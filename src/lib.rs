@@ -41,5 +41,8 @@ impl FlacStream {
 }
 
 #[test]
-fn it_works() {
+fn read_header() {
+    use std::io::fs::File;
+    let mut input = File::open(&Path::new("foo.flac")).unwrap();
+    let flac_stream = FlacStream::new(&mut input).unwrap();
 }
