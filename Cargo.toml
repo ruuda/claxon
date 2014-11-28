@@ -1,0 +1,5 @@
+[package]
+
+name = "flac"
+version = "0.0.1"
+authors = ["Ruud van Asseldonk <dev@veniogames.com>"]
