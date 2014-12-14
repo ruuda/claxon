@@ -1,2 +1,7 @@
+# Cargo files
 /target
 /Cargo.lock
+
+# Editor files
+*.swp
+*.swo
