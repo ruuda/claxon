@@ -2,6 +2,9 @@
 /target
 /Cargo.lock
 
+# Test files
+/foo.flac
+
 # Editor files
 *.swp
 *.swo
