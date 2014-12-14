@@ -1,4 +1,5 @@
 use std::io::{IoError, IoErrorKind, Reader};
+use std::io::fs::File;
 
 struct MetadataBlock;
 struct Frame;
@@ -20,14 +21,28 @@ struct FlacStream {
     metadata_blocks: Vec<MetadataBlock>
 }
 
-const HEADER: u32 = 0x66_4c_61_43; // The header 'fLaC' (big endian).
+#[cfg(test)]
+fn get_foo_file() -> File {
+    File::open(&Path::new("foo.flac")).unwrap()
+}
+
+fn read_header(input: &mut Reader) -> Result<(), Error> {
+    // A FLAC stream starts with a 32-bit header 'fLaC' (big endian).
+    const HEADER: u32 = 0x66_4c_61_43;
+    let header = try!(input.read_be_u32());
+    if header != HEADER { return Err(mk_err()); } // TODO: provide more error info.
+    Ok(())
+}
+
+#[test]
+fn test_read_header() {
+    let mut input = get_foo_file();
+    read_header(&mut input).unwrap();
+}
 
 impl FlacStream {
     pub fn new(input: &mut Reader) -> Result<FlacStream, Error> {
-        // A FLAC stream starts with a 32-bit header.
-        let header = try!(input.read_be_u32());
-        if header != HEADER { return Err(mk_err()); }
-
+        let _ = try!(read_header(input));
         // Read the STREAMINFO block
         // Read any metadata
         // Read frames
@@ -41,8 +56,7 @@ impl FlacStream {
 }
 
 #[test]
-fn read_header() {
-    use std::io::fs::File;
-    let mut input = File::open(&Path::new("foo.flac")).unwrap();
+fn test_open_stream() {
+    let mut input = get_foo_file();
     let flac_stream = FlacStream::new(&mut input).unwrap();
 }
