@@ -1,4 +1,4 @@
-use std::io::{IoError, IoErrorKind, Reader};
+use std::io::{IoResult, IoError, IoErrorKind, Reader};
 use std::io::fs::File;
 
 struct Frame;
@@ -88,10 +88,8 @@ fn read_metadata_block_header(input: &mut Reader) -> Result<MetadataBlockHeader,
     if block_type == 127 { return Err(mk_err()); } // TODO: "invalid, to avoid confusion with a frame sync code"
     if block_type > 6 { return Err(mk_err()); } // TODO: "reserved"
 
-    // TODO: extend reader to be able to read u24 or maybe arbitrary size ingers.
-    let length_msb = try!(input.read_u8());
-    let length_lsb = try!(input.read_be_u16());
-    let length = length_msb as u32 << 16 | length_lsb as u32;
+    // The length field is 24 bits, or 3 bytes.
+    let length = try!(input.read_be_uint_n(3)) as u32;
     
     let header = MetadataBlockHeader {
         is_last: is_last,
@@ -99,6 +97,34 @@ fn read_metadata_block_header(input: &mut Reader) -> Result<MetadataBlockHeader,
         length: length
     };
     Ok(header)
+}
+
+fn read_streaminfo_block(input: &mut Reader) -> Result<StreamInfo, Error> {
+    let min_block_size = try!(input.read_be_u16());
+    let max_block_size = try!(input.read_be_u16());
+    // The frame size fields are 24 bits, or 3 bytes.
+    let min_frame_size = try!(input.read_be_uint_n(3)) as u32;
+    let max_frame_size = try!(input.read_be_uint_n(3)) as u32;
+
+    // Sample data is packed as 20 bits sample rate, 3 bits #channels - 1,
+    // 5 bits #bits per sample - 1, 36 bits #samples in stream.
+    let sample_rate_msb = try!(input.read_be_u16());
+    let sample_rate_lsb = try!(input.read_byte());
+    // Stitch together the value from the first 16 bits,
+    // and then 4 bits of the next byte.
+    let sample_rate = sample_rate_msb as u32 << 4 | sample_rate_lsb as u32 >> 4;
+    // Next three bits are the number of channels - 1; mask out and add 1.
+    let n_channels = ((sample_rate_lsb >> 1) & 0x7) + 1;
+    // The final bit is the most significant of bits per sample - 1
+    let bps_msb = sample_rate_lsb & 1;
+    let bps_lsb = try!(input.read_byte());
+    // Stitch together these values, add 1 because # - 1 is stored.
+    let bits_per_sample = (bps_msb << 5 | (bps_lsb >> 4)) + 1;
+    // Number of samples in 36 bits, we have 4, 32 to go.
+    let n_samples_lsb = try!(input.read_be_u32());
+    let n_samples = (bps_lsb & 0xf) as u64 << 32 | n_samples_lsb as u64;
+
+    let md5_signature = try!(input.read_exact(16));
 }
 
 impl FlacStream {
