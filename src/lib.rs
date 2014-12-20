@@ -210,6 +210,39 @@ fn read_application_block(input: &mut Reader, length: u32) -> Result<(u32, Vec<u
     Ok((id, data))
 }
 
+struct MetadataBlockReader<'r, R> where R: 'r {
+    input: &'r mut R,
+    done: bool
+}
+
+type MetadataBlockResult = Result<MetadataBlock, Error>;
+
+impl<'r, R> MetadataBlockReader<'r, R> where R: Reader {
+    pub fn new(input: &'r mut R) -> MetadataBlockReader<'r, R> {
+        MetadataBlockReader { input: input, done: false }
+    }
+
+    fn read_next(&mut self) -> MetadataBlockResult {
+        let header = try!(read_metadata_block_header(self.input));
+        let block = try!(read_metadata_block(self.input, header.block_type, header.length));
+        self.done = header.is_last;
+        Ok(block)
+    }
+}
+
+impl<'r, R> Iterator<MetadataBlockResult>
+    for MetadataBlockReader<'r, R>
+    where R: Reader {
+
+    fn next(&mut self) -> Option<MetadataBlockResult> {
+        if self.done { None } else { Some(self.read_next()) }
+    }
+
+    fn size_hint(&self) -> (uint, Option<uint>) {
+        if self.done { (0, Some(0)) } else { (1, None) }
+    }
+}
+
 impl FlacStream {
     pub fn new(input: &mut Reader) -> Result<FlacStream, Error> {
         try!(read_stream_header(input));
