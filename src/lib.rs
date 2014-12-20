@@ -133,7 +133,7 @@ pub fn read_streaminfo_block(input: &mut Reader) -> Result<StreamInfo, Error> {
     let bps_lsb_n_samples = try!(input.read_byte());
 
     // Stitch together these values, add 1 because # - 1 is stored.
-    let bits_per_sample = (bps_msb << 5 | (bps_lsb_n_samples >> 4)) + 1;
+    let bits_per_sample = (bps_msb << 4 | (bps_lsb_n_samples >> 4)) + 1;
 
     // Number of samples in 36 bits, we have 4 already, 32 to go.
     let n_samples_msb = bps_lsb_n_samples & 0xf;
