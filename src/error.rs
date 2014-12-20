@@ -11,9 +11,6 @@ pub enum FlacError {
 
     /// Metadata block type 127 is invalid, to avoid confusion with a frame sync code.
     InvalidMetadataBlockType,
-    /// This version of the library cannot handle this kind of metadata block,
-    /// it was reserved at the time of writing.
-    ReservedMetadataBlockType,
 
     /// A lower bound was encountered that was bigger than an upper bound.
     InconsistentBounds,

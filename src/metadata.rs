@@ -38,7 +38,8 @@ pub enum MetadataBlock {
     SeekTable(SeekTable),
     VorbisComment, // TODO
     CueSheet, // TODO
-    Picture // TODO
+    Picture, // TODO
+    Reserved
 }
 
 fn read_metadata_block_header(input: &mut Reader)
@@ -47,8 +48,8 @@ fn read_metadata_block_header(input: &mut Reader)
 
     // The first bit specifies whether this is the last block, the next 7 bits
     // specify the type of the metadata block to follow.
-    let is_last = (byte & 1) == 1;
-    let block_type = byte >> 1;
+    let is_last = (byte >> 7) == 1;
+    let block_type = byte & 0b0111_1111;
 
     // The length field is 24 bits, or 3 bytes.
     let length = try!(input.read_be_uint_n(3)) as u32;
@@ -96,14 +97,19 @@ fn read_metadata_block(input: &mut Reader, block_type: u8, length: u32)
             try!(skip_block(input, length));
             Ok(MetadataBlock::Padding { length: length })
         },
-        127 => Err(FlacError::InvalidMetadataBlockType),
-
-        // Other values of the block type are reserved at the moment of writing.
-        // When we do encounter such a value, it means that this library will
-        // be unable to handle it. We could ignore the block, but there would
-        // be no way to tell that we did so for users of the library. I think
-        // it is better to be explicit, and make this an error.
-        _ => Err(FlacError::ReservedMetadataBlockType)
+        127 => {
+            // This code is invalid to avoid confusion with a frame sync code.
+            Err(FlacError::InvalidMetadataBlockType)
+        },
+        _ => {
+            // Any other block type is 'reserved' at the moment of writing. The
+            // reference implementation reads it as an 'unknown' block. That is
+            // one way of handling it, but maybe there should be some kind of
+            // 'strict' mode (configurable at compile time?) so that this can
+            // be an error if desired.
+            try!(skip_block(input, length));
+            Ok(MetadataBlock::Reserved)
+        }
     }
 }
 
@@ -125,7 +131,7 @@ fn read_streaminfo_block(input: &mut Reader) -> FlacResult<StreamInfo> {
 
     // Next three bits are the number of channels - 1. Mask them out and add 1.
     let n_channels_bps = sample_rate_lsb;
-    let n_channels = ((n_channels_bps >> 1) & 0x7) + 1;
+    let n_channels = ((n_channels_bps >> 1) & 0b0000_0111) + 1;
 
     // The final bit is the most significant of bits per sample - 1. Bits per
     // sample - 1 is 5 bits in total.
@@ -136,7 +142,7 @@ fn read_streaminfo_block(input: &mut Reader) -> FlacResult<StreamInfo> {
     let bits_per_sample = (bps_msb << 4 | (bps_lsb_n_samples >> 4)) + 1;
 
     // Number of samples in 36 bits, we have 4 already, 32 to go.
-    let n_samples_msb = bps_lsb_n_samples & 0xf;
+    let n_samples_msb = bps_lsb_n_samples & 0b0000_1111;
     let n_samples_lsb = try!(input.read_be_u32());
     let n_samples = n_samples_msb as u64 << 32 | n_samples_lsb as u64;
 
