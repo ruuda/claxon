@@ -6,7 +6,7 @@ struct Frame;
 // TODO: there should be a way to signal IO error.
 // This will be handled by the error reform RFCs, I think.
 // For now, use IO error to indicate any failure.
-type Error = IoError;
+pub type Error = IoError;
 
 fn mk_err() -> Error {
     IoError {
@@ -25,7 +25,8 @@ fn get_foo_file() -> File {
     File::open(&Path::new("foo.flac")).unwrap()
 }
 
-fn read_stream_header(input: &mut Reader) -> Result<(), Error> {
+// TODO: this should be private, but it must be public for the test for now.
+pub fn read_stream_header(input: &mut Reader) -> Result<(), Error> {
     // A FLAC stream starts with a 32-bit header 'fLaC' (big endian).
     const HEADER: u32 = 0x66_4c_61_43;
     let header = try!(input.read_be_u32());
@@ -39,7 +40,9 @@ fn test_read_stream_header() {
     read_stream_header(&mut input).unwrap();
 }
 
-struct StreamInfo {
+// TODO: should this be private or not?
+#[deriving(Show)]
+pub struct StreamInfo {
     pub min_block_size: u16,
     pub max_block_size: u16,
     pub min_frame_size: Option<u32>,
@@ -51,17 +54,19 @@ struct StreamInfo {
     pub md5sum: [u8, ..16]
 }
 
-struct Seekpoint {
+// TODO: should this be private?
+pub struct Seekpoint {
     pub sample: u64,
     pub offset: u64,
     pub n_samples: u16
 }
 
-struct SeekTable {
+// TODO: should this be private?
+pub struct SeekTable {
     seekpoints: Vec<Seekpoint>
 }
 
-enum MetadataBlock {
+pub enum MetadataBlock {
     StreamInfoBlock(StreamInfo),
     PaddingBlock(u32),
     ApplicationBlock(u32, Vec<u8>),
@@ -71,13 +76,15 @@ enum MetadataBlock {
     PictureBlock // TODO
 }
 
-struct MetadataBlockHeader {
+// TODO: this should be private.
+pub struct MetadataBlockHeader {
     is_last: bool,
     block_type: u8,
     length: u32
 }
 
-fn read_metadata_block_header(input: &mut Reader) -> Result<MetadataBlockHeader, Error> {
+// TODO: this should be private, but it must be public for the test for now.
+pub fn read_metadata_block_header(input: &mut Reader) -> Result<MetadataBlockHeader, Error> {
     let byte = try!(input.read_u8());
 
     // The first bit specifies whether this is the last block, the next 7 bits
@@ -99,7 +106,8 @@ fn read_metadata_block_header(input: &mut Reader) -> Result<MetadataBlockHeader,
     Ok(header)
 }
 
-fn read_streaminfo_block(input: &mut Reader) -> Result<StreamInfo, Error> {
+// TODO: this should be private, but it must be public for the test for now.
+pub fn read_streaminfo_block(input: &mut Reader) -> Result<StreamInfo, Error> {
     let min_block_size = try!(input.read_be_u16());
     let max_block_size = try!(input.read_be_u16());
 
@@ -157,6 +165,9 @@ impl FlacStream {
         let hdr = try!(read_metadata_block_header(input));
         println!("type: {}, length: {}, last: {}",
                  hdr.block_type, hdr.length, hdr.is_last);
+
+        let streaminfo = try!(read_streaminfo_block(input));
+        println!("streaminfo: {}", streaminfo);
         // Read the STREAMINFO block
         // Read any metadata
         // Read frames
