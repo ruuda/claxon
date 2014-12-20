@@ -3,7 +3,7 @@
 /Cargo.lock
 
 # Test files
-/foo.flac
+*.flac
 
 # Editor files
 *.swp
