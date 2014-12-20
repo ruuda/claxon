@@ -29,7 +29,7 @@ fn run_metaflac(fname: &Path) -> String {
 }
 
 fn print_hex(seq: &[u8]) -> String {
-    let vec: Vec<String> = seq.iter().map(|x| format!("{:x}", *x)).collect();
+    let vec: Vec<String> = seq.iter().map(|x| format!("{:0>2x}", *x)).collect();
     vec.concat()
 }
 
