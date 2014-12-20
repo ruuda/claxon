@@ -3,10 +3,9 @@
 use error::{FlacError, FlacResult};
 use metadata::{MetadataBlock, MetadataBlockReader, StreamInfo};
 
+pub mod decode;
 pub mod error;
 pub mod metadata;
-
-struct Frame;
 
 pub struct FlacStream {
     streaminfo: StreamInfo,
