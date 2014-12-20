@@ -11,6 +11,8 @@ pub enum FlacError {
 
     /// Metadata block type 127 is invalid, to avoid confusion with a frame sync code.
     InvalidMetadataBlockType,
+    /// The streaminfo block must have length 34.
+    InvalidMetadataBlockLength,
 
     /// A lower bound was encountered that was bigger than an upper bound.
     InconsistentBounds,

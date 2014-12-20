@@ -79,8 +79,13 @@ fn read_metadata_block(input: &mut Reader, block_type: u8, length: u32)
                        -> FlacResult<MetadataBlock> {
     match block_type {
         0 => {
-            let streaminfo = try!(read_streaminfo_block(input));
-            Ok(MetadataBlock::StreamInfo(streaminfo))
+            // The streaminfo block has a fixed size of 34 bytes.
+            if length == 34 {
+                let streaminfo = try!(read_streaminfo_block(input));
+                Ok(MetadataBlock::StreamInfo(streaminfo))
+            } else {
+                Err(FlacError::InvalidMetadataBlockLength)
+            }
         },
         1 => {
             try!(read_padding_block(input, length));
