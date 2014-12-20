@@ -65,13 +65,25 @@ fn compare_metaflac(fname: &Path) {
     let mut si_lines = streaminfo.lines_any();
     while let (Some(mf), Some(si)) = (mf_lines.next(), si_lines.next()) {
         if mf != si {
-            println!("metaflac: {}\nstreaminfo: {}", metaflac, streaminfo);
-            panic!("metaflac disagrees on parsed streaminfo (run with --nocapture for details)");
+            println!("metaflac\n--------\n{}", metaflac);
+            println!("streaminfo\n----------\n{}", streaminfo);
+            panic!("metaflac disagrees on parsed streaminfo");
         }
     };
 }
 
 #[test]
-fn test_foo() {
-    compare_metaflac(&Path::new("foo.flac"));
+fn verify_streaminfo() {
+    use std::io::fs::{readdir, PathExtensions};
+
+    // Compare our streaminfo parsing with metaflac on all flac files in the
+    // current directory.
+    let dir = readdir(&Path::new(".")).ok().expect("failed to enumerate flac files");
+    for path in dir.iter() {
+        if path.is_file() && path.extension_str() == Some("flac") {
+            print!("    comparing {} ...", path.as_str().expect("unsupported filename"));
+            compare_metaflac(path);
+            println!(" ok");
+        }
+    }
 }
