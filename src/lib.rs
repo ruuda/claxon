@@ -1,19 +1,42 @@
 #![allow(dead_code)]
 
-use std::io::{IoError, IoErrorKind, Reader};
+use std::error::FromError;
+use std::io::IoError;
 
 struct Frame;
 
-// TODO: there should be a way to signal IO error.
-// This will be handled by the error reform RFCs, I think.
-// For now, use IO error to indicate any failure.
-pub type Error = IoError;
+#[deriving(Show)]
+pub enum FlacError {
+    /// Not a decoding error, but a problem with the underlying IO.
+    IoError(IoError),
 
-fn mk_err() -> Error {
-    IoError {
-        kind: IoErrorKind::OtherIoError,
-        desc: "FLAC decoding error",
-        detail: None
+    /// The stream header does not equal 'fLaC'.
+    InvalidStreamHeader,
+
+    /// Metadata block type 127 is invalid, to avoid confusion with a frame sync code.
+    InvalidMetadataBlockType,
+    /// This version of the library cannot handle this kind of metadata block,
+    /// it was reserved at the time of writing.
+    ReservedMetadataBlockType,
+
+    /// A lower bound was encountered that was bigger than an upper bound.
+    InconsistentBounds,
+    /// The minimum block size must be larger than 15.
+    InvalidBlockSize,
+    /// The sample rate must be positive and no larger than 6553550 Hz.
+    InvalidSampleRate,
+
+    /// The streaminfo block must be the very first metadata block.
+    MissingStreamInfoBlock,
+}
+
+pub type FlacResult<T> = Result<T, FlacError>;
+
+// TODO: implement the Error trait for FlacError.
+
+impl FromError<IoError> for FlacError {
+    fn from_error(err: IoError) -> FlacError {
+        FlacError::IoError(err)
     }
 }
 
@@ -23,11 +46,11 @@ struct FlacStream {
 }
 
 // TODO: this should be private, but it must be public for the test for now.
-pub fn read_stream_header(input: &mut Reader) -> Result<(), Error> {
+pub fn read_stream_header(input: &mut Reader) -> FlacResult<()> {
     // A FLAC stream starts with a 32-bit header 'fLaC' (big endian).
     const HEADER: u32 = 0x66_4c_61_43;
     let header = try!(input.read_be_u32());
-    if header != HEADER { return Err(mk_err()); } // TODO: provide more error info.
+    if header != HEADER { return Err(FlacError::InvalidStreamHeader); }
     Ok(())
 }
 
@@ -76,7 +99,7 @@ pub struct MetadataBlockHeader {
 }
 
 // TODO: this should be private, but it must be public for the test for now.
-pub fn read_metadata_block_header(input: &mut Reader) -> Result<MetadataBlockHeader, Error> {
+pub fn read_metadata_block_header(input: &mut Reader) -> FlacResult<MetadataBlockHeader> {
     let byte = try!(input.read_u8());
 
     // The first bit specifies whether this is the last block, the next 7 bits
@@ -96,7 +119,7 @@ pub fn read_metadata_block_header(input: &mut Reader) -> Result<MetadataBlockHea
 }
 
 fn read_metadata_block(input: &mut Reader, block_type: u8, length: u32)
-                       -> Result<MetadataBlock, Error> {
+                       -> FlacResult<MetadataBlock> {
     match block_type {
         0 => {
             let streaminfo = try!(read_streaminfo_block(input));
@@ -130,13 +153,19 @@ fn read_metadata_block(input: &mut Reader, block_type: u8, length: u32)
             try!(skip_block(input, length));
             Ok(MetadataBlock::Padding { length: length })
         },
-        127 => Err(mk_err()), // TODO: "invalid, to avoid confusion with a frame sync code"
-        _ => Err(mk_err()) // TODO: "reserved", is that an error or do we ignore it?
+        127 => Err(FlacError::InvalidMetadataBlockType),
+
+        // Other values of the block type are reserved at the moment of writing.
+        // When we do encounter such a value, it means that this library will
+        // be unable to handle it. We could ignore the block, but there would
+        // be no way to tell that we did so for users of the library. I think
+        // it is better to be explicit, and make this an error.
+        _ => Err(FlacError::ReservedMetadataBlockType)
     }
 }
 
 // TODO: this should be private, but it must be public for the test for now.
-pub fn read_streaminfo_block(input: &mut Reader) -> Result<StreamInfo, Error> {
+pub fn read_streaminfo_block(input: &mut Reader) -> FlacResult<StreamInfo> {
     let min_block_size = try!(input.read_be_u16());
     let max_block_size = try!(input.read_be_u16());
 
@@ -172,6 +201,24 @@ pub fn read_streaminfo_block(input: &mut Reader) -> Result<StreamInfo, Error> {
     let mut md5sum = [0u8, ..16];
     try!(input.read_at_least(16, &mut md5sum));
 
+    // Lower bounds can never be larger than upper bounds. Note that 0 indicates
+    // unknown for the frame size. Also, the block size must be at least 16.
+    if min_block_size > max_block_size {
+        return Err(FlacError::InconsistentBounds);
+    }
+    if min_block_size < 16 {
+        return Err(FlacError::InvalidBlockSize);
+    }
+    if min_frame_size > max_frame_size && max_frame_size != 0 {
+        return Err(FlacError::InconsistentBounds);
+    }
+
+    // A sample rate of 0 is invalid, and the maximum sample rate is limited by
+    // the structure of the frame headers to 655350 Hz.
+    if sample_rate == 0 || sample_rate > 655350 {
+        return Err(FlacError::InvalidSampleRate);
+    }
+
     let stream_info = StreamInfo {
         min_block_size: min_block_size,
         max_block_size: max_block_size,
@@ -183,27 +230,25 @@ pub fn read_streaminfo_block(input: &mut Reader) -> Result<StreamInfo, Error> {
         n_samples: if n_samples == 0 { None } else { Some(n_samples) },
         md5sum: md5sum
     };
-
     Ok(stream_info)
 }
 
-fn read_padding_block(input: &mut Reader, length: u32) -> Result<(), Error> {
+fn read_padding_block(input: &mut Reader, length: u32) -> FlacResult<()> {
     // The specification dictates that all bits of the padding block must be 0.
-    for _ in range(0, length) {
-        if try!(input.read_byte()) != 0 {
-            return Err(mk_err()); // TODO: error, nonzero bit in padding block.
-        }
-    }
-    Ok(())
+    // However, the reference implementation does not issue an error when this
+    // is not the case, and frankly, when you are going to skip over these
+    // bytes and do nothing with them whatsoever, why waste all those CPU
+    // cycles checking that the padding is valid?
+    skip_block(input, length)
 }
 
-fn skip_block(input: &mut Reader, length: u32) -> Result<(), Error> {
+fn skip_block(input: &mut Reader, length: u32) -> FlacResult<()> {
     // Skip all the padding bytes.
     for _ in range(0, length) { try!(input.read_byte()); }
     Ok(())
 }
 
-fn read_application_block(input: &mut Reader, length: u32) -> Result<(u32, Vec<u8>), Error> {
+fn read_application_block(input: &mut Reader, length: u32) -> FlacResult<(u32, Vec<u8>)> {
     let id = try!(input.read_be_u32());
 
     // Four bytes of the block have been used for the ID, the rest is payload.
@@ -223,7 +268,7 @@ struct MetadataBlockReader<'r, R> where R: 'r {
     done: bool
 }
 
-type MetadataBlockResult = Result<MetadataBlock, Error>;
+type MetadataBlockResult = FlacResult<MetadataBlock>;
 
 impl<'r, R> MetadataBlockReader<'r, R> where R: Reader {
     pub fn new(input: &'r mut R) -> MetadataBlockReader<'r, R> {
@@ -263,7 +308,7 @@ impl<'r, R> Iterator<MetadataBlockResult>
 }
 
 impl FlacStream {
-    pub fn new<R>(input: &mut R) -> Result<FlacStream, Error>
+    pub fn new<R>(input: &mut R) -> FlacResult<FlacStream>
         where R: Reader {
         // A flac stream first of all starts with a stream header.
         try!(read_stream_header(input));
@@ -275,7 +320,7 @@ impl FlacStream {
         let streaminfo_block = try!(metadata_iter.next().unwrap());
         let streaminfo = match streaminfo_block {
             MetadataBlock::StreamInfo(info) => info,
-            _ => return Err(mk_err()) // TODO: Error: streaminfo block must be the first block.
+            _ => return Err(FlacError::MissingStreamInfoBlock)
         };
 
         // There might be more metadata blocks, read and store them.
