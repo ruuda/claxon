@@ -7,19 +7,30 @@ struct MetadataBlockHeader {
     length: u32
 }
 
+/// The streaminfo metadata block, with important information about the stream.
 #[deriving(Copy)]
 pub struct StreamInfo {
+    /// The minimum block size (in samples) used in the stream.
     pub min_block_size: u16,
+    /// The maximum block size (in samples) used in the stream.
     pub max_block_size: u16,
+    /// The minimum frame size (in bytes) used in the stream.
     pub min_frame_size: Option<u32>,
+    /// The maximum frame size (in bytes) used in the stream.
     pub max_frame_size: Option<u32>,
+    /// The sample rate in Hz.
     pub sample_rate: u32,
+    /// The number of channels.
     pub n_channels: u8,
+    /// The number of bits per sample.
     pub bits_per_sample: u8,
+    /// The total number of inter-channel samples in the stream.
     pub n_samples: Option<u64>,
+    /// MD5 signature of the unencoded audio data.
     pub md5sum: [u8, ..16]
 }
 
+/// A seek point in the seek table.
 #[deriving(Copy)]
 pub struct SeekPoint {
     pub sample: u64,
@@ -27,10 +38,12 @@ pub struct SeekPoint {
     pub n_samples: u16
 }
 
+/// A seek table to aid seeking in the stream.
 pub struct SeekTable {
     seekpoints: Vec<SeekPoint>
 }
 
+/// A metadata about the flac stream.
 pub enum MetadataBlock {
     StreamInfo(StreamInfo),
     Padding { length: u32 },
@@ -219,9 +232,12 @@ pub struct MetadataBlockReader<'r, R> where R: 'r {
     done: bool
 }
 
+/// Either a `MetadataBlock` or a `FlacError`.
 pub type MetadataBlockResult = FlacResult<MetadataBlock>;
 
 impl<'r, R> MetadataBlockReader<'r, R> where R: Reader {
+
+    /// Creates a metadata block reader that will yield at least one element.
     pub fn new(input: &'r mut R) -> MetadataBlockReader<'r, R> {
         MetadataBlockReader { input: input, done: false }
     }

@@ -3,8 +3,8 @@
 use error::{FlacError, FlacResult};
 use metadata::{MetadataBlock, MetadataBlockReader, StreamInfo};
 
-mod error;
-mod metadata;
+pub mod error;
+pub mod metadata;
 
 struct Frame;
 
@@ -22,6 +22,9 @@ fn read_stream_header(input: &mut Reader) -> FlacResult<()> {
 }
 
 impl FlacStream {
+    /// Constructs a flac stream from the given input.
+    ///
+    /// This will read all metadata and stop at the first audio frame.
     pub fn new<R>(input: &mut R) -> FlacResult<FlacStream> where R: Reader {
         // A flac stream first of all starts with a stream header.
         try!(read_stream_header(input));
@@ -55,6 +58,7 @@ impl FlacStream {
         Ok(flac_stream)
     }
 
+    /// Returns the streaminfo metadata.
     pub fn streaminfo(&self) -> &StreamInfo {
         &self.streaminfo
     }
