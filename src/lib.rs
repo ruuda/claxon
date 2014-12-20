@@ -21,11 +21,6 @@ struct FlacStream {
     metadata_blocks: Vec<MetadataBlock>
 }
 
-#[cfg(test)]
-fn get_foo_file() -> File {
-    File::open(&Path::new("foo.flac")).unwrap()
-}
-
 // TODO: this should be private, but it must be public for the test for now.
 pub fn read_stream_header(input: &mut Reader) -> Result<(), Error> {
     // A FLAC stream starts with a 32-bit header 'fLaC' (big endian).
@@ -33,12 +28,6 @@ pub fn read_stream_header(input: &mut Reader) -> Result<(), Error> {
     let header = try!(input.read_be_u32());
     if header != HEADER { return Err(mk_err()); } // TODO: provide more error info.
     Ok(())
-}
-
-#[test]
-fn test_read_stream_header() {
-    let mut input = get_foo_file();
-    read_stream_header(&mut input).unwrap();
 }
 
 // TODO: should this be private or not?
@@ -245,6 +234,7 @@ impl FlacStream {
 
 #[test]
 fn test_open_stream() {
-    let mut input = get_foo_file();
+    use std::io::File;
+    let mut input = File::open(&Path::new("foo.flac")).unwrap();
     let flac_stream = FlacStream::new(&mut input).unwrap();
 }
