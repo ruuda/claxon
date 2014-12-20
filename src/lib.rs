@@ -31,8 +31,7 @@ pub fn read_stream_header(input: &mut Reader) -> Result<(), Error> {
     Ok(())
 }
 
-// TODO: should this be private or not?
-#[deriving(Show)]
+#[deriving(Copy)]
 pub struct StreamInfo {
     pub min_block_size: u16,
     pub max_block_size: u16,
@@ -46,6 +45,7 @@ pub struct StreamInfo {
 }
 
 // TODO: should this be private?
+#[deriving(Copy)]
 pub struct SeekPoint {
     pub sample: u64,
     pub offset: u64,
@@ -68,6 +68,7 @@ pub enum MetadataBlock {
 }
 
 // TODO: this should be private.
+#[deriving(Copy)]
 pub struct MetadataBlockHeader {
     is_last: bool,
     block_type: u8,
