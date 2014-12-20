@@ -1,8 +1,10 @@
 #![allow(dead_code)]
+#![feature(slicing_syntax)]
 
 use error::{FlacError, FlacResult};
 use metadata::{MetadataBlock, MetadataBlockReader, StreamInfo};
 
+mod checksum;
 pub mod decode;
 pub mod error;
 pub mod metadata;
