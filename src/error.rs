@@ -33,3 +33,5 @@ impl FromError<IoError> for FlacError {
         FlacError::IoError(err)
     }
 }
+
+pub type FlacResult<T> = Result<T, FlacError>;

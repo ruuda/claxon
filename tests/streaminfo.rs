@@ -35,15 +35,11 @@ fn print_hex(seq: &[u8]) -> String {
 
 fn read_streaminfo(fname: &Path) -> String {
     use std::io::fs::File;
-    use flac::{read_stream_header, read_metadata_block_header, read_streaminfo_block};
+    use flac::FlacStream;
 
-    // Open the file and extract its streaminfo block.
-    // TODO: avoid repetition in the tests and library;
-    // there might be some kind of metadata block iterator in the future.
-    let mut file = File::open(fname).ok().expect("failed to open flac file");
-    read_stream_header(&mut file).ok().expect("invalid flac header");
-    read_metadata_block_header(&mut file).ok().expect("invalid metadata block header");
-    let streaminfo = read_streaminfo_block(&mut file).ok().expect("failed to read streaminfo");
+    let mut file = File::open(fname).unwrap();
+    let stream = FlacStream::new(&mut file).unwrap();
+    let streaminfo = stream.streaminfo();
 
     // Format the streaminfo in the same way that metaflac prints it.
     format!("{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n",
