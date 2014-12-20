@@ -1,5 +1,6 @@
-use std::io::{IoResult, IoError, IoErrorKind, Reader};
-use std::io::fs::File;
+#![allow(dead_code)]
+
+use std::io::{IoError, IoErrorKind, Reader};
 
 struct Frame;
 
@@ -55,7 +56,7 @@ pub struct StreamInfo {
 }
 
 // TODO: should this be private?
-pub struct Seekpoint {
+pub struct SeekPoint {
     pub sample: u64,
     pub offset: u64,
     pub n_samples: u16
@@ -63,17 +64,17 @@ pub struct Seekpoint {
 
 // TODO: should this be private?
 pub struct SeekTable {
-    seekpoints: Vec<Seekpoint>
+    seekpoints: Vec<SeekPoint>
 }
 
 pub enum MetadataBlock {
-    StreamInfoBlock(StreamInfo),
-    PaddingBlock(u32),
-    ApplicationBlock(u32, Vec<u8>),
-    SeekTableBlock(SeekTable),
-    VorbisCommentBlock, // TODO
-    CuesheetBlock, // TODO
-    PictureBlock // TODO
+    StreamInfo(StreamInfo),
+    Padding { length: u32 },
+    Application { id: u32, data: Vec<u8> },
+    SeekTable(SeekTable),
+    VorbisComment, // TODO
+    CueSheet, // TODO
+    Picture // TODO
 }
 
 // TODO: this should be private.
@@ -104,6 +105,27 @@ pub fn read_metadata_block_header(input: &mut Reader) -> Result<MetadataBlockHea
         length: length
     };
     Ok(header)
+}
+
+fn read_metadata_block(input: &mut Reader, block_type: u8, length: u32)
+                       -> Result<MetadataBlock, Error> {
+    let block = match block_type {
+        0 => {
+            let streaminfo = try!(read_streaminfo_block(input));
+            MetadataBlock::StreamInfo(streaminfo)
+        },
+        1 => {
+            try!(read_padding_block(input, length));
+            MetadataBlock::Padding { length: length }
+        },
+        2 => {
+            let (id, data) = try!(read_application_block(input, length));
+            MetadataBlock::Application { id: id, data: data }
+        },
+        _ => return Err(mk_err())
+    };
+
+    Ok(block)
 }
 
 // TODO: this should be private, but it must be public for the test for now.
@@ -156,6 +178,21 @@ pub fn read_streaminfo_block(input: &mut Reader) -> Result<StreamInfo, Error> {
     };
 
     Ok(stream_info)
+}
+
+fn read_padding_block(input: &mut Reader, length: u32) -> Result<(), Error> {
+    // Skip all the padding bytes.
+    for _ in range(0, length) { try!(input.read_byte()); }
+    Ok(())
+}
+
+fn read_application_block(input: &mut Reader, length: u32) -> Result<(u32, Vec<u8>), Error> {
+    let id = try!(input.read_be_u32());
+
+    // Four bytes of the block have been used for the ID, the rest is payload.
+    let data = try!(input.read_exact((length - 4) as uint));
+
+    Ok((id, data))
 }
 
 impl FlacStream {
