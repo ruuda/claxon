@@ -18,6 +18,7 @@ fn mk_err() -> Error {
 }
 
 struct FlacStream {
+    streaminfo: StreamInfo,
     metadata_blocks: Vec<MetadataBlock>
 }
 
@@ -210,6 +211,12 @@ fn read_application_block(input: &mut Reader, length: u32) -> Result<(u32, Vec<u
     Ok((id, data))
 }
 
+/// Reads metadata blocks from a stream and exposes them as an iterator.
+///
+/// It is assumed that the next byte that the reader will read, is the first
+/// byte of a metadata block header. This means that the iterator will yield at
+/// least a single value. If the iterator ever yields an error, then no more
+/// data will be read thereafter, and the next value will be `None`.
 struct MetadataBlockReader<'r, R> where R: 'r {
     input: &'r mut R,
     done: bool
@@ -224,7 +231,8 @@ impl<'r, R> MetadataBlockReader<'r, R> where R: Reader {
 
     fn read_next(&mut self) -> MetadataBlockResult {
         let header = try!(read_metadata_block_header(self.input));
-        let block = try!(read_metadata_block(self.input, header.block_type, header.length));
+        let block = try!(read_metadata_block(self.input, header.block_type,
+                                                         header.length));
         self.done = header.is_last;
         Ok(block)
     }
@@ -235,7 +243,17 @@ impl<'r, R> Iterator<MetadataBlockResult>
     where R: Reader {
 
     fn next(&mut self) -> Option<MetadataBlockResult> {
-        if self.done { None } else { Some(self.read_next()) }
+        if self.done {
+            None
+        } else {
+            let block = self.read_next();
+
+            // After a failure, no more attempts to read will be made,
+            // because we don't know where we are in the stream.
+            if !block.is_ok() { self.done = true; }
+
+            Some(block)
+        }
     }
 
     fn size_hint(&self) -> (uint, Option<uint>) {
@@ -244,21 +262,35 @@ impl<'r, R> Iterator<MetadataBlockResult>
 }
 
 impl FlacStream {
-    pub fn new(input: &mut Reader) -> Result<FlacStream, Error> {
+    pub fn new<R>(input: &mut R) -> Result<FlacStream, Error>
+        where R: Reader {
+        // A flac stream first of all starts with a stream header.
         try!(read_stream_header(input));
 
-        let hdr = try!(read_metadata_block_header(input));
-        println!("type: {}, length: {}, last: {}",
-                 hdr.block_type, hdr.length, hdr.is_last);
+        // Next are one or more metadata blocks. The flac specification
+        // dictates that the streaminfo block is the first block. The metadata
+        // block reader will yield at least one element, so the unwrap is safe.
+        let mut metadata_iter = MetadataBlockReader::new(input);
+        let streaminfo_block = try!(metadata_iter.next().unwrap());
+        let streaminfo = match streaminfo_block {
+            MetadataBlock::StreamInfo(info) => info,
+            _ => return Err(mk_err()) // TODO: Error: streaminfo block must be the first block.
+        };
 
-        let streaminfo = try!(read_streaminfo_block(input));
-        println!("streaminfo: {}", streaminfo);
-        // Read the STREAMINFO block
-        // Read any metadata
+        // There might be more metadata blocks, read and store them.
+        let mut metadata_blocks = Vec::new();
+        for block_result in metadata_iter {
+            match block_result {
+                Err(error) => return Err(error),
+                Ok(block) => metadata_blocks.push(block)
+            }
+        }
+
         // Read frames
 
         let flac_stream = FlacStream {
-            metadata_blocks: Vec::new()
+            streaminfo: streaminfo,
+            metadata_blocks: metadata_blocks
         };
 
         Ok(flac_stream)
