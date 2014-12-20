@@ -93,9 +93,6 @@ pub fn read_metadata_block_header(input: &mut Reader) -> Result<MetadataBlockHea
     let is_last = (byte & 1) == 1;
     let block_type = byte >> 1;
 
-    if block_type == 127 { return Err(mk_err()); } // TODO: "invalid, to avoid confusion with a frame sync code"
-    if block_type > 6 { return Err(mk_err()); } // TODO: "reserved"
-
     // The length field is 24 bits, or 3 bytes.
     let length = try!(input.read_be_uint_n(3)) as u32;
     
@@ -109,23 +106,42 @@ pub fn read_metadata_block_header(input: &mut Reader) -> Result<MetadataBlockHea
 
 fn read_metadata_block(input: &mut Reader, block_type: u8, length: u32)
                        -> Result<MetadataBlock, Error> {
-    let block = match block_type {
+    match block_type {
         0 => {
             let streaminfo = try!(read_streaminfo_block(input));
-            MetadataBlock::StreamInfo(streaminfo)
+            Ok(MetadataBlock::StreamInfo(streaminfo))
         },
         1 => {
             try!(read_padding_block(input, length));
-            MetadataBlock::Padding { length: length }
+            Ok(MetadataBlock::Padding { length: length })
         },
         2 => {
             let (id, data) = try!(read_application_block(input, length));
-            MetadataBlock::Application { id: id, data: data }
+            Ok(MetadataBlock::Application { id: id, data: data })
         },
-        _ => return Err(mk_err())
-    };
-
-    Ok(block)
+        3 => {
+            // TODO: implement seektable reading. For now, pretend it is padding.
+            try!(skip_block(input, length));
+            Ok(MetadataBlock::Padding { length: length })
+        },
+        4 => {
+            // TODO: implement Vorbis comment reading. For now, pretend it is padding.
+            try!(skip_block(input, length));
+            Ok(MetadataBlock::Padding { length: length })
+        },
+        5 => {
+            // TODO: implement CUE sheet reading. For now, pretend it is padding.
+            try!(skip_block(input, length));
+            Ok(MetadataBlock::Padding { length: length })
+        },
+        6 => {
+            // TODO: implement picture reading. For now, pretend it is padding.
+            try!(skip_block(input, length));
+            Ok(MetadataBlock::Padding { length: length })
+        },
+        127 => Err(mk_err()), // TODO: "invalid, to avoid confusion with a frame sync code"
+        _ => Err(mk_err()) // TODO: "reserved", is that an error or do we ignore it?
+    }
 }
 
 // TODO: this should be private, but it must be public for the test for now.
@@ -181,6 +197,16 @@ pub fn read_streaminfo_block(input: &mut Reader) -> Result<StreamInfo, Error> {
 }
 
 fn read_padding_block(input: &mut Reader, length: u32) -> Result<(), Error> {
+    // The specification dictates that all bits of the padding block must be 0.
+    for _ in range(0, length) {
+        if try!(input.read_byte()) != 0 {
+            return Err(mk_err()); // TODO: error, nonzero bit in padding block.
+        }
+    }
+    Ok(())
+}
+
+fn skip_block(input: &mut Reader, length: u32) -> Result<(), Error> {
     // Skip all the padding bytes.
     for _ in range(0, length) { try!(input.read_byte()); }
     Ok(())
