@@ -75,8 +75,8 @@ const CRC16_TABLE: [u16, ..256] = [
 /// A reader that computes the CRC-8 over everything it reads.
 ///
 /// The polynomial used is x^8 + x^2 + x^1 + x^0, and the initial value is 0.
-pub struct Crc8Reader<'r, R> where R: 'r {
-    reader: &'r mut R,
+pub struct Crc8Reader<'r> {
+    reader: &'r mut (Reader + 'r),
     state: u8
 }
 
@@ -85,9 +85,9 @@ pub struct Crc16Reader<'r, R> where R: 'r {
     state: u16
 }
 
-impl<'r, R> Crc8Reader<'r, R> {
+impl<'r> Crc8Reader<'r> {
     /// Wraps the reader with a CRC-8 computing reader with initial value 0.
-    pub fn new(reader: &'r mut R) -> Crc8Reader<'r, R> {
+    pub fn new(reader: &'r mut Reader) -> Crc8Reader<'r> {
         Crc8Reader { reader: reader, state: 0 }
     }
 
@@ -97,7 +97,7 @@ impl<'r, R> Crc8Reader<'r, R> {
     }
 }
 
-impl<'r, R> Reader for Crc8Reader<'r, R> where R: Reader {
+impl<'r> Reader for Crc8Reader<'r> {
     fn read(&mut self, buf: &mut [u8]) -> IoResult<uint> {
         // Pass through to the regular reader.
         let n = try!(self.reader.read(buf));

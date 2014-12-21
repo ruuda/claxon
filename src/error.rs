@@ -16,13 +16,23 @@ pub enum FlacError {
 
     /// A lower bound was encountered that was bigger than an upper bound.
     InconsistentBounds,
-    /// The minimum block size must be larger than 15.
+    /// The minimum block size must be larger than 15, and the block size must
+    /// not exceed 65535.
     InvalidBlockSize,
     /// The sample rate must be positive and no larger than 6553550 Hz.
     InvalidSampleRate,
 
     /// The streaminfo block must be the very first metadata block.
     MissingStreamInfoBlock,
+
+    /// A frame must start with the frame sync code.
+    MissingFrameSyncCode,
+    /// The frame header contains an invalid value in one of the reserved bits,
+    /// or it contains one of the bit patterns that is invalid to prevent
+    /// confusion with a frame sync code, or a bit pattern that is reserved.
+    InvalidFrameHeader,
+    /// The observed frame header CRC does not match the stored CRC.
+    FrameHeaderCrcMismatch,
 }
 
 // TODO: implement the Error trait for FlacError.
