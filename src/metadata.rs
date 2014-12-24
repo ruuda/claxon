@@ -240,7 +240,7 @@ pub struct MetadataBlockReader<'r, R> where R: 'r {
 /// Either a `MetadataBlock` or a `FlacError`.
 pub type MetadataBlockResult = FlacResult<MetadataBlock>;
 
-impl<'r, R> MetadataBlockReader<'r, R> where R: Reader {
+impl<'r, R> MetadataBlockReader<'r, R> where R: Reader + 'r {
 
     /// Creates a metadata block reader that will yield at least one element.
     pub fn new(input: &'r mut R) -> MetadataBlockReader<'r, R> {
@@ -257,7 +257,7 @@ impl<'r, R> MetadataBlockReader<'r, R> where R: Reader {
 }
 
 impl<'r, R> Iterator<MetadataBlockResult>
-    for MetadataBlockReader<'r, R> where R: Reader {
+    for MetadataBlockReader<'r, R> where R: Reader + 'r {
 
     fn next(&mut self) -> Option<MetadataBlockResult> {
         if self.done {
