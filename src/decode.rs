@@ -30,6 +30,64 @@ struct FrameHeader {
     // TODO: there is also a sample or frame number.
 }
 
+/// Reads a variable-length integer encoded as what is called "UTF-8" coding
+/// in the specification. (It is not real UTF-8.)
+fn read_var_length_int(input: &mut Reader) -> FlacResult<u64> {
+    use std::iter::range_step_inclusive;
+    // The number of consecutive 1s followed by a 0 is the number of additional
+    // bytes to read.
+    let first = try!(input.read_byte());
+    let mut read_additional = 0u;
+    let mut mask_data = 0b0111_1111u8;
+    let mut mask_mark = 0b1000_0000u8;
+
+    // Determine the number of leading 1s.
+    while first & mask_mark != 0 {
+        read_additional = read_additional + 1;
+        mask_data = mask_data >> 1;
+        mask_mark = mask_mark >> 1;
+    }
+
+    // A single leading 1 is a follow-up byte and thus invalid.
+    if read_additional > 0 {
+        if read_additional == 1 {
+            return Err(FlacError::InvalidVarLengthInt);
+        } else {
+            // The number of 1s (if > 1) is the total number of bytes, not the
+            // number of additional bytes.
+            read_additional = read_additional - 1;
+        }
+    }
+
+    // Each additional byte will yield 6 extra bits, so shift the most
+    // significant bits into the correct position.
+    let mut result = (first & mask_data) as u64 << (6 * read_additional);
+    println!("result = {}, read_a = {}\n", result, read_additional);
+    for i in range_step_inclusive(read_additional - 1, 0, -1) {
+        let byte = try!(input.read_byte());
+
+        // The two most significant bits _must_ be 10.
+        if byte & 0b1100_0000 != 0b1000_0000 {
+            return Err(FlacError::InvalidVarLengthInt);
+        }
+        result = result | ((byte & 0b0011_1111) as u64 << (6 * i));
+    }
+
+    Ok(result)
+}
+
+#[test]
+fn verify_read_var_length_int() {
+    use std::io::MemReader;
+
+    let mut reader = MemReader::new(vec!(0x24, 0xc2, 0xa2, 0xe2, 0x82, 0xac,
+                                         0xf0, 0x90, 0x8d, 0x88));
+    assert_eq!(read_var_length_int(&mut reader).unwrap(), 0x24);
+    assert_eq!(read_var_length_int(&mut reader).unwrap(), 0xa2);
+    assert_eq!(read_var_length_int(&mut reader).unwrap(), 0x20ac);
+    assert_eq!(read_var_length_int(&mut reader).unwrap(), 0x010348);
+}
+
 fn read_frame_header(input: &mut Reader) -> FlacResult<FrameHeader> {
     // The frame header includes a CRC-8 at the end. It can be computed
     // automatically while reading, by wrapping the input reader in a reader

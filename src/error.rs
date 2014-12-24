@@ -31,6 +31,8 @@ pub enum FlacError {
     /// or it contains one of the bit patterns that is invalid to prevent
     /// confusion with a frame sync code, or a bit pattern that is reserved.
     InvalidFrameHeader,
+    /// The expected UTF-8-ish encoded integer contains invalid bit sequences.
+    InvalidVarLengthInt,
     /// The observed frame header CRC does not match the stored CRC.
     FrameHeaderCrcMismatch,
 }
