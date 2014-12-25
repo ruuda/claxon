@@ -73,8 +73,8 @@ impl<'r> FlacStream<'r> {
     }
 
     /// Returns an iterator that decodes frames while iterating.
-    pub fn frames(&'r self) -> &'r FrameReader<'r> {
-        &self.frame_reader
+    pub fn frames(&'r mut self) -> &'r mut FrameReader<'r> {
+        &mut self.frame_reader
     }
 }
 
@@ -82,5 +82,6 @@ impl<'r> FlacStream<'r> {
 fn test_open_stream() {
     use std::io::File;
     let mut input = File::open(&Path::new("foo.flac")).unwrap();
-    let flac_stream = FlacStream::new(&mut input).unwrap();
+    let mut stream = FlacStream::new(&mut input).unwrap();
+    let frame = stream.frames().next().unwrap();
 }
