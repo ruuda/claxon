@@ -37,7 +37,7 @@ struct FrameHeader {
 }
 
 /// Reads a variable-length integer encoded as what is called "UTF-8" coding
-/// in the specification. (It is not real UTF-8.) This function can read 
+/// in the specification. (It is not real UTF-8.) This function can read
 /// integers encoded in this way up to 36-bit integers.
 fn read_var_length_int(input: &mut Reader) -> FlacResult<u64> {
     use std::iter::range_step_inclusive;
@@ -273,4 +273,45 @@ fn read_frame_header(input: &mut Reader) -> FlacResult<FrameHeader> {
        bits_per_sample: bits_per_sample
     };
     Ok(frame_header)
+}
+
+/// Reads frames from a stream and exposes them as an iterator.
+///
+/// TODO: for now, it is assumes that the reader starts at a frame header;
+/// no searching for a sync code is performed at the moment.
+pub struct FrameReader<'r> {
+    input: &'r mut (Reader + 'r),
+}
+
+/// TODO
+struct Frame;
+
+/// Either a `Frame` or a `FlacError`.
+pub type FrameResult = FlacResult<Frame>;
+
+impl<'r> FrameReader<'r> {
+
+    /// Creates a new frame reader that will yield at least one element.
+    pub fn new(input: &'r mut Reader) -> FrameReader<'r> {
+        FrameReader { input: input }
+    }
+
+    fn read_next(&mut self) -> FrameResult {
+        let header = try!(read_frame_header(self.input));
+        // TODO: read the subframes and padding
+        // TODO: read frame footer
+
+        Ok(Frame)
+    }
+}
+
+impl<'r> Iterator<FrameResult> for FrameReader<'r> {
+    fn next(&mut self) -> Option<FrameResult> {
+        // TODO: there needs to be a way to determine whether stream has ended.
+        // In that case, we need to know the stream lengh, so we need to know
+        // the streaminfo (which we might need anyway) ...
+        Some(self.read_next())
+    }
+
+    // TODO: it would be possible to give quite an accurate size hint.
 }
