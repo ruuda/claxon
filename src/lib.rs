@@ -5,6 +5,7 @@ use error::{FlacError, FlacResult};
 use frame::{FrameReader};
 use metadata::{MetadataBlock, MetadataBlockReader, StreamInfo};
 
+mod bitstream;
 mod crc;
 pub mod error;
 pub mod frame;
