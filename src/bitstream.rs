@@ -22,6 +22,11 @@ impl<'r> Bitstream<'r> {
         0xffu8 << (8 - bits) as uint
     }
 
+    /// Skips bits such that the next read will be byte-aligned.
+    pub fn align_to_byte(&mut self) {
+        self.bits_left = 0;
+    }
+
     /// Reads at most eight bits.
     pub fn read_leq_u8(&mut self, bits: u8) -> IoResult<u8> {
         // Of course we can read no more than 8 bits, but we do not want the
@@ -82,4 +87,16 @@ fn verify_bitstream() {
     assert_eq!(bits.read_leq_u8(6).unwrap(), 0b010010);
     assert_eq!(bits.read_leq_u8(7).unwrap(), 0b1010101);
     assert_eq!(bits.read_leq_u8(8).unwrap(), 0b11001100);
+}
+
+#[test]
+fn verify_align() {
+    use std::io::MemReader;
+
+    let mut data = MemReader::new(vec!(0x00, 0xff));
+    let mut bits = Bitstream::new(&mut data);
+
+    assert_eq!(bits.read_leq_u8(5).unwrap(), 0);
+    bits.align_to_byte();
+    assert_eq!(bits.read_leq_u8(3).unwrap(), 7);
 }
