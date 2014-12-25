@@ -5,7 +5,7 @@ use error::{FlacError, FlacResult};
 use decode::{FrameReader};
 use metadata::{MetadataBlock, MetadataBlockReader, StreamInfo};
 
-mod checksum;
+mod crc;
 pub mod decode;
 pub mod error;
 pub mod metadata;

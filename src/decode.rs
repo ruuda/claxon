@@ -1,4 +1,4 @@
-use checksum::Crc8Reader;
+use crc::Crc8Reader;
 use error::{FlacError, FlacResult};
 
 #[deriving(Copy)]
