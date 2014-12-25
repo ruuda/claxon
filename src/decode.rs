@@ -13,7 +13,7 @@ enum BlockTime {
     SampleNumber(u64)
 }
 
-#[deriving(Copy)]
+#[deriving(Copy, Show)] // TODO: should not derive show.
 enum ChannelMode {
     /// The channels are coded as-is.
     Raw,
@@ -296,6 +296,15 @@ impl<'r> FrameReader<'r> {
 
     fn read_next(&mut self) -> FrameResult {
         let header = try!(read_frame_header(self.input));
+
+        // TODO: remove this print.
+        println!("Frame: bs = {}, sr = {}, n_ch = {}, cm = {}, bps = {}",
+                 header.block_size,
+                 header.sample_rate,
+                 header.n_channels,
+                 header.channel_mode,
+                 header.bits_per_sample);
+
         // TODO: read the subframes and padding
         // TODO: read frame footer
 
