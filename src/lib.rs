@@ -2,12 +2,13 @@
 #![feature(slicing_syntax)]
 
 use error::{FlacError, FlacResult};
-use decode::{FrameReader};
+use frame::{FrameReader};
 use metadata::{MetadataBlock, MetadataBlockReader, StreamInfo};
 
 mod crc;
-pub mod decode;
 pub mod error;
+pub mod frame;
+pub mod subframe;
 pub mod metadata;
 
 pub struct FlacStream<'r> {

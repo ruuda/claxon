@@ -33,7 +33,6 @@ struct FrameHeader {
     pub n_channels: u8,
     pub channel_mode: ChannelMode,
     pub bits_per_sample: Option<u8>
-    // TODO: there is also a sample or frame number.
 }
 
 /// Reads a variable-length integer encoded as what is called "UTF-8" coding
