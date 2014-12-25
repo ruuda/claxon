@@ -80,8 +80,11 @@ pub struct Crc8Reader<'r> {
     state: u8
 }
 
-pub struct Crc16Reader<'r, R> where R: 'r {
-    reader: &'r mut R,
+/// A reader that computes the CRC-16 over everything it reads.
+///
+/// The polynomial used is x^16 + x^15 + x^2 + x^0, and the initial value is 0.
+pub struct Crc16Reader<'r> {
+    reader: &'r mut (Reader + 'r),
     state: u16
 }
 
@@ -93,6 +96,18 @@ impl<'r> Crc8Reader<'r> {
 
     /// Returns the CRC computed thus far.
     pub fn crc(&self) -> u8 {
+        self.state
+    }
+}
+
+impl<'r> Crc16Reader<'r> {
+    /// Wraps the reader with a CRC-16 computing reader with initial value 0.
+    pub fn new(reader: &'r mut Reader) -> Crc16Reader<'r> {
+        Crc16Reader { reader: reader, state: 0 }
+    }
+
+    /// Returns the CRC computed thus far.
+    pub fn crc(&self) -> u16 {
         self.state
     }
 }
@@ -111,6 +126,21 @@ impl<'r> Reader for Crc8Reader<'r> {
     }
 }
 
+impl<'r> Reader for Crc16Reader<'r> {
+    fn read(&mut self, buf: &mut [u8]) -> IoResult<uint> {
+        // Pass through to the regular reader.
+        let n = try!(self.reader.read(buf));
+
+        // And also update the CRC with the bytes just read.
+        for x in buf[0 ..n].iter() {
+            self.state = (self.state << 8)
+                       ^ CRC16_TABLE[((self.state >> 8) as u8 ^ *x) as uint];
+        }
+
+        Ok(n)
+    }
+}
+
 #[cfg(test)]
 fn verify_crc8(test_vector: Vec<u8>, result: u8) {
     use std::io::MemReader;
@@ -118,7 +148,17 @@ fn verify_crc8(test_vector: Vec<u8>, result: u8) {
     let mut data = MemReader::new(test_vector);
     let mut reader = Crc8Reader::new(&mut data);
     reader.read_to_end().unwrap();
-    assert!(reader.crc() == result);
+    assert_eq!(reader.crc(), result);
+}
+
+#[cfg(test)]
+fn verify_crc16(test_vector: Vec<u8>, result: u16) {
+    use std::io::MemReader;
+
+    let mut data = MemReader::new(test_vector);
+    let mut reader = Crc16Reader::new(&mut data);
+    reader.read_to_end().unwrap();
+    assert_eq!(reader.crc(), result);
 }
 
 #[test]
@@ -126,4 +166,9 @@ fn verify_crc8_test_vectors() {
     verify_crc8(vec!(0x1f), 0x5d);
     verify_crc8(vec!(0x04, 0x01), 0x53);
     verify_crc8(vec!(0x61, 0x62, 0x63), 0x5f);
+}
+
+#[test]
+fn verify_crc16_test_vectors() {
+    // TODO: find some good test vectors.
 }
