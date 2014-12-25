@@ -35,6 +35,9 @@ pub enum FlacError {
     InvalidVarLengthInt,
     /// The observed frame header CRC does not match the stored CRC.
     FrameHeaderCrcMismatch,
+
+    /// The subframe header contains an invalid or reserved bit pattern.
+    InvalidSubframeHeader,
 }
 
 // TODO: implement the Error trait for FlacError.
