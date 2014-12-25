@@ -8,6 +8,12 @@ enum BlockingStrategy {
 }
 
 #[deriving(Copy)]
+enum BlockTime {
+    FrameNumber(u32),
+    SampleNumber(u64)
+}
+
+#[deriving(Copy)]
 enum ChannelMode {
     /// The channels are coded as-is.
     Raw,
@@ -21,7 +27,7 @@ enum ChannelMode {
 
 #[deriving(Copy)]
 struct FrameHeader {
-    pub blocking_strategy: BlockingStrategy,
+    pub block_time: BlockTime,
     pub block_size: u16,
     pub sample_rate: Option<u32>,
     pub n_channels: u8,
@@ -31,9 +37,11 @@ struct FrameHeader {
 }
 
 /// Reads a variable-length integer encoded as what is called "UTF-8" coding
-/// in the specification. (It is not real UTF-8.)
+/// in the specification. (It is not real UTF-8.) This function can read 
+/// integers encoded in this way up to 36-bit integers.
 fn read_var_length_int(input: &mut Reader) -> FlacResult<u64> {
     use std::iter::range_step_inclusive;
+    use std::io::stdio::flush;
     // The number of consecutive 1s followed by a 0 is the number of additional
     // bytes to read.
     let first = try!(input.read_byte());
@@ -62,15 +70,17 @@ fn read_var_length_int(input: &mut Reader) -> FlacResult<u64> {
     // Each additional byte will yield 6 extra bits, so shift the most
     // significant bits into the correct position.
     let mut result = (first & mask_data) as u64 << (6 * read_additional);
-    println!("result = {}, read_a = {}\n", result, read_additional);
-    for i in range_step_inclusive(read_additional - 1, 0, -1) {
+    println!("result = {:b}, read_a = {}\n", result, read_additional);
+    for i in range_step_inclusive(read_additional as int - 1, 0, -1) {
         let byte = try!(input.read_byte());
 
         // The two most significant bits _must_ be 10.
         if byte & 0b1100_0000 != 0b1000_0000 {
             return Err(FlacError::InvalidVarLengthInt);
         }
-        result = result | ((byte & 0b0011_1111) as u64 << (6 * i));
+        println!("adding bits {:b}\n", (byte & 0b0011_1111));
+        flush();
+        result = result | ((byte & 0b0011_1111) as u64 << (6 * i as uint));
     }
 
     Ok(result)
@@ -81,11 +91,18 @@ fn verify_read_var_length_int() {
     use std::io::MemReader;
 
     let mut reader = MemReader::new(vec!(0x24, 0xc2, 0xa2, 0xe2, 0x82, 0xac,
-                                         0xf0, 0x90, 0x8d, 0x88));
+                                         0xf0, 0x90, 0x8d, 0x88, 0xc2, 0x00,
+                                         0x80));
     assert_eq!(read_var_length_int(&mut reader).unwrap(), 0x24);
     assert_eq!(read_var_length_int(&mut reader).unwrap(), 0xa2);
     assert_eq!(read_var_length_int(&mut reader).unwrap(), 0x20ac);
     assert_eq!(read_var_length_int(&mut reader).unwrap(), 0x010348);
+    // Two-byte integer with invalid continuation byte should fail.
+    assert_eq!(read_var_length_int(&mut reader).err().unwrap(),
+               FlacError::InvalidVarLengthInt);
+    // Continuation byte can never be the first byte.
+    assert_eq!(read_var_length_int(&mut reader).err().unwrap(),
+               FlacError::InvalidVarLengthInt);
 }
 
 fn read_frame_header(input: &mut Reader) -> FlacResult<FrameHeader> {
@@ -194,16 +211,22 @@ fn read_frame_header(input: &mut Reader) -> FlacResult<FrameHeader> {
         return Err(FlacError::InvalidFrameHeader);
     }
 
-    match blocking_strategy {
+    let block_time = match blocking_strategy {
         BlockingStrategy::Variable => {
-            // TODO: read UTF-8 encoded sample number from 8-46 bits,
-            // decoded number is 36 bits.
+            // The sample number is encoded in 8-56 bits, at most a 36-bit int.
+            let sample = try!(read_var_length_int(&mut crc_input));
+            BlockTime::SampleNumber(sample)
         },
         BlockingStrategy::Fixed => {
-            // TODO: read UTF-8 encoded frame number from 8-48 bits,
-            // decoded number is 31 bits.
+            // The frame number is encoded in 8-48 bits, at most a 31-bit int.
+            let frame = try!(read_var_length_int(&mut crc_input));
+            // A frame number larger than 31 bits is therefore invalid.
+            if frame > 0x7fffffff {
+                return Err(FlacError::InvalidFrameHeader);
+            }
+            BlockTime::FrameNumber(frame as u32)
         }
-    }
+    };
 
     if read_8bit_bs {
         // 8 bit block size - 1 is stored.
@@ -242,7 +265,7 @@ fn read_frame_header(input: &mut Reader) -> FlacResult<FrameHeader> {
     }
 
     let frame_header = FrameHeader {
-       blocking_strategy: blocking_strategy,
+       block_time: block_time,
        block_size: block_size,
        sample_rate: sample_rate,
        n_channels: n_channels,

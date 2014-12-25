@@ -1,7 +1,7 @@
 use std::error::FromError;
 use std::io::IoError;
 
-#[deriving(Show)]
+#[deriving(PartialEq, Eq, Show)]
 pub enum FlacError {
     /// Not a decoding error, but a problem with the underlying IO.
     IoError(IoError),
