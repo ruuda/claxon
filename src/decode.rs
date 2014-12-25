@@ -41,7 +41,6 @@ struct FrameHeader {
 /// integers encoded in this way up to 36-bit integers.
 fn read_var_length_int(input: &mut Reader) -> FlacResult<u64> {
     use std::iter::range_step_inclusive;
-    use std::io::stdio::flush;
     // The number of consecutive 1s followed by a 0 is the number of additional
     // bytes to read.
     let first = try!(input.read_byte());
