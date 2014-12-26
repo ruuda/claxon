@@ -340,7 +340,7 @@ impl<'r, Sample> FrameReader<'r, Sample> where Sample: UnsignedInt {
         FrameReader { input: input, buffer: Vec::new() }
     }
 
-    fn read_next<'s>(&'s mut self) -> FrameResult<'s, Sample> {
+    pub fn read_next<'s>(&'s mut self) -> FrameResult<'s, Sample> {
         let header = try!(read_frame_header(self.input));
 
         // TODO: remove this print.
@@ -404,15 +404,15 @@ impl<'r, Sample> FrameReader<'r, Sample> where Sample: UnsignedInt {
     }
 }
 
-impl<'r, 'b, Sample> Iterator<FrameResult<'b, Sample>>
-    for FrameReader<'r, Sample>
-    where Sample: UnsignedInt {
-    fn next(&mut self) -> Option<FrameResult<'b, Sample>> {
-        // TODO: there needs to be a way to determine whether stream has ended.
-        // In that case, we need to know the stream lengh, so we need to know
-        // the streaminfo (which we might need anyway) ...
-        Some(self.read_next())
-    }
-
-    // TODO: it would be possible to give quite an accurate size hint.
-}
+// impl<'r, 'b, Sample> Iterator<FrameResult<'b, Sample>>
+//     for FrameReader<'r, Sample>
+//     where Sample: UnsignedInt {
+//     fn next(&mut self) -> Option<FrameResult<'b, Sample>> {
+//         // TODO: there needs to be a way to determine whether stream has ended.
+//         // In that case, we need to know the stream lengh, so we need to know
+//         // the streaminfo (which we might need anyway) ...
+//         Some(self.read_next())
+//     }
+//
+//     // TODO: it would be possible to give quite an accurate size hint.
+// }

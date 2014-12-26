@@ -87,5 +87,6 @@ fn test_open_stream() {
     use std::io::File;
     let mut input = File::open(&Path::new("foo.flac")).unwrap();
     let mut stream = FlacStream::new(&mut input).unwrap();
-    let frame = stream.frames().next().unwrap();
+    let mut blocks = stream.blocks::<u16>();
+    let block = blocks.read_next();
 }
