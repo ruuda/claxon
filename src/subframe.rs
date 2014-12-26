@@ -1,4 +1,3 @@
-use std::mem::size_of;
 use std::num::{NumCast, UnsignedInt};
 use bitstream::Bitstream;
 use error::{FlacError, FlacResult};
@@ -74,59 +73,57 @@ fn read_subframe_header(input: &mut Bitstream) -> FlacResult<SubframeHeader> {
     Ok(subframe_header)
 }
 
-pub struct SubframeDecoder<'r> {
-    block_size: u16,
+pub struct SubframeDecoder<'r, Sample> {
     bits_per_sample: u8,
-    header: SubframeHeader,
     input: &'r mut Bitstream<'r>
 }
 
-impl<'r> SubframeDecoder<'r> {
-    pub fn new(block_size: u16,
-               bits_per_sample: u8,
-               input: &'r mut Bitstream<'r>)
-               -> FlacResult<SubframeDecoder<'r>> {
-        let header = try!(read_subframe_header(input));
-        let decoder = SubframeDecoder {
-            block_size: block_size,
-            bits_per_sample: bits_per_sample,
-            header: header,
-            input: input
-        };
-        Ok(decoder)
-    }
-
-    /// Decodes the subframe into the provided buffer.
+impl<'r, Sample> SubframeDecoder<'r, Sample>
+where Sample: UnsignedInt {
+    /// Creates a new subframe decoder capable of decoding several subframes.
     ///
-    /// The buffer must have _exactly_ the right size (the block size of the
-    /// frame). The `Sample` type must be wide enough to accomodate for all
-    /// bits per sample of the frame.
-    pub fn decode<Sample>(&mut self, buffer: &mut [Sample]) -> FlacResult<()>
-                          where Sample: UnsignedInt {
+    /// The size of the `Sample` type must be wide enough to accomodate for
+    /// `bits_per_sample` bits per sample.
+    pub fn new(bits_per_sample: u8, input: &'r mut Bitstream<'r>)
+               -> SubframeDecoder<'r, Sample> {
         // The sample type should be wide enough to accomodate for all bits of
         // the stream, but this can be verified at a higher level than here.
         // Still, it is a good idea to make the assumption explicit.
         //
         // TODO: the compiler refuses to compile the next line at the moment of
         // writing. Maybe in the future it will?
-        // debug_assert!(self.bits_per_sample <= size_of<Sample>() * 8);
- 
-        // We assume that the buffer has the right size; obviously it cannot be
-        // to small if we are to decode the entire subframe. Requiring it to
-        // have the exact block size also ensures that there cannot be any
-        // confusion about what happens to excess samples: there are none.
-        debug_assert_eq!(self.block_size as uint, buffer.len());
+        // use std::mem::size_of;
+        // debug_assert!(bits_per_sample <= size_of<Sample>() * 8);
 
-        match self.header.sf_type {
-            SubframeType::Constant => self.decode_constant(buffer),
-            SubframeType::Verbatim => self.decode_verbatim(buffer),
-            _ => Ok(()) // TODO: implement other decoders
-        }
+        SubframeDecoder { bits_per_sample: bits_per_sample, input: input }
     }
 
-    fn decode_constant<Sample>(&mut self, buffer: &mut [Sample])
-                               -> FlacResult<()>
-                               where Sample: UnsignedInt {
+    /// Decodes the subframe into the provided block-size buffer.
+    ///
+    /// It is assumed that the length of the buffer is the block size.
+    pub fn decode(&mut self, buffer: &mut [Sample]) -> FlacResult<()> {
+        // First up is the subframe header.
+        let header = try!(read_subframe_header(self.input));
+
+        // Then decode the subframe, properly per type.
+        match header.sf_type {
+            SubframeType::Constant => try!(self.decode_constant(buffer)),
+            SubframeType::Verbatim => try!(self.decode_verbatim(buffer)),
+            _ => { } // TODO: implement other decoders
+        }
+
+        // Finally, everything must be shifted by 'wasted bits per sample' to
+        // the left.
+        if header.wasted_bits_per_sample > 0 {
+            for s in buffer.iter_mut() {
+                *s = *s << header.wasted_bits_per_sample as uint;
+            }
+        }
+
+        Ok(())
+    }
+
+    fn decode_constant(&mut self, buffer: &mut [Sample]) -> FlacResult<()> {
         // A constant block has <bits per sample> bits: the value of all
         // samples. The unwrap is safe, because it has been verified before
         // that the `Sample` type is wide enough for the bits per sample.
@@ -140,9 +137,7 @@ impl<'r> SubframeDecoder<'r> {
         Ok(())
     }
 
-    fn decode_verbatim<Sample>(&mut self, buffer: &mut [Sample])
-                               -> FlacResult<()>
-                               where Sample: UnsignedInt {
+    fn decode_verbatim(&mut self, buffer: &mut [Sample]) -> FlacResult<()> {
         // A verbatim block stores samples without encoding whatsoever.
         for s in buffer.iter_mut() {
             // The unwrap is safe, because it has been verified before that the
