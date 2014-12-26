@@ -64,10 +64,48 @@ impl<'r> Bitstream<'r> {
         // bits, but we want to pad in the most significant bits, so shift.
         Ok(result >> (8 - bits) as uint)
     }
+
+    /// Reads at most 16 bits.
+    pub fn read_leq_u16(&mut self, bits: u8) -> IoResult<u16> {
+        // As with read_leq_u8, this only makes sense if we read <= 16 bits.
+        debug_assert!(bits <= 16);
+
+        // Note: the following is not the most efficient implementation
+        // possible, but it avoids duplicating the complexity of `read_leq_u8`.
+
+        if bits <= 8 {
+            let result = try!(self.read_leq_u8(bits));
+            Ok(result as u16)
+        } else {
+            // First read the 8 most significant bits, then read what is left.
+            let msb = try!(self.read_leq_u8(8)) as u16;
+            let lsb = try!(self.read_leq_u8(bits - 8)) as u16;
+            Ok((msb << (bits - 8) as uint) | lsb)
+        }
+    }
+
+    /// Reads at most 32 bits.
+    pub fn read_leq_u32(&mut self, bits: u8) -> IoResult<u32> {
+        // As with read_leq_u8, this only makes sense if we read <= 32 bits.
+        debug_assert!(bits <= 32);
+
+        // Note: the following is not the most efficient implementation
+        // possible, but it avoids duplicating the complexity of `read_leq_u8`.
+
+        if bits <= 16 {
+            let result = try!(self.read_leq_u16(bits));
+            Ok(result as u32)
+        } else {
+            // First read the 16 most significant bits, then read what is left.
+            let msb = try!(self.read_leq_u16(16)) as u32;
+            let lsb = try!(self.read_leq_u16(bits - 16)) as u32;
+            Ok((msb << (bits - 16) as uint) | lsb)
+        }
+    }
 }
 
 #[test]
-fn verify_bitstream() {
+fn verify_read_leq_u8() {
     use std::io::MemReader;
 
     let mut data = MemReader::new(vec!(0b1010_0101, 0b1110_0001,
@@ -87,6 +125,20 @@ fn verify_bitstream() {
     assert_eq!(bits.read_leq_u8(6).unwrap(), 0b010010);
     assert_eq!(bits.read_leq_u8(7).unwrap(), 0b1010101);
     assert_eq!(bits.read_leq_u8(8).unwrap(), 0b11001100);
+}
+
+#[test]
+fn verify_read_leq_u16() {
+    use std::io::MemReader;
+
+    let mut data = MemReader::new(vec!(0b1010_0101, 0b1110_0001,
+                                       0b1101_0010, 0b0101_0101));
+    let mut bits = Bitstream::new(&mut data);
+
+    assert_eq!(bits.read_leq_u16(0).unwrap(), 0);
+    assert_eq!(bits.read_leq_u16(1).unwrap(), 1);
+    assert_eq!(bits.read_leq_u16(13).unwrap(), 0b0100101111000);
+    assert_eq!(bits.read_leq_u16(9).unwrap(), 0b011101001);
 }
 
 #[test]
