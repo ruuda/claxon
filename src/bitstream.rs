@@ -137,8 +137,21 @@ fn verify_read_leq_u16() {
 
     assert_eq!(bits.read_leq_u16(0).unwrap(), 0);
     assert_eq!(bits.read_leq_u16(1).unwrap(), 1);
-    assert_eq!(bits.read_leq_u16(13).unwrap(), 0b0100101111000);
-    assert_eq!(bits.read_leq_u16(9).unwrap(), 0b011101001);
+    assert_eq!(bits.read_leq_u16(13).unwrap(), 0b010_0101_1110_00);
+    assert_eq!(bits.read_leq_u16(9).unwrap(), 0b01_1101_001);
+}
+
+#[test]
+fn verify_read_leq_u32() {
+    use std::io::MemReader;
+
+    let mut data = MemReader::new(vec!(0b1010_0101, 0b1110_0001,
+                                       0b1101_0010, 0b0101_0101));
+    let mut bits = Bitstream::new(&mut data);
+
+    assert_eq!(bits.read_leq_u32(1).unwrap(), 1);
+    assert_eq!(bits.read_leq_u32(17).unwrap(), 0b010_0101_1110_0001_11);
+    assert_eq!(bits.read_leq_u32(14).unwrap(), 0b01_0010_0101_0101);
 }
 
 #[test]
