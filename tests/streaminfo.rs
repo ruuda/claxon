@@ -1,4 +1,4 @@
-extern crate flac;
+extern crate snow;
 
 fn run_metaflac(fname: &Path) -> String {
     use std::io::Command;
@@ -36,7 +36,7 @@ fn print_hex(seq: &[u8]) -> String {
 fn read_streaminfo(fname: &Path) -> String {
     use std::io::fs::File;
     use std::io::BufferedReader;
-    use flac::FlacStream;
+    use snow::FlacStream;
 
     // Use a buffered reader, this speeds up the test by 120%.
     let file = File::open(fname).unwrap();
