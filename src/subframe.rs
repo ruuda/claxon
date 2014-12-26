@@ -78,8 +78,7 @@ pub struct SubframeDecoder<'r, Sample> {
     input: &'r mut Bitstream<'r>
 }
 
-impl<'r, Sample> SubframeDecoder<'r, Sample>
-where Sample: UnsignedInt {
+impl<'r, Sample> SubframeDecoder<'r, Sample> where Sample: UnsignedInt {
     /// Creates a new subframe decoder capable of decoding several subframes.
     ///
     /// The size of the `Sample` type must be wide enough to accomodate for
@@ -89,11 +88,8 @@ where Sample: UnsignedInt {
         // The sample type should be wide enough to accomodate for all bits of
         // the stream, but this can be verified at a higher level than here.
         // Still, it is a good idea to make the assumption explicit.
-        //
-        // TODO: the compiler refuses to compile the next line at the moment of
-        // writing. Maybe in the future it will?
-        // use std::mem::size_of;
-        // debug_assert!(bits_per_sample <= size_of<Sample>() * 8);
+        use std::mem::size_of;
+        debug_assert!(bits_per_sample as uint <= size_of::<Sample>() * 8);
 
         SubframeDecoder { bits_per_sample: bits_per_sample, input: input }
     }

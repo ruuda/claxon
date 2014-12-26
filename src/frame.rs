@@ -341,6 +341,8 @@ impl<'r, Sample> FrameReader<'r, Sample> where Sample: UnsignedInt {
     }
 
     pub fn read_next<'s>(&'s mut self) -> FrameResult<'s, Sample> {
+        use std::mem::size_of;
+
         let header = try!(read_frame_header(self.input));
 
         // TODO: remove this print.
@@ -350,8 +352,6 @@ impl<'r, Sample> FrameReader<'r, Sample> where Sample: UnsignedInt {
                  header.n_channels,
                  header.channel_mode,
                  header.bits_per_sample);
-
-        // TODO: verify that `Sample` is wide enough, fail otherwise.
 
         // We must allocate enough space for all channels in the block to be
         // decoded.
@@ -369,6 +369,9 @@ impl<'r, Sample> FrameReader<'r, Sample> where Sample: UnsignedInt {
         // TODO: if the bps is missing from the header, we must get it from
         // the streaminfo block.
         let bps = header.bits_per_sample.unwrap();
+
+        // The sample size must be wide enough to accomodate for the bits per sample.
+        debug_assert!(bps as uint <= size_of::<Sample>() * 8);
 
         // In the next part of the stream, nothing is byte-aligned any more,
         // we need a bitstream. Then we can decode subframes from the bitstream.
