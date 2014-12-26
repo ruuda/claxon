@@ -2,7 +2,7 @@ use std::num::{NumCast, UnsignedInt};
 use bitstream::Bitstream;
 use error::{FlacError, FlacResult};
 
-#[deriving(Copy)]
+#[deriving(Copy, Show)] // TODO: this should not implement Show.
 enum SubframeType {
     Constant,
     Verbatim,
@@ -102,6 +102,7 @@ impl<'r, Sample> SubframeDecoder<'r, Sample> where Sample: UnsignedInt {
         let header = try!(read_subframe_header(self.input));
 
         // Then decode the subframe, properly per type.
+        println!("encountered subframe of type {}", header.sf_type);
         match header.sf_type {
             SubframeType::Constant => try!(self.decode_constant(buffer)),
             SubframeType::Verbatim => try!(self.decode_verbatim(buffer)),

@@ -391,6 +391,8 @@ impl<'r, Sample> FrameReader<'r, Sample> where Sample: UnsignedInt {
             // enforce this here.
         }
 
+        // TODO: decode sepcial channel modes.
+
         // TODO: constant block size should be verified if a frame number is
         // encountered.
         let time = match header.block_time {
