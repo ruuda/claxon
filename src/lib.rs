@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 #![feature(slicing_syntax)]
 
+use std::num::UnsignedInt;
 use error::{FlacError, FlacResult};
 use frame::{FrameReader};
 use metadata::{MetadataBlock, MetadataBlockReader, StreamInfo};
@@ -15,7 +16,7 @@ pub mod metadata;
 pub struct FlacStream<'r> {
     streaminfo: StreamInfo,
     metadata_blocks: Vec<MetadataBlock>,
-    frame_reader: FrameReader<'r>
+    input: &'r mut (Reader + 'r)
 }
 
 fn read_stream_header(input: &mut Reader) -> FlacResult<()> {
@@ -63,7 +64,7 @@ impl<'r> FlacStream<'r> {
         let flac_stream = FlacStream {
             streaminfo: streaminfo,
             metadata_blocks: metadata_blocks,
-            frame_reader: FrameReader::new(input)
+            input: input
         };
 
         Ok(flac_stream)
@@ -74,9 +75,10 @@ impl<'r> FlacStream<'r> {
         &self.streaminfo
     }
 
-    /// Returns an iterator that decodes frames while iterating.
-    pub fn frames(&'r mut self) -> &'r mut FrameReader<'r> {
-        &mut self.frame_reader
+    /// Returns an iterator that decodes a single frame on every iteration.
+    pub fn blocks<Sample>(&'r mut self) -> &'r mut FrameReader<'r, Sample>
+        where Sample: UnsignedInt {
+        &mut FrameReader::new(&mut self.input)
     }
 }
 

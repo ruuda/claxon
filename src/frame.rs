@@ -1,5 +1,8 @@
+use std::num::{Int, UnsignedInt};
+use bitstream::Bitstream;
 use crc::Crc8Reader;
 use error::{FlacError, FlacResult};
+use subframe::SubframeDecoder;
 
 #[deriving(Copy)]
 enum BlockingStrategy {
@@ -271,28 +274,73 @@ fn read_frame_header(input: &mut Reader) -> FlacResult<FrameHeader> {
     Ok(frame_header)
 }
 
+pub struct Block<'b, Sample> where Sample: 'b {
+    /// The sample number of the first sample in the this block.
+    first_sample_number: u64,
+    /// The number of samples in the block.
+    block_size: u16,
+    /// The number of channels in the block.
+    n_channels: u8,
+    /// The decoded samples, the channels stored consecutively.
+    samples: &'b [Sample]
+}
+
+impl <'b, Sample> Block<'b, Sample> where Sample: UnsignedInt {
+    fn new(time: u64, bs: u16, buffer: &'b [Sample]) -> Block<'b, Sample> {
+        Block {
+            first_sample_number: time,
+            block_size: bs,
+            n_channels: (buffer.len() / bs as uint) as u8,
+            samples: buffer
+        }
+    }
+
+    /// Returns the sample number of the first sample in the block.
+    pub fn time(&self) -> u64 {
+        self.first_sample_number
+    }
+
+    /// Returns the number of inter-channel samples in the block.
+    pub fn len(&self) -> u16 {
+        self.block_size
+    }
+
+    /// Returns the number of channels in the block.
+    pub fn channels(&self) -> u8 {
+        self.n_channels
+    }
+
+    /// Returns the (zero-based) `ch`-th channel as a slice.
+    ///
+    /// # Panics
+    /// Panics if `ch` is larger than `channels()`.
+    pub fn channel(&'b self, ch: u8) -> &'b [Sample] {
+        self.samples[ch as uint * self.block_size as uint
+                     .. (ch as uint + 1) * self.block_size as uint]
+    }
+}
+
 /// Reads frames from a stream and exposes them as an iterator.
 ///
 /// TODO: for now, it is assumes that the reader starts at a frame header;
 /// no searching for a sync code is performed at the moment.
-pub struct FrameReader<'r> {
+pub struct FrameReader<'r, Sample> {
     input: &'r mut (Reader + 'r),
+    buffer: Vec<Sample>
 }
 
-/// TODO
-struct Frame;
+/// Either a `Block` or a `FlacError`.
+pub type FrameResult<'b, Sample> = FlacResult<Block<'b, Sample>>;
 
-/// Either a `Frame` or a `FlacError`.
-pub type FrameResult = FlacResult<Frame>;
-
-impl<'r> FrameReader<'r> {
+impl<'r, Sample> FrameReader<'r, Sample> where Sample: UnsignedInt {
 
     /// Creates a new frame reader that will yield at least one element.
-    pub fn new(input: &'r mut Reader) -> FrameReader<'r> {
-        FrameReader { input: input }
+    pub fn new(input: &'r mut Reader) -> FrameReader<'r, Sample> {
+        // TODO: a hit for the vector size can be provided.
+        FrameReader { input: input, buffer: Vec::new() }
     }
 
-    fn read_next(&mut self) -> FrameResult {
+    fn read_next<'s>(&'s mut self) -> FrameResult<'s, Sample> {
         let header = try!(read_frame_header(self.input));
 
         // TODO: remove this print.
@@ -303,15 +351,62 @@ impl<'r> FrameReader<'r> {
                  header.channel_mode,
                  header.bits_per_sample);
 
-        // TODO: read the subframes and padding
+        // TODO: verify that `Sample` is wide enough, fail otherwise.
+
+        // We must allocate enough space for all channels in the block to be
+        // decoded.
+        let total_samples = header.n_channels as uint * header.block_size as uint;
+        if self.buffer.len() < total_samples {
+            // Previous data will be overwritten, so instead of resizing the
+            // vector if it is too small, we might as well allocate a new one.
+            if self.buffer.capacity() < total_samples {
+                self.buffer = Vec::with_capacity(total_samples);
+            }
+            self.buffer.grow(total_samples - self.buffer.len(), Int::zero());
+        }
+
+        // TODO: if the bps is missing from the header, we must get it from
+        // the streaminfo block.
+        let bps = header.bits_per_sample.unwrap();
+
+        // In the next part of the stream, nothing is byte-aligned any more,
+        // we need a bitstream. Then we can decode subframes from the bitstream.
+        {
+            let bitstream = Bitstream::new(self.input);
+            let decoder = SubframeDecoder::new(bps, &mut bitstream);
+
+            for ch in range(0, header.n_channels) {
+                decoder.decode(self.buffer[
+                               ch as uint * header.block_size as uint
+                               .. (ch as uint + 1) * header.block_size as uint]);
+            }
+
+            // When the bitstream goes out of scope, we can use the `input`
+            // reader again, which will be byte-aligned. The specification
+            // dictates that padding should consist of zero bits, but we do not
+            // enforce this here.
+        }
+
+        // TODO: constant block size should be verified if a frame number is
+        // encountered.
+        let time = match header.block_time {
+            BlockTime::FrameNumber(fnr) => header.block_size as u64 * fnr as u64,
+            BlockTime::SampleNumber(snr) => snr
+        };
+
+        let block = Block::new(time, header.block_size,
+                               self.buffer[0 .. total_samples]);
+
         // TODO: read frame footer
 
-        Ok(Frame)
+        Ok(block)
     }
 }
 
-impl<'r> Iterator<FrameResult> for FrameReader<'r> {
-    fn next(&mut self) -> Option<FrameResult> {
+impl<'r, 'b, Sample> Iterator<FrameResult<'b, Sample>>
+    for FrameReader<'r, Sample>
+    where Sample: UnsignedInt {
+    fn next(&mut self) -> Option<FrameResult<'b, Sample>> {
         // TODO: there needs to be a way to determine whether stream has ended.
         // In that case, we need to know the stream lengh, so we need to know
         // the streaminfo (which we might need anyway) ...
