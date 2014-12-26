@@ -38,6 +38,8 @@ pub enum FlacError {
 
     /// The subframe header contains an invalid or reserved bit pattern.
     InvalidSubframeHeader,
+    /// The subframe contains an invalid or reserved bit pattern.
+    InvalidSubframe,
 
     /// The audio stream has more bits per sample than the provided sample
     /// buffer to decode into.
