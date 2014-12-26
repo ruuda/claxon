@@ -76,9 +76,9 @@ impl<'r> FlacStream<'r> {
     }
 
     /// Returns an iterator that decodes a single frame on every iteration.
-    pub fn blocks<Sample>(&'r mut self) -> &'r mut FrameReader<'r, Sample>
+    pub fn blocks<Sample>(&'r mut self) -> FrameReader<'r, Sample>
         where Sample: UnsignedInt {
-        &mut FrameReader::new(&mut self.input)
+        FrameReader::new(&mut self.input)
     }
 }
 

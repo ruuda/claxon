@@ -362,7 +362,8 @@ impl<'r, Sample> FrameReader<'r, Sample> where Sample: UnsignedInt {
             if self.buffer.capacity() < total_samples {
                 self.buffer = Vec::with_capacity(total_samples);
             }
-            self.buffer.grow(total_samples - self.buffer.len(), Int::zero());
+            let len = self.buffer.len();
+            self.buffer.grow(total_samples - len, Int::zero());
         }
 
         // TODO: if the bps is missing from the header, we must get it from
@@ -372,13 +373,13 @@ impl<'r, Sample> FrameReader<'r, Sample> where Sample: UnsignedInt {
         // In the next part of the stream, nothing is byte-aligned any more,
         // we need a bitstream. Then we can decode subframes from the bitstream.
         {
-            let bitstream = Bitstream::new(self.input);
-            let decoder = SubframeDecoder::new(bps, &mut bitstream);
+            let mut bitstream = Bitstream::new(self.input);
+            let mut decoder = SubframeDecoder::new(bps, &mut bitstream);
 
             for ch in range(0, header.n_channels) {
-                decoder.decode(self.buffer[
-                               ch as uint * header.block_size as uint
-                               .. (ch as uint + 1) * header.block_size as uint]);
+                try!(decoder.decode(self.buffer[mut
+                     ch as uint * header.block_size as uint
+                     .. (ch as uint + 1) * header.block_size as uint]));
             }
 
             // When the bitstream goes out of scope, we can use the `input`
