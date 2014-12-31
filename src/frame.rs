@@ -14,7 +14,8 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-use std::num::{Int, NumCast, UnsignedInt};
+use std::mem::size_of;
+use std::num::{Int, UnsignedInt};
 use bitstream::Bitstream;
 use crc::Crc8Reader;
 use error::{FlacError, FlacResult};
@@ -35,7 +36,7 @@ enum BlockTime {
 #[deriving(Copy, Show)] // TODO: should not derive show.
 enum ChannelMode {
     /// The channels are coded as-is.
-    Raw,
+    Independent,
     /// Channel 0 is the left channel, channel 1 is the side channel.
     LeftSideStereo,
     /// Channel 0 is the side channel, channel 1 is the right channel.
@@ -201,7 +202,7 @@ fn read_frame_header(input: &mut Reader) -> FlacResult<FrameHeader> {
     // The most significant 4 bits determine channel assignment.
     let (n_channels, channel_mode) = match chan_bps_res >> 4 {
         // Values 0 through 7 indicate n + 1 channels without mixing.
-        n if n < 8 => (n + 1, ChannelMode::Raw),
+        n if n < 8 => (n + 1, ChannelMode::Independent),
         0b1000 => (2, ChannelMode::LeftSideStereo),
         0b1001 => (2, ChannelMode::RightSideStereo),
         0b1010 => (2, ChannelMode::MidSideStereo),
@@ -308,8 +309,8 @@ fn decode_left_side<Sample>(buffer: &mut [Sample]) where Sample: UnsignedInt {
 fn verify_decode_left_side() {
     let mut buffer = vec!(2u8, 005, 083, 113, 127, 193, 211, 241,
                           007, 038, 142, 238, 000, 104, 204, 238);
-    let result = vec!(2u8, 005, 083, 113, 127, 193, 211, 241,
-                      251, 223, 197, 131, 127, 089, 007, 003);
+    let result =     vec!(2u8, 005, 083, 113, 127, 193, 211, 241,
+                          251, 223, 197, 131, 127, 089, 007, 003);
     decode_left_side(buffer[mut]);
     assert_eq!(buffer, result);
 }
@@ -332,8 +333,8 @@ fn decode_right_side<Sample>(buffer: &mut [Sample]) where Sample: UnsignedInt {
 fn verify_decode_right_side() {
     let mut buffer = vec!(7u8, 038, 142, 238, 000, 104, 204, 238,
                           251, 223, 197, 131, 127, 089, 007, 003);
-    let result = vec!(2u8, 005, 083, 113, 127, 193, 211, 241,
-                      251, 223, 197, 131, 127, 089, 007, 003);
+    let result =     vec!(2u8, 005, 083, 113, 127, 193, 211, 241,
+                          251, 223, 197, 131, 127, 089, 007, 003);
     decode_right_side(buffer[mut]);
     assert_eq!(buffer, result);
 }
@@ -341,17 +342,36 @@ fn verify_decode_right_side() {
 /// Converts a buffer mid ++ side in-place to left ++ right.
 fn decode_mid_side<Sample>(buffer: &mut [Sample]) where Sample: UnsignedInt {
     let block_size = buffer.len() / 2;
-    let two = NumCast::from(2u8).unwrap();
     for i in range(0, block_size) {
         let mid = buffer[i];
         let side = buffer[block_size + i];
 
-        // side = left - right, mid = left/2 + right/2 => left = mid - side/2.
-        // Note: overflow is intentional.
-        buffer[i] = (mid - side) / two;
-        buffer[block_size + i] = (mid + side) / two; // TODO: is this correct?
+        // The code below uses shifts insead of multiplication/division by two,
+        // because Rust does not infer a literal `2` to be of type `Sample`.
+
+        // Double mid first, and then correct for truncated rounding that
+        // will have occured if side is odd.
+        // TODO: this fails if (mid + side) overflows. It would be possible
+        // to use a wider integer, but then adding/subtracting side does not
+        // wrap as desired. The reference implementation does not take special
+        // care of this; maybe the encoder encodes in such a way that this works
+        // out, and my assumption about the encoding is wrong?
+        let mid = (mid << 1) | (side & Int::one());
+        buffer[i] = (mid + side) >> 1;
+        buffer[block_size + i] = (mid - side) >> 1;
     }
 }
+
+// TODO
+// #[test]
+// fn verify_decode_mid_side() {
+//     let mut buffer = vec!(126u8, 114, 140, 122, 127, 141, 109, 122,
+//                             007, 038, 142, 238, 000, 104, 204, 238);
+//     let result =       vec!(2u8, 005, 083, 113, 127, 193, 211, 241,
+//                             251, 223, 197, 131, 127, 089, 007, 003);
+//     decode_mid_side(buffer[mut]);
+//     assert_eq!(buffer, result);
+// }
 
 pub struct Block<'b, Sample> where Sample: 'b {
     /// The sample number of the first sample in the this block.
@@ -476,7 +496,8 @@ impl<'r, Sample> FrameReader<'r, Sample> where Sample: UnsignedInt {
             match header.channel_mode {
                 ChannelMode::LeftSideStereo => decode_left_side(stereo_chs),
                 ChannelMode::RightSideStereo => decode_right_side(stereo_chs),
-                _ => { } // TODO
+                ChannelMode::MidSideStereo => decode_mid_side(stereo_chs),
+                ChannelMode::Independent => { },
             }
         }
 
