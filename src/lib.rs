@@ -101,7 +101,7 @@ impl<'r> FlacStream<'r> {
 #[test]
 fn test_open_stream() {
     use std::io::{File, BufferedReader};
-    let input = File::open(&Path::new("foo.flac")).unwrap();
+    let input = File::open(&Path::new("testsamples/foo.flac")).unwrap();
     let mut reader = BufferedReader::new(input);
     let mut stream = FlacStream::new(&mut reader).unwrap();
     let mut blocks = stream.blocks::<u16>();

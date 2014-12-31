@@ -76,8 +76,8 @@ fn verify_streaminfo() {
     use std::io::fs::{readdir, PathExtensions};
 
     // Compare our streaminfo parsing with metaflac on all flac files in the
-    // current directory.
-    let dir = readdir(&Path::new(".")).ok().expect("failed to enumerate flac files");
+    // testsamples directory.
+    let dir = readdir(&Path::new("testsamples")).ok().expect("failed to enumerate flac files");
     for path in dir.iter() {
         if path.is_file() && path.extension_str() == Some("flac") {
             print!("    comparing {} ...", path.as_str().expect("unsupported filename"));
