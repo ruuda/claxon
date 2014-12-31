@@ -328,6 +328,16 @@ fn decode_right_side<Sample>(buffer: &mut [Sample]) where Sample: UnsignedInt {
     }
 }
 
+#[test]
+fn verify_decode_right_side() {
+    let mut buffer = vec!(7u8, 038, 142, 238, 000, 104, 204, 238,
+                          251, 223, 197, 131, 127, 089, 007, 003);
+    let result = vec!(2u8, 005, 083, 113, 127, 193, 211, 241,
+                      251, 223, 197, 131, 127, 089, 007, 003);
+    decode_right_side(buffer[mut]);
+    assert_eq!(buffer, result);
+}
+
 /// Converts a buffer mid ++ side in-place to left ++ right.
 fn decode_mid_side<Sample>(buffer: &mut [Sample]) where Sample: UnsignedInt {
     let block_size = buffer.len() / 2;
@@ -461,12 +471,13 @@ impl<'r, Sample> FrameReader<'r, Sample> where Sample: UnsignedInt {
         }
 
         // If a special stereo channel mode was used, decode to left-right.
-        match header.channel_mode {
-            ChannelMode::LeftSideStereo => {
-                let left_side = self.buffer[mut 0 .. header.block_size as uint * 2];
-                decode_left_side(left_side);
-            },
-            _ => { } // TODO
+        {
+            let stereo_chs = self.buffer[mut 0 .. header.block_size as uint * 2];
+            match header.channel_mode {
+                ChannelMode::LeftSideStereo => decode_left_side(stereo_chs),
+                ChannelMode::RightSideStereo => decode_right_side(stereo_chs),
+                _ => { } // TODO
+            }
         }
 
         // TODO: constant block size should be verified if a frame number is
