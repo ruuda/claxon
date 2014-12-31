@@ -14,7 +14,7 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-use std::num::{Int, UnsignedInt};
+use std::num::{Int, NumCast, UnsignedInt};
 use bitstream::Bitstream;
 use crc::Crc8Reader;
 use error::{FlacError, FlacResult};
@@ -290,6 +290,59 @@ fn read_frame_header(input: &mut Reader) -> FlacResult<FrameHeader> {
     Ok(frame_header)
 }
 
+/// Converts a buffer left ++ right in-place to left ++ right.
+fn decode_left_side<Sample>(buffer: &mut [Sample]) where Sample: UnsignedInt {
+    let block_size = buffer.len() / 2;
+    for i in range(0, block_size) {
+        let left = buffer[i];
+        let side = buffer[block_size + i];
+
+        // Left is correct already, only the right channel needs to be decoded.
+        // side = left - right => right = left - side.
+        // Note: overflow is intentional.
+        buffer[block_size + i] = left - side;
+    }
+}
+
+#[test]
+fn verify_decode_left_side() {
+    let mut buffer = vec!(2u8, 005, 083, 113, 127, 193, 211, 241,
+                          007, 038, 142, 238, 000, 104, 204, 238);
+    let result = vec!(2u8, 005, 083, 113, 127, 193, 211, 241,
+                      251, 223, 197, 131, 127, 089, 007, 003);
+    decode_left_side(buffer[mut]);
+    assert_eq!(buffer, result);
+}
+
+/// Converts a buffer side ++ right in-place to left ++ right.
+fn decode_right_side<Sample>(buffer: &mut [Sample]) where Sample: UnsignedInt {
+    let block_size = buffer.len() / 2;
+    for i in range(0, block_size) {
+        let side = buffer[i];
+        let right = buffer[block_size + i];
+
+        // Right is correct already, only the left channel needs to be decoded.
+        // side = left - right => left = side + right.
+        // Note: overflow is intentional.
+        buffer[i] = side + right;
+    }
+}
+
+/// Converts a buffer mid ++ side in-place to left ++ right.
+fn decode_mid_side<Sample>(buffer: &mut [Sample]) where Sample: UnsignedInt {
+    let block_size = buffer.len() / 2;
+    let two = NumCast::from(2u8).unwrap();
+    for i in range(0, block_size) {
+        let mid = buffer[i];
+        let side = buffer[block_size + i];
+
+        // side = left - right, mid = left/2 + right/2 => left = mid - side/2.
+        // Note: overflow is intentional.
+        buffer[i] = (mid - side) / two;
+        buffer[block_size + i] = (mid + side) / two; // TODO: is this correct?
+    }
+}
+
 pub struct Block<'b, Sample> where Sample: 'b {
     /// The sample number of the first sample in the this block.
     first_sample_number: u64,
@@ -407,7 +460,14 @@ impl<'r, Sample> FrameReader<'r, Sample> where Sample: UnsignedInt {
             // enforce this here.
         }
 
-        // TODO: decode sepcial channel modes.
+        // If a special stereo channel mode was used, decode to left-right.
+        match header.channel_mode {
+            ChannelMode::LeftSideStereo => {
+                let left_side = self.buffer[mut 0 .. header.block_size as uint * 2];
+                decode_left_side(left_side);
+            },
+            _ => { } // TODO
+        }
 
         // TODO: constant block size should be verified if a frame number is
         // encountered.

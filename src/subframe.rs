@@ -140,7 +140,8 @@ impl<'r, Sample> SubframeDecoder<'r, Sample> where Sample: UnsignedInt {
         }
 
         // Finally, everything must be shifted by 'wasted bits per sample' to
-        // the left.
+        // the left. Note: it might be better performance-wise to do this on
+        // the fly while decoding, that could be done if this is a bottleneck.
         if header.wasted_bits_per_sample > 0 {
             for s in buffer.iter_mut() {
                 *s = *s << header.wasted_bits_per_sample as uint;
