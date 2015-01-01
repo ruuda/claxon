@@ -15,7 +15,6 @@
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 use std::iter::repeat;
-use std::mem::size_of;
 use std::num::{Int, UnsignedInt};
 use bitstream::Bitstream;
 use crc::Crc8Reader;
