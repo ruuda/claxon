@@ -62,6 +62,8 @@ pub enum FlacError {
     /// The number of bits per sample in an unencoded binary Rice partition
     /// is larger than the bits per sample of the stream.
     InvalidBitsPerSample,
+    /// A bit pattern is not a valid Rice code in the context.
+    InvalidRiceCode,
 
     /// The audio stream has more bits per sample than the provided sample
     /// buffer to decode into.

@@ -14,7 +14,7 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-use std::num::{NumCast, UnsignedInt};
+use std::num::{NumCast, Int, UnsignedInt};
 use bitstream::Bitstream;
 use error::{FlacError, FlacResult};
 
@@ -102,6 +102,32 @@ fn extend_sign(val: u16, bits: u8) -> i16 {
     (val | sign_extension) as i16
 }
 
+/// Decodes a signed number from Rice coding to the two's complement.
+///
+/// The Rice coding used by FLAC operates on unsigned integers, but the
+/// residual is signed. The mapping is done as follows:
+///
+///      0 -> 0
+///     -1 -> 1
+///      1 -> 2
+///     -2 -> 3
+///      2 -> 4
+///      etc.
+///
+/// This function takes the unsigned value and converts it into a signed
+/// number. The return type still has unsigned type, because arithmetic relies
+/// on overflow.
+fn rice_to_signed<Sample>(val: Sample) -> Sample where Sample: UnsignedInt {
+    // This uses bitwise arithmetic, because a literal cannot have type `Sample`,
+    // I believe this is the most concise way to express the decoding.
+    let sample_max: Sample = Int::max_value();
+    if val & Int::one() == Int::one() {
+        val >> 1
+    } else {
+        sample_max - (val >> 1)
+    }
+}
+
 pub struct SubframeDecoder<'r, Sample> {
     bits_per_sample: u8,
     input: &'r mut Bitstream<'r>
@@ -166,7 +192,8 @@ impl<'r, Sample> SubframeDecoder<'r, Sample> where Sample: UnsignedInt {
 
     fn decode_partitioned_rice(&mut self, block_size: u16,
                                buffer: &mut [Sample]) -> FlacResult<()> {
-        println!("  decoding partitioned Rice"); // TODO: remove this.
+        println!("  decoding partitioned Rice, bs = {}, buffer.len = {}",
+                block_size, buffer.len()); // TODO: remove this.
 
         // First are 4 bits partition order.
         let order = try!(self.input.read_leq_u8(4));
@@ -180,10 +207,19 @@ impl<'r, Sample> SubframeDecoder<'r, Sample> where Sample: UnsignedInt {
         let n_partitions = 1u32 << order as uint;
         let n_samples = block_size as uint / n_partitions as uint;
         let n_warm_up = block_size as uint - buffer.len();
-        let mut start = 0u;
 
+        // The partition size must be at least as big as the number of warm-up
+        // samples.
+        if n_warm_up > n_samples { return Err(FlacError::InvalidResidual); }
+
+        println!("  order: {}, partitions: {}, samples: {}",
+                 order, n_partitions, n_samples); // TODO: Remove this.
+
+        let mut start = 0u;
         for i in range(0, n_partitions) {
             let partition_size = n_samples - if i == 0 { n_warm_up } else { 0 };
+            println!("  > decoding partition {}, from {} to {}",
+                     i, start, start + partition_size); // TODO: Remove this.
             try!(self.decode_rice_partition(buffer.slice_mut(start,
                                             start + partition_size)));
             start = start + partition_size;
@@ -209,7 +245,33 @@ impl<'r, Sample> SubframeDecoder<'r, Sample> where Sample: UnsignedInt {
 
             panic!("unencoded binary is not yet implemented"); // TODO
         } else {
-            panic!("rice coding is not yet implemented"); // TODO
+            let one: Sample = Int::one();
+            let factor = one << rice_param as uint;
+            let max_sample: Sample = Int::max_value();
+            let max_q = max_sample / factor;
+
+            // TODO: It is possible for the rice_param to be larger than the
+            // sample width, which would be invalid. Check for that.
+
+            for sample in buffer.iter_mut() {
+                // First part of the sample is the quotient, unary encoded.
+                // This means that there are q zeroes, and then a one. There
+                // should not be more than max_q consecutive zeroes.
+                let mut q: Sample = Int::zero();
+                while try!(self.input.read_leq_u8(1)) == 0 {
+                    if q == max_q { return Err(FlacError::InvalidRiceCode); }
+                    q = q + Int::one();
+                }
+
+                // What follows is the remainder in `rice_param` bits. The
+                // unwrap is safe, because any integer is at least 8-bit. Also,
+                // r < factor because we read `rice_param` bits.
+                let r_u8 = try!(self.input.read_leq_u8(rice_param));
+                let r: Sample = NumCast::from(r_u8).unwrap();
+                // TODO: use std::num::Cast instead of NumCast::from.
+
+                *sample = rice_to_signed(q * factor + r);
+            }
         }
 
         Ok(())
