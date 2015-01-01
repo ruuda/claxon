@@ -14,6 +14,7 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+use std::iter::repeat;
 use std::mem::size_of;
 use std::num::{Int, UnsignedInt};
 use bitstream::Bitstream;
@@ -462,7 +463,7 @@ impl<'r, Sample> FrameReader<'r, Sample> where Sample: UnsignedInt {
                 self.buffer = Vec::with_capacity(total_samples);
             }
             let len = self.buffer.len();
-            self.buffer.grow(total_samples - len, Int::zero());
+            self.buffer.extend(repeat(Int::zero()).take(total_samples - len));
         }
 
         // TODO: if the bps is missing from the header, we must get it from
