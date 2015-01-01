@@ -1,5 +1,5 @@
 // Snow -- A FLAC decoding library in Rust
-// Copyright (C) 2014  Ruud van Asseldonk
+// Copyright (C) 2014-2015  Ruud van Asseldonk
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -96,14 +96,4 @@ impl<'r> FlacStream<'r> {
         where Sample: UnsignedInt {
         FrameReader::new(&mut self.input)
     }
-}
-
-#[test]
-fn test_open_stream() {
-    use std::io::{File, BufferedReader};
-    let input = File::open(&Path::new("testsamples/foo.flac")).unwrap();
-    let mut reader = BufferedReader::new(input);
-    let mut stream = FlacStream::new(&mut reader).unwrap();
-    let mut blocks = stream.blocks::<u16>();
-    let block = blocks.read_next();
 }
