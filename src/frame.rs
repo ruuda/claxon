@@ -1,5 +1,5 @@
 // Snow -- A FLAC decoding library in Rust
-// Copyright (C) 2014  Ruud van Asseldonk
+// Copyright (C) 2014-2015  Ruud van Asseldonk
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -311,7 +311,7 @@ fn verify_decode_left_side() {
                           007, 038, 142, 238, 000, 104, 204, 238);
     let result =     vec!(2u8, 005, 083, 113, 127, 193, 211, 241,
                           251, 223, 197, 131, 127, 089, 007, 003);
-    decode_left_side(buffer[mut]);
+    decode_left_side(buffer.as_mut_slice());
     assert_eq!(buffer, result);
 }
 
@@ -335,7 +335,7 @@ fn verify_decode_right_side() {
                           251, 223, 197, 131, 127, 089, 007, 003);
     let result =     vec!(2u8, 005, 083, 113, 127, 193, 211, 241,
                           251, 223, 197, 131, 127, 089, 007, 003);
-    decode_right_side(buffer[mut]);
+    decode_right_side(buffer.as_mut_slice());
     assert_eq!(buffer, result);
 }
 
@@ -479,9 +479,9 @@ impl<'r, Sample> FrameReader<'r, Sample> where Sample: UnsignedInt {
             let mut decoder = SubframeDecoder::new(bps, &mut bitstream);
 
             for ch in range(0, header.n_channels) {
-                try!(decoder.decode(self.buffer[mut
-                     ch as uint * header.block_size as uint
-                     .. (ch as uint + 1) * header.block_size as uint]));
+                try!(decoder.decode(self.buffer.slice_mut(
+                     (ch as uint) * header.block_size as uint,
+                     (ch as uint + 1) * header.block_size as uint)));
             }
 
             // When the bitstream goes out of scope, we can use the `input`
@@ -492,7 +492,7 @@ impl<'r, Sample> FrameReader<'r, Sample> where Sample: UnsignedInt {
 
         // If a special stereo channel mode was used, decode to left-right.
         {
-            let stereo_chs = self.buffer[mut 0 .. header.block_size as uint * 2];
+            let stereo_chs = self.buffer.slice_mut(0, header.block_size as uint * 2);
             match header.channel_mode {
                 ChannelMode::LeftSideStereo => decode_left_side(stereo_chs),
                 ChannelMode::RightSideStereo => decode_right_side(stereo_chs),
