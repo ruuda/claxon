@@ -1,5 +1,5 @@
 // Snow -- A FLAC decoding library in Rust
-// Copyright (C) 2014  Ruud van Asseldonk
+// Copyright (C) 2014-2015  Ruud van Asseldonk
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -131,7 +131,8 @@ impl<'r, Sample> SubframeDecoder<'r, Sample> where Sample: UnsignedInt {
         let header = try!(read_subframe_header(self.input));
 
         // Then decode the subframe, properly per type.
-        println!("encountered subframe of type {}", header.sf_type);
+        println!("encountered subframe of type {}",
+                 header.sf_type); // TODO: Remove this.
         match header.sf_type {
             SubframeType::Constant => try!(self.decode_constant(buffer)),
             SubframeType::Verbatim => try!(self.decode_verbatim(buffer)),
@@ -148,6 +149,76 @@ impl<'r, Sample> SubframeDecoder<'r, Sample> where Sample: UnsignedInt {
             }
         }
 
+        println!("subframe decoded"); // TODO: Remove this.
+        Ok(())
+    }
+
+    fn decode_residual(&mut self, block_size: u16,
+                       buffer: &mut [Sample]) -> FlacResult<()> {
+        // Residual starts with two bits of coding method.
+        let method = try!(self.input.read_leq_u8(2));
+        match method {
+            0b00 => self.decode_partitioned_rice(block_size, buffer),
+            0b01 => self.decode_partitioned_rice2(block_size, buffer),
+            _ => Err(FlacError::InvalidResidual) // 10 and 11 are reserved.
+        }
+    }
+
+    fn decode_partitioned_rice(&mut self, block_size: u16,
+                               buffer: &mut [Sample]) -> FlacResult<()> {
+        println!("  decoding partitioned Rice"); // TODO: remove this.
+
+        // First are 4 bits partition order.
+        let order = try!(self.input.read_leq_u8(4));
+
+        // There are 2^order partitions. Note: the specification states a 4-bit
+        // partition order, so the order is at most 31, so there could be 2^31
+        // partitions, but the block size is a 16-bit number, so there are at
+        // most 2^16 - 1 samples in the block. No values have been marked as
+        // invalid by the specification though. Therefore use an u32 for the
+        // number of partitions, to avoid division by 0 in the number of samples.
+        let n_partitions = 1u32 << order as uint;
+        let n_samples = block_size as uint / n_partitions as uint;
+        let n_warm_up = block_size as uint - buffer.len();
+        let mut start = 0u;
+
+        for i in range(0, n_partitions) {
+            let partition_size = n_samples - if i == 0 { n_warm_up } else { 0 };
+            try!(self.decode_rice_partition(buffer.slice_mut(start,
+                                            start + partition_size)));
+            start = start + partition_size;
+        }
+
+        Ok(())
+    }
+
+    fn decode_rice_partition(&mut self,
+                             buffer: &mut [Sample]) -> FlacResult<()> {
+        // The Rice partition starts with 4 bits Rice parameter.
+        let rice_param = try!(self.input.read_leq_u8(4));
+
+        // 1111 is an escape code that indicates unencoded binary.
+        if rice_param == 0b1111 {
+            // For unencoded binary, there are five bits indicating bits-per-sample.
+            let bps = try!(self.input.read_leq_u8(5));
+
+            // There cannot be more bits per sample than the sample type.
+            if self.bits_per_sample < bps {
+                return Err(FlacError::InvalidBitsPerSample);
+            }
+
+            panic!("unencoded binary is not yet implemented"); // TODO
+        } else {
+            panic!("rice coding is not yet implemented"); // TODO
+        }
+
+        Ok(())
+    }
+
+    fn decode_partitioned_rice2(&mut self, block_size: u16,
+                                buffer: &mut [Sample]) -> FlacResult<()> {
+        println!("  decoding partitioned Rice 2"); // TODO: Remove this.
+        panic!("partitioned_rice2 is not yet implemented"); // TODO
         Ok(())
     }
 
@@ -179,7 +250,8 @@ impl<'r, Sample> SubframeDecoder<'r, Sample> where Sample: UnsignedInt {
 
     fn decode_lpc(&mut self, order: u8, buffer: &mut [Sample])
                   -> FlacResult<()> {
-        // There are order * bits per sample unencoded warm-up samples.
+        println!("begin decoding of LPC subframe"); // TODO: Remove this.
+        // There are order * bits per sample unencoded warm-up sample bits.
         for i in range(0, order as uint) {
             // The unwrap is safe, because it has been verified before that the
             // `Sample` type is wide enough for the bits per sample.
@@ -187,11 +259,11 @@ impl<'r, Sample> SubframeDecoder<'r, Sample> where Sample: UnsignedInt {
             buffer[i] = NumCast::from(sample_u32).unwrap();
         }
 
-        // Next are four bits quantised linear predictor coefficient precision.
-        let qlp_precision = try!(self.input.read_leq_u8(4));
+        // Next are four bits quantised linear predictor coefficient precision - 1.
+        let qlp_precision = try!(self.input.read_leq_u8(4)) + 1;
 
         // The bit pattern 1111 is invalid.
-        if qlp_precision == 0b1111 {
+        if qlp_precision - 1 == 0b1111 {
             return Err(FlacError::InvalidSubframe);
         }
 
@@ -200,6 +272,9 @@ impl<'r, Sample> SubframeDecoder<'r, Sample> where Sample: UnsignedInt {
         let qlp_shift_unsig = try!(self.input.read_leq_u16(5));
         let qlp_shift = extend_sign(qlp_shift_unsig, 5) as uint;
 
+        println!("  lpc: qlp_precision = {}, qlp_shift = {}",
+                 qlp_precision, qlp_shift); // TODO: Remove this.
+
         // Finally, the coefficients themselves.
         // TODO: get rid of the allocation by pre-allocating a vector in the decoder.
         let mut coefficients = Vec::new();
@@ -207,9 +282,17 @@ impl<'r, Sample> SubframeDecoder<'r, Sample> where Sample: UnsignedInt {
             let coef_unsig = try!(self.input.read_leq_u16(qlp_precision));
             let coef = extend_sign(coef_unsig, qlp_precision);
             coefficients.push(coef);
+            println!("  > coef = {}", coef); // TODO: Remove this.
         }
 
-        // TODO: decode residual.
+        // Next up is the residual. We decode it into the buffer directly, the
+        // predictor contributions will be added in a second pass. The first
+        // `order` samples have been decoded already, so continue after that.
+        try!(self.decode_residual(buffer.len() as u16,
+                                  buffer.slice_from_mut(order as uint)));
+
+        // TODO: do prediction.
+
         Ok(())
     }
 }

@@ -405,6 +405,7 @@ impl <'b, Sample> Block<'b, Sample> where Sample: UnsignedInt {
     }
 
     /// Returns the number of channels in the block.
+    // TODO: should a frame know this? #channels must be constant throughout the stream anyway ...
     pub fn channels(&self) -> u8 {
         self.n_channels
     }
@@ -445,7 +446,7 @@ impl<'r, Sample> FrameReader<'r, Sample> where Sample: UnsignedInt {
         let header = try!(read_frame_header(self.input));
 
         // TODO: remove this print.
-        println!("Frame: bs = {}, sr = {}, n_ch = {}, cm = {}, bps = {}",
+        println!("frame: bs = {}, sr = {}, n_ch = {}, cm = {}, bps = {}",
                  header.block_size,
                  header.sample_rate,
                  header.n_channels,
@@ -479,6 +480,7 @@ impl<'r, Sample> FrameReader<'r, Sample> where Sample: UnsignedInt {
             let mut decoder = SubframeDecoder::new(bps, &mut bitstream);
 
             for ch in range(0, header.n_channels) {
+                println!("decoding subframe {}", ch); // TODO: remove this.
                 try!(decoder.decode(self.buffer.slice_mut(
                      (ch as uint) * header.block_size as uint,
                      (ch as uint + 1) * header.block_size as uint)));
@@ -490,6 +492,8 @@ impl<'r, Sample> FrameReader<'r, Sample> where Sample: UnsignedInt {
             // enforce this here.
         }
 
+        println!("Decoding of all subframes completed"); // TODO: remove this.
+
         // If a special stereo channel mode was used, decode to left-right.
         {
             let stereo_chs = self.buffer.slice_mut(0, header.block_size as uint * 2);
@@ -497,7 +501,7 @@ impl<'r, Sample> FrameReader<'r, Sample> where Sample: UnsignedInt {
                 ChannelMode::LeftSideStereo => decode_left_side(stereo_chs),
                 ChannelMode::RightSideStereo => decode_right_side(stereo_chs),
                 ChannelMode::MidSideStereo => decode_mid_side(stereo_chs),
-                ChannelMode::Independent => { },
+                ChannelMode::Independent => { }
             }
         }
 

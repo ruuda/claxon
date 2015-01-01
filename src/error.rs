@@ -1,5 +1,5 @@
 // Snow -- A FLAC decoding library in Rust
-// Copyright (C) 2014  Ruud van Asseldonk
+// Copyright (C) 2014-2015  Ruud van Asseldonk
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -56,6 +56,12 @@ pub enum FlacError {
     InvalidSubframeHeader,
     /// The subframe contains an invalid or reserved bit pattern.
     InvalidSubframe,
+
+    /// The residual contains an invalid or reserved bit pattern.
+    InvalidResidual,
+    /// The number of bits per sample in an unencoded binary Rice partition
+    /// is larger than the bits per sample of the stream.
+    InvalidBitsPerSample,
 
     /// The audio stream has more bits per sample than the provided sample
     /// buffer to decode into.
