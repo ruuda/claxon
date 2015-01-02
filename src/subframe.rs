@@ -107,12 +107,12 @@ fn extend_sign(val: u16, bits: u8) -> i16 {
 /// The Rice coding used by FLAC operates on unsigned integers, but the
 /// residual is signed. The mapping is done as follows:
 ///
-///      0 -> 0
-///     -1 -> 1
-///      1 -> 2
-///     -2 -> 3
-///      2 -> 4
-///      etc.
+///  0 -> 0
+/// -1 -> 1
+///  1 -> 2
+/// -2 -> 3
+///  2 -> 4
+///  etc.
 ///
 /// This function takes the unsigned value and converts it into a signed
 /// number. The return type still has unsigned type, because arithmetic relies
