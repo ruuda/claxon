@@ -199,6 +199,7 @@ impl<'r, Sample> SubframeDecoder<'r, Sample> where Sample: UnsignedInt {
                        buffer: &mut [Sample]) -> FlacResult<()> {
         // Residual starts with two bits of coding method.
         let method = try!(self.input.read_leq_u8(2));
+        println!("  residual coding method: {:b}", method); // TODO: Remove this.
         match method {
             0b00 => self.decode_partitioned_rice(block_size, buffer),
             0b01 => self.decode_partitioned_rice2(block_size, buffer),
@@ -374,6 +375,7 @@ impl<'r, Sample> SubframeDecoder<'r, Sample> where Sample: UnsignedInt {
         // TODO: get rid of the allocation by pre-allocating a vector in the decoder.
         let mut coefficients = Vec::new();
         for _ in range(0, order) {
+            // We can safely read into an u16, qlp_precision is at most 15.
             let coef_unsig = try!(self.input.read_leq_u16(qlp_precision));
             let coef = extend_sign(coef_unsig, qlp_precision);
             coefficients.push(coef);
