@@ -23,11 +23,17 @@ fn main() {
     let input = File::open(&Path::new(&args()[1])).unwrap();
     let mut reader = BufferedReader::new(input);
     let mut stream = FlacStream::new(&mut reader).unwrap();
+    let n_samples = stream.streaminfo().n_samples.unwrap();
     let mut blocks = stream.blocks::<u16>();
-    loop {
+    let mut sample = 0u64;
+    let mut i = 0u;
+    while sample < n_samples {
         let block = blocks.read_next().unwrap();
         let left = block.channel(0);
         let right = block.channel(1);
-        println!("left: {}\nright: {}", left.slice_to(12), right.slice_to(12));
+        println!("block {} decoded\nleft: {}\nright: {}",
+                 i, left.slice_to(12), right.slice_to(12));
+        sample = sample + block.len() as u64;
+        i = i + 1;
     }
 }
