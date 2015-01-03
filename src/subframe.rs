@@ -14,7 +14,8 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-use std::num::{NumCast, Int, UnsignedInt};
+use std::num;
+use std::num::{Int, UnsignedInt};
 use bitstream::Bitstream;
 use error::{FlacError, FlacResult};
 
@@ -286,8 +287,7 @@ impl<'r, Sample> SubframeDecoder<'r, Sample> where Sample: UnsignedInt {
                 // rice_param is at most 14, this fits in an u16. TODO: for
                 // the RICE2 partition it will not fit.
                 let r_u16 = try!(self.input.read_leq_u16(rice_param));
-                let r: Sample = NumCast::from(r_u16).unwrap();
-                // TODO: use std::num::cast instead of NumCast::from.
+                let r: Sample = num::cast(r_u16).unwrap();
 
                 *sample = rice_to_signed((q << rice_param as uint) | r);
             }
@@ -308,7 +308,7 @@ impl<'r, Sample> SubframeDecoder<'r, Sample> where Sample: UnsignedInt {
         // samples. The unwrap is safe, because it has been verified before
         // that the `Sample` type is wide enough for the bits per sample.
         let sample_u32 = try!(self.input.read_leq_u32(self.bits_per_sample));
-        let sample = NumCast::from(sample_u32).unwrap();
+        let sample = num::cast(sample_u32).unwrap();
 
         for s in buffer.iter_mut() {
             *s = sample;
@@ -323,7 +323,7 @@ impl<'r, Sample> SubframeDecoder<'r, Sample> where Sample: UnsignedInt {
             // The unwrap is safe, because it has been verified before that the
             // `Sample` type is wide enough for the bits per sample.
             let sample_u32 = try!(self.input.read_leq_u32(self.bits_per_sample));
-            *s = NumCast::from(sample_u32).unwrap();
+            *s = num::cast(sample_u32).unwrap();
         }
 
         Ok(())
@@ -353,7 +353,8 @@ impl<'r, Sample> SubframeDecoder<'r, Sample> where Sample: UnsignedInt {
         try!(self.decode_verbatim(buffer.slice_to_mut(order as uint)));
 
         println!("the warm-up samples are {}", buffer[0 .. order as uint].iter()
-                 .map(|x| NumCast::from(*x).unwrap()).collect::<Vec<u32>>()); // TODO: Remove this.
+                 .map(|x| num::cast::<Sample, u16>(*x).unwrap() as i16)
+                 .collect::<Vec<i16>>()); // TODO: Remove this.
 
         // Next are four bits quantised linear predictor coefficient precision - 1.
         let qlp_precision = try!(self.input.read_leq_u8(4)) + 1;
@@ -368,8 +369,8 @@ impl<'r, Sample> SubframeDecoder<'r, Sample> where Sample: UnsignedInt {
         let qlp_shift_unsig = try!(self.input.read_leq_u16(5));
         let qlp_shift = extend_sign(qlp_shift_unsig, 5);
 
-        println!("  lpc: qlp_precision = {}, qlp_shift = {}",
-                 qlp_precision, qlp_shift); // TODO: Remove this.
+        println!("  lpc: qlp_precision: {}, qlp_shift: {}, order: {}",
+                 qlp_precision, qlp_shift, order); // TODO: Remove this.
 
         // Finally, the coefficients themselves.
         // TODO: get rid of the allocation by pre-allocating a vector in the decoder.
@@ -379,7 +380,7 @@ impl<'r, Sample> SubframeDecoder<'r, Sample> where Sample: UnsignedInt {
             let coef_unsig = try!(self.input.read_leq_u16(qlp_precision));
             let coef = extend_sign(coef_unsig, qlp_precision);
             coefficients.push(coef);
-            println!("  > coef = {}", coef); // TODO: Remove this.
+            println!("  > coef: {}", coef); // TODO: Remove this.
         }
 
         // Next up is the residual. We decode it into the buffer directly, the
