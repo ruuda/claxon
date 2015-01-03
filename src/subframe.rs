@@ -251,6 +251,8 @@ impl<'r, Sample> SubframeDecoder<'r, Sample> where Sample: UnsignedInt {
         // The Rice partition starts with 4 bits Rice parameter.
         let rice_param = try!(self.input.read_leq_u8(4));
 
+        println!("  >   rice param: {}", rice_param); // TODO: Remove this.
+
         // 1111 is an escape code that indicates unencoded binary.
         if rice_param == 0b1111 {
             // For unencoded binary, there are five bits indicating bits-per-sample.
@@ -279,12 +281,12 @@ impl<'r, Sample> SubframeDecoder<'r, Sample> where Sample: UnsignedInt {
                     q = q + Int::one();
                 }
 
-                // What follows is the remainder in `rice_param` bits. The
-                // unwrap is safe, because any integer is at least 8-bit. Also,
-                // r < 2^rice_param because we read `rice_param` bits.
-                let r_u8 = try!(self.input.read_leq_u8(rice_param));
-                let r: Sample = NumCast::from(r_u8).unwrap();
-                // TODO: use std::num::Cast instead of NumCast::from.
+                // What follows is the remainder in `rice_param` bits. Because
+                // rice_param is at most 14, this fits in an u16. TODO: for
+                // the RICE2 partition it will not fit.
+                let r_u16 = try!(self.input.read_leq_u16(rice_param));
+                let r: Sample = NumCast::from(r_u16).unwrap();
+                // TODO: use std::num::cast instead of NumCast::from.
 
                 *sample = rice_to_signed((q << rice_param as uint) | r);
             }
