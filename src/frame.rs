@@ -496,6 +496,11 @@ impl<'r, Sample> FrameReader<'r, Sample> where Sample: UnsignedInt {
 
         println!("Decoding of all subframes completed"); // TODO: remove this.
 
+        // The frame footer is a 16-bit CRC.
+        // TODO: Get CRC of frame read so far.
+        let frame_crc = try!(self.input.read_be_u16());
+        // TODO: Compare CRCs.
+
         // If a special stereo channel mode was used, decode to left-right.
         {
             let stereo_chs = self.buffer.slice_mut(0, header.block_size as uint * 2);
@@ -516,8 +521,6 @@ impl<'r, Sample> FrameReader<'r, Sample> where Sample: UnsignedInt {
 
         let block = Block::new(time, header.block_size,
                                self.buffer[0 .. total_samples]);
-
-        // TODO: read frame footer
 
         Ok(block)
     }

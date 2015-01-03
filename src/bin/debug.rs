@@ -24,8 +24,10 @@ fn main() {
     let mut reader = BufferedReader::new(input);
     let mut stream = FlacStream::new(&mut reader).unwrap();
     let mut blocks = stream.blocks::<u16>();
-    let block = blocks.read_next().unwrap();
-    let left = block.channel(0);
-    let right = block.channel(1);
-    println!("left: {}\nright: {}", left.slice_to(12), right.slice_to(12));
+    loop {
+        let block = blocks.read_next().unwrap();
+        let left = block.channel(0);
+        let right = block.channel(1);
+        println!("left: {}\nright: {}", left.slice_to(12), right.slice_to(12));
+    }
 }

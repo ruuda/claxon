@@ -365,7 +365,7 @@ impl<'r, Sample> SubframeDecoder<'r, Sample> where Sample: UnsignedInt {
         // Next are five bits quantized linear predictor coefficient shift,
         // in signed two's complement. Read 5 bits and then extend the sign bit.
         let qlp_shift_unsig = try!(self.input.read_leq_u16(5));
-        let qlp_shift = extend_sign(qlp_shift_unsig, 5) as uint;
+        let qlp_shift = extend_sign(qlp_shift_unsig, 5);
 
         println!("  lpc: qlp_precision = {}, qlp_shift = {}",
                  qlp_precision, qlp_shift); // TODO: Remove this.
