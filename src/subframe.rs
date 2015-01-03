@@ -122,10 +122,25 @@ fn rice_to_signed<Sample>(val: Sample) -> Sample where Sample: UnsignedInt {
     // I believe this is the most concise way to express the decoding.
     let sample_max: Sample = Int::max_value();
     if val & Int::one() == Int::one() {
-        val >> 1
-    } else {
         sample_max - (val >> 1)
+    } else {
+        val >> 1
     }
+}
+
+#[test]
+fn verify_rice_to_signed() {
+    assert_eq!(rice_to_signed(0u8), 0u8);
+    assert_eq!(rice_to_signed(1u8), 0xffu8 - 0);
+    assert_eq!(rice_to_signed(2u8), 1u8);
+    assert_eq!(rice_to_signed(3u8), 0xffu8 - 1);
+    assert_eq!(rice_to_signed(4u8), 2u8);
+
+    assert_eq!(rice_to_signed(3u16), 0xffffu16 - 1);
+    assert_eq!(rice_to_signed(4u16), 2u16);
+
+    assert_eq!(rice_to_signed(3u32), 0xffffffffu32 - 1);
+    assert_eq!(rice_to_signed(4u32), 2u32);
 }
 
 pub struct SubframeDecoder<'r, Sample> {
@@ -168,7 +183,7 @@ impl<'r, Sample> SubframeDecoder<'r, Sample> where Sample: UnsignedInt {
 
         // Finally, everything must be shifted by 'wasted bits per sample' to
         // the left. Note: it might be better performance-wise to do this on
-        // the fly while decoding, that could be done if this is a bottleneck.
+        // the fly while decoding. That could be done if this is a bottleneck.
         if header.wasted_bits_per_sample > 0 {
             for s in buffer.iter_mut() {
                 *s = *s << header.wasted_bits_per_sample as uint;
@@ -195,6 +210,9 @@ impl<'r, Sample> SubframeDecoder<'r, Sample> where Sample: UnsignedInt {
         println!("  decoding partitioned Rice, bs = {}, buffer.len = {}",
                 block_size, buffer.len()); // TODO: remove this.
 
+        // The block size, and therefore the buffer, cannot exceed 2^16 - 1.
+        debug_assert!(buffer.len() <= 0xffff);
+
         // First are 4 bits partition order.
         let order = try!(self.input.read_leq_u8(4));
 
@@ -202,14 +220,13 @@ impl<'r, Sample> SubframeDecoder<'r, Sample> where Sample: UnsignedInt {
         // partition order, so the order is at most 31, so there could be 2^31
         // partitions, but the block size is a 16-bit number, so there are at
         // most 2^16 - 1 samples in the block. No values have been marked as
-        // invalid by the specification though. Therefore use an u32 for the
-        // number of partitions, to avoid division by 0 in the number of samples.
+        // invalid by the specification though.
         let n_partitions = 1u32 << order as uint;
-        let n_samples = block_size as uint / n_partitions as uint;
-        let n_warm_up = block_size as uint - buffer.len();
+        let n_samples = block_size >> order as uint;
+        let n_warm_up = block_size - buffer.len() as u16;
 
         // The partition size must be at least as big as the number of warm-up
-        // samples.
+        // samples, otherwise the size of the first partition is negative.
         if n_warm_up > n_samples { return Err(FlacError::InvalidResidual); }
 
         println!("  order: {}, partitions: {}, samples: {}",
@@ -219,10 +236,10 @@ impl<'r, Sample> SubframeDecoder<'r, Sample> where Sample: UnsignedInt {
         for i in range(0, n_partitions) {
             let partition_size = n_samples - if i == 0 { n_warm_up } else { 0 };
             println!("  > decoding partition {}, from {} to {}",
-                     i, start, start + partition_size); // TODO: Remove this.
+                     i, start, start + partition_size as uint); // TODO: Remove this.
             try!(self.decode_rice_partition(buffer.slice_mut(start,
-                                            start + partition_size)));
-            start = start + partition_size;
+                                            start + partition_size as uint)));
+            start = start + partition_size as uint;
         }
 
         Ok(())
@@ -245,10 +262,8 @@ impl<'r, Sample> SubframeDecoder<'r, Sample> where Sample: UnsignedInt {
 
             panic!("unencoded binary is not yet implemented"); // TODO
         } else {
-            let one: Sample = Int::one();
-            let factor = one << rice_param as uint;
             let max_sample: Sample = Int::max_value();
-            let max_q = max_sample / factor;
+            let max_q = max_sample >> rice_param as uint;
 
             // TODO: It is possible for the rice_param to be larger than the
             // sample width, which would be invalid. Check for that.
@@ -265,12 +280,12 @@ impl<'r, Sample> SubframeDecoder<'r, Sample> where Sample: UnsignedInt {
 
                 // What follows is the remainder in `rice_param` bits. The
                 // unwrap is safe, because any integer is at least 8-bit. Also,
-                // r < factor because we read `rice_param` bits.
+                // r < 2^rice_param because we read `rice_param` bits.
                 let r_u8 = try!(self.input.read_leq_u8(rice_param));
                 let r: Sample = NumCast::from(r_u8).unwrap();
                 // TODO: use std::num::Cast instead of NumCast::from.
 
-                *sample = rice_to_signed(q * factor + r);
+                *sample = rice_to_signed((q << rice_param as uint) | r);
             }
         }
 
@@ -320,6 +335,9 @@ impl<'r, Sample> SubframeDecoder<'r, Sample> where Sample: UnsignedInt {
             let sample_u32 = try!(self.input.read_leq_u32(self.bits_per_sample));
             buffer[i] = NumCast::from(sample_u32).unwrap();
         }
+
+        println!("the warm-up samples are {}", buffer[0 .. order as uint].iter()
+                 .map(|x| NumCast::from(*x).unwrap()).collect::<Vec<u32>>()); // TODO: Remove this.
 
         // Next are four bits quantised linear predictor coefficient precision - 1.
         let qlp_precision = try!(self.input.read_leq_u8(4)) + 1;

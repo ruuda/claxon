@@ -490,6 +490,8 @@ impl<'r, Sample> FrameReader<'r, Sample> where Sample: UnsignedInt {
             // reader again, which will be byte-aligned. The specification
             // dictates that padding should consist of zero bits, but we do not
             // enforce this here.
+            // TODO: It could be enforced by having a read_to_byte_aligned
+            // method on the bit reader; it'd be a simple comparison.
         }
 
         println!("Decoding of all subframes completed"); // TODO: remove this.
