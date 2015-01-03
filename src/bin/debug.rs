@@ -18,8 +18,9 @@ extern crate snow;
 
 fn main() {
     use std::io::{File, BufferedReader};
+    use std::os::args;
     use snow::FlacStream;
-    let input = File::open(&Path::new("testsamples/foo.flac")).unwrap();
+    let input = File::open(&Path::new(&args()[1])).unwrap();
     let mut reader = BufferedReader::new(input);
     let mut stream = FlacStream::new(&mut reader).unwrap();
     let mut blocks = stream.blocks::<u16>();
