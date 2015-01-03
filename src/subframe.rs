@@ -63,6 +63,7 @@ fn read_subframe_header(input: &mut Bitstream) -> FlacResult<SubframeHeader> {
         // The only possibility left is bit pattern 1xxxxx, an LPC subframe.
         n => {
             // The xxxxx bits are the order minus one.
+            println!("subframe type is LPC, bits: {:b}", n); // TODO: remove this.
             let order_mo = n & 0b011_111;
             SubframeType::Lpc(order_mo + 1)
         }
@@ -177,8 +178,8 @@ impl<'r, Sample> SubframeDecoder<'r, Sample> where Sample: UnsignedInt {
         match header.sf_type {
             SubframeType::Constant => try!(self.decode_constant(buffer)),
             SubframeType::Verbatim => try!(self.decode_verbatim(buffer)),
-            SubframeType::Lpc(ord) => try!(self.decode_lpc(ord, buffer)),
-            _ => { } // TODO: implement other decoders
+            SubframeType::Fixed(ord) => try!(self.decode_fixed(ord, buffer)),
+            SubframeType::Lpc(ord) => try!(self.decode_lpc(ord, buffer))
         }
 
         // Finally, everything must be shifted by 'wasted bits per sample' to
@@ -225,12 +226,12 @@ impl<'r, Sample> SubframeDecoder<'r, Sample> where Sample: UnsignedInt {
         let n_samples = block_size >> order as uint;
         let n_warm_up = block_size - buffer.len() as u16;
 
+        println!("  order: {}, partitions: {}, samples: {}",
+                 order, n_partitions, n_samples); // TODO: Remove this.
+
         // The partition size must be at least as big as the number of warm-up
         // samples, otherwise the size of the first partition is negative.
         if n_warm_up > n_samples { return Err(FlacError::InvalidResidual); }
-
-        println!("  order: {}, partitions: {}, samples: {}",
-                 order, n_partitions, n_samples); // TODO: Remove this.
 
         let mut start = 0u;
         for i in range(0, n_partitions) {
@@ -325,16 +326,28 @@ impl<'r, Sample> SubframeDecoder<'r, Sample> where Sample: UnsignedInt {
         Ok(())
     }
 
+    fn decode_fixed(&mut self, order: u8, buffer: &mut [Sample])
+                    -> FlacResult<()> {
+        println!("begin decoding fixed subframe"); // TODO: Remove this.
+        // There are order * bits per sample unencoded warm-up sample bits.
+        try!(self.decode_verbatim(buffer.slice_to_mut(order as uint)));
+
+        // Next up is the residual. We decode into the buffer directly, the
+        // predictor contributions will be added in a second pass. The first
+        // `order` samples have been decoded already, so continue after that.
+        try!(self.decode_residual(buffer.len() as u16,
+                                  buffer.slice_from_mut(order as uint)));
+
+        // TODO: do prediction.
+
+        Ok(())
+    }
+
     fn decode_lpc(&mut self, order: u8, buffer: &mut [Sample])
                   -> FlacResult<()> {
         println!("begin decoding of LPC subframe"); // TODO: Remove this.
         // There are order * bits per sample unencoded warm-up sample bits.
-        for i in range(0, order as uint) {
-            // The unwrap is safe, because it has been verified before that the
-            // `Sample` type is wide enough for the bits per sample.
-            let sample_u32 = try!(self.input.read_leq_u32(self.bits_per_sample));
-            buffer[i] = NumCast::from(sample_u32).unwrap();
-        }
+        try!(self.decode_verbatim(buffer.slice_to_mut(order as uint)));
 
         println!("the warm-up samples are {}", buffer[0 .. order as uint].iter()
                  .map(|x| NumCast::from(*x).unwrap()).collect::<Vec<u32>>()); // TODO: Remove this.
