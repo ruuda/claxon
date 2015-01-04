@@ -19,7 +19,7 @@ use std::num::{Int, UnsignedInt};
 use bitstream::Bitstream;
 use error::{FlacError, FlacResult};
 
-#[deriving(Copy, Show)] // TODO: this should not implement Show.
+#[derive(Copy, Show)] // TODO: this should not implement Show.
 enum SubframeType {
     Constant,
     Verbatim,
@@ -27,7 +27,7 @@ enum SubframeType {
     Lpc(u8)
 }
 
-#[deriving(Copy)]
+#[derive(Copy)]
 struct SubframeHeader {
     sf_type: SubframeType,
     wasted_bits_per_sample: u8

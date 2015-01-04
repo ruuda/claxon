@@ -16,7 +16,7 @@
 
 use error::{FlacError, FlacResult};
 
-#[deriving(Copy)]
+#[derive(Copy)]
 struct MetadataBlockHeader {
     is_last: bool,
     block_type: u8,
@@ -24,7 +24,7 @@ struct MetadataBlockHeader {
 }
 
 /// The streaminfo metadata block, with important information about the stream.
-#[deriving(Copy)]
+#[derive(Copy)]
 pub struct StreamInfo {
     /// The minimum block size (in samples) used in the stream.
     pub min_block_size: u16,
@@ -47,7 +47,7 @@ pub struct StreamInfo {
 }
 
 /// A seek point in the seek table.
-#[deriving(Copy)]
+#[derive(Copy)]
 pub struct SeekPoint {
     pub sample: u64,
     pub offset: u64,

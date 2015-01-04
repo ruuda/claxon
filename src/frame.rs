@@ -21,19 +21,19 @@ use crc::Crc8Reader;
 use error::{FlacError, FlacResult};
 use subframe::SubframeDecoder;
 
-#[deriving(Copy)]
+#[derive(Copy)]
 enum BlockingStrategy {
     Fixed,
     Variable
 }
 
-#[deriving(Copy)]
+#[derive(Copy)]
 enum BlockTime {
     FrameNumber(u32),
     SampleNumber(u64)
 }
 
-#[deriving(Copy, Show)] // TODO: should not derive show.
+#[derive(Copy, Show)] // TODO: should not derive show.
 enum ChannelMode {
     /// The channels are coded as-is.
     Independent,
@@ -45,7 +45,7 @@ enum ChannelMode {
     MidSideStereo
 }
 
-#[deriving(Copy)]
+#[derive(Copy)]
 struct FrameHeader {
     pub block_time: BlockTime,
     pub block_size: u16,
