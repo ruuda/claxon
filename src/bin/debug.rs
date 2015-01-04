@@ -31,8 +31,9 @@ fn main() {
         let block = blocks.read_next().unwrap();
         let left = block.channel(0);
         let right = block.channel(1);
-        println!("block {} decoded\nleft: {}\nright: {}",
-                 i, left.slice_to(12), right.slice_to(12));
+        println!("block {} decoded\nleft: {} .. {}\nright: {} .. {}",
+                 i, left.slice_to(12), left.slice_from(block.len() as uint - 12),
+                 right.slice_to(12), right.slice_from(block.len() as uint - 12));
         sample = sample + block.len() as u64;
         i = i + 1;
     }

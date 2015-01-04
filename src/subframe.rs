@@ -145,6 +145,12 @@ fn verify_rice_to_signed() {
     assert_eq!(rice_to_signed(4u32), 2u32);
 }
 
+// TODO: Remove this function.
+fn show_sample<Sample: UnsignedInt>(x: Sample) -> i16 {
+    let x_u16: u16 = num::cast(x).unwrap();
+    x_u16 as i16
+}
+
 pub struct SubframeDecoder<'r, Sample> {
     bits_per_sample: u8,
     input: &'r mut Bitstream<'r>
@@ -335,6 +341,10 @@ impl<'r, Sample> SubframeDecoder<'r, Sample> where Sample: UnsignedInt {
         // There are order * bits per sample unencoded warm-up sample bits.
         try!(self.decode_verbatim(buffer.slice_to_mut(order as uint)));
 
+        println!("the warm-up samples are {}", buffer[0 .. order as uint].iter()
+                 .map(|x| show_sample(*x))
+                 .collect::<Vec<i16>>()); // TODO: Remove this.
+
         // Next up is the residual. We decode into the buffer directly, the
         // predictor contributions will be added in a second pass. The first
         // `order` samples have been decoded already, so continue after that.
@@ -353,7 +363,7 @@ impl<'r, Sample> SubframeDecoder<'r, Sample> where Sample: UnsignedInt {
         try!(self.decode_verbatim(buffer.slice_to_mut(order as uint)));
 
         println!("the warm-up samples are {}", buffer[0 .. order as uint].iter()
-                 .map(|x| num::cast::<Sample, u16>(*x).unwrap() as i16)
+                 .map(|x| show_sample(*x))
                  .collect::<Vec<i16>>()); // TODO: Remove this.
 
         // Next are four bits quantised linear predictor coefficient precision - 1.
@@ -388,6 +398,10 @@ impl<'r, Sample> SubframeDecoder<'r, Sample> where Sample: UnsignedInt {
         // `order` samples have been decoded already, so continue after that.
         try!(self.decode_residual(buffer.len() as u16,
                                   buffer.slice_from_mut(order as uint)));
+
+        println!("  > first residual: {}, last residual: {}",
+                 show_sample(buffer[order as uint]),
+                 show_sample(buffer[buffer.len() - 1])); // TODO: Remove this.
 
         // TODO: do prediction.
 

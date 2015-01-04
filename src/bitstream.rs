@@ -76,6 +76,9 @@ impl<'r> Bitstream<'r> {
             result
         };
 
+        // If there are more than 8 bits left, we read too far.
+        debug_assert!(self.bits_left < 8);
+
         // The resulting data is padded with zeroes in the least significant
         // bits, but we want to pad in the most significant bits, so shift.
         Ok(result >> (8 - bits) as uint)
@@ -126,7 +129,8 @@ fn verify_read_leq_u8() {
 
     let mut data = MemReader::new(vec!(0b1010_0101, 0b1110_0001,
                                        0b1101_0010, 0b0101_0101,
-                                       0b0111_0011, 0b0011_1111));
+                                       0b0111_0011, 0b0011_1111,
+                                       0b1010_1010, 0b0000_1100));
     let mut bits = Bitstream::new(&mut data);
 
     assert_eq!(bits.read_leq_u8(0).unwrap(), 0);
@@ -141,6 +145,12 @@ fn verify_read_leq_u8() {
     assert_eq!(bits.read_leq_u8(6).unwrap(), 0b010010);
     assert_eq!(bits.read_leq_u8(7).unwrap(), 0b1010101);
     assert_eq!(bits.read_leq_u8(8).unwrap(), 0b11001100);
+    assert_eq!(bits.read_leq_u8(6).unwrap(), 0b111111);
+    assert_eq!(bits.read_leq_u8(8).unwrap(), 0b10101010);
+    assert_eq!(bits.read_leq_u8(4).unwrap(), 0b0000);
+    assert_eq!(bits.read_leq_u8(1).unwrap(), 1);
+    assert_eq!(bits.read_leq_u8(1).unwrap(), 1);
+    assert_eq!(bits.read_leq_u8(2).unwrap(), 0b00);
 }
 
 #[test]
