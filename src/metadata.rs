@@ -161,7 +161,7 @@ fn read_streaminfo_block(input: &mut Reader) -> FlacResult<StreamInfo> {
 
     // Stitch together the value from the first 16 bits,
     // and then the 4 most significant bits of the next byte.
-    let sample_rate = sample_rate_msb as u32 << 4 | sample_rate_lsb as u32 >> 4;
+    let sample_rate = (sample_rate_msb as u32) << 4 | (sample_rate_lsb as u32) >> 4;
 
     // Next three bits are the number of channels - 1. Mask them out and add 1.
     let n_channels_bps = sample_rate_lsb;
@@ -178,7 +178,7 @@ fn read_streaminfo_block(input: &mut Reader) -> FlacResult<StreamInfo> {
     // Number of samples in 36 bits, we have 4 already, 32 to go.
     let n_samples_msb = bps_lsb_n_samples & 0b0000_1111;
     let n_samples_lsb = try!(input.read_be_u32());
-    let n_samples = n_samples_msb as u64 << 32 | n_samples_lsb as u64;
+    let n_samples = (n_samples_msb as u64) << 32 | n_samples_lsb as u64;
 
     let mut md5sum = [0u8; 16];
     try!(input.read_at_least(16, &mut md5sum));

@@ -87,7 +87,7 @@ fn read_var_length_int(input: &mut Reader) -> FlacResult<u64> {
 
     // Each additional byte will yield 6 extra bits, so shift the most
     // significant bits into the correct position.
-    let mut result = (first & mask_data) as u64 << (6 * read_additional);
+    let mut result = ((first & mask_data) as u64) << (6 * read_additional);
     for i in range_step_inclusive(read_additional as int - 1, 0, -1) {
         let byte = try!(input.read_byte());
 
@@ -96,7 +96,7 @@ fn read_var_length_int(input: &mut Reader) -> FlacResult<u64> {
             return Err(FlacError::InvalidVarLengthInt);
         }
 
-        result = result | ((byte & 0b0011_1111) as u64 << (6 * i as uint));
+        result = result | (((byte & 0b0011_1111) as u64) << (6 * i as uint));
     }
 
     Ok(result)
