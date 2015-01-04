@@ -1,5 +1,5 @@
 // Snow -- A FLAC decoding library in Rust
-// Copyright (C) 2014  Ruud van Asseldonk
+// Copyright (C) 2014-2015  Ruud van Asseldonk
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -43,7 +43,7 @@ pub struct StreamInfo {
     /// The total number of inter-channel samples in the stream.
     pub n_samples: Option<u64>,
     /// MD5 signature of the unencoded audio data.
-    pub md5sum: [u8, ..16]
+    pub md5sum: [u8; 16]
 }
 
 /// A seek point in the seek table.
@@ -180,7 +180,7 @@ fn read_streaminfo_block(input: &mut Reader) -> FlacResult<StreamInfo> {
     let n_samples_lsb = try!(input.read_be_u32());
     let n_samples = n_samples_msb as u64 << 32 | n_samples_lsb as u64;
 
-    let mut md5sum = [0u8, ..16];
+    let mut md5sum = [0u8; 16];
     try!(input.read_at_least(16, &mut md5sum));
 
     // Lower bounds can never be larger than upper bounds. Note that 0 indicates
