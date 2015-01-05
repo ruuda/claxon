@@ -1,5 +1,5 @@
-// Snow -- A FLAC decoding library in Rust
-// Copyright (C) 2015  Ruud van Asseldonk
+// Claxon -- A FLAC decoding library in Rust
+// Copyright (C) 2015 Ruud van Asseldonk
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -14,12 +14,12 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-extern crate snow;
+extern crate claxon;
 
 fn main() {
     use std::io::{File, BufferedReader};
     use std::os::args;
-    use snow::FlacStream;
+    use claxon::FlacStream;
     let input = File::open(&Path::new(&args()[1])).unwrap();
     let mut reader = BufferedReader::new(input);
     let mut stream = FlacStream::new(&mut reader).unwrap();
