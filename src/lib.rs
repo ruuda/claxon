@@ -14,8 +14,9 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-#![allow(dead_code)]
-#![feature(slicing_syntax)]
+#![allow(dead_code)] // TODO: Remove for v0.1
+#![feature(slicing_syntax)] // TODO: Remove, this will be deprecated, right?
+#![feature(associated_types)]
 
 use std::num::UnsignedInt;
 use error::{FlacError, FlacResult};

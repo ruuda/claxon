@@ -272,8 +272,10 @@ impl<'r, R> MetadataBlockReader<'r, R> where R: Reader + 'r {
     }
 }
 
-impl<'r, R> Iterator<MetadataBlockResult>
+impl<'r, R> Iterator
     for MetadataBlockReader<'r, R> where R: Reader + 'r {
+
+    type Item = MetadataBlockResult;
 
     fn next(&mut self) -> Option<MetadataBlockResult> {
         if self.done {
