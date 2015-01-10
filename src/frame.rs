@@ -446,7 +446,7 @@ impl<'r, Sample> FrameReader<'r, Sample> where Sample: UnsignedInt {
         let header = try!(read_frame_header(self.input));
 
         // TODO: remove this print.
-        println!("frame: bs = {}, sr = {}, n_ch = {}, cm = {}, bps = {}",
+        println!("frame: bs = {}, sr = {:?}, n_ch = {}, cm = {:?}, bps = {:?}",
                  header.block_size,
                  header.sample_rate,
                  header.n_channels,

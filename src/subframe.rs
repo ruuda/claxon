@@ -180,7 +180,7 @@ impl<'r, Sample> SubframeDecoder<'r, Sample> where Sample: UnsignedInt {
         let header = try!(read_subframe_header(self.input));
 
         // Then decode the subframe, properly per type.
-        println!("encountered subframe of type {}",
+        println!("encountered subframe of type {:?}",
                  header.sf_type); // TODO: Remove this.
         match header.sf_type {
             SubframeType::Constant => try!(self.decode_constant(buffer)),
@@ -341,7 +341,7 @@ impl<'r, Sample> SubframeDecoder<'r, Sample> where Sample: UnsignedInt {
         // There are order * bits per sample unencoded warm-up sample bits.
         try!(self.decode_verbatim(buffer.slice_to_mut(order as uint)));
 
-        println!("the warm-up samples are {}", buffer[0 .. order as uint].iter()
+        println!("the warm-up samples are {:?}", buffer[0 .. order as uint].iter()
                  .map(|x| show_sample(*x))
                  .collect::<Vec<i16>>()); // TODO: Remove this.
 
@@ -362,7 +362,7 @@ impl<'r, Sample> SubframeDecoder<'r, Sample> where Sample: UnsignedInt {
         // There are order * bits per sample unencoded warm-up sample bits.
         try!(self.decode_verbatim(buffer.slice_to_mut(order as uint)));
 
-        println!("the warm-up samples are {}", buffer[0 .. order as uint].iter()
+        println!("the warm-up samples are {:?}", buffer[0 .. order as uint].iter()
                  .map(|x| show_sample(*x))
                  .collect::<Vec<i16>>()); // TODO: Remove this.
 
