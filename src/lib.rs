@@ -15,7 +15,6 @@
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #![allow(dead_code)] // TODO: Remove for v0.1
-#![feature(slicing_syntax)] // TODO: Remove, this will be deprecated, right?
 
 use std::num::UnsignedInt;
 use error::{FlacError, FlacResult};

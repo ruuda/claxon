@@ -415,8 +415,8 @@ impl <'b, Sample> Block<'b, Sample> where Sample: UnsignedInt {
     /// # Panics
     /// Panics if `ch` is larger than `channels()`.
     pub fn channel(&'b self, ch: u8) -> &'b [Sample] {
-        self.samples[ch as uint * self.block_size as uint
-                     .. (ch as uint + 1) * self.block_size as uint]
+        self.samples.slice(ch as uint * self.block_size as uint,
+                          (ch as uint + 1) * self.block_size as uint)
     }
 }
 
@@ -520,7 +520,7 @@ impl<'r, Sample> FrameReader<'r, Sample> where Sample: UnsignedInt {
         };
 
         let block = Block::new(time, header.block_size,
-                               self.buffer[0 .. total_samples]);
+                               self.buffer.slice_to(total_samples));
 
         Ok(block)
     }
