@@ -3,7 +3,8 @@
 /Cargo.lock
 
 # Test files
-/testsamples
+/testsamples/*.flac
+/testsamples/*.ana
 
 # Editor files
 *.swp
