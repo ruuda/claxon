@@ -129,13 +129,13 @@ impl<'r> Crc16Reader<'r> {
 }
 
 impl<'r> Reader for Crc8Reader<'r> {
-    fn read(&mut self, buf: &mut [u8]) -> IoResult<uint> {
+    fn read(&mut self, buf: &mut [u8]) -> IoResult<usize> {
         // Pass through to the regular reader.
         let n = try!(self.reader.read(buf));
 
         // And also update the CRC with the bytes just read.
         for x in buf[0 ..n].iter() {
-            self.state = CRC8_TABLE[(self.state ^ *x) as uint];
+            self.state = CRC8_TABLE[(self.state ^ *x) as usize];
         }
 
         Ok(n)
@@ -143,14 +143,14 @@ impl<'r> Reader for Crc8Reader<'r> {
 }
 
 impl<'r> Reader for Crc16Reader<'r> {
-    fn read(&mut self, buf: &mut [u8]) -> IoResult<uint> {
+    fn read(&mut self, buf: &mut [u8]) -> IoResult<usize> {
         // Pass through to the regular reader.
         let n = try!(self.reader.read(buf));
 
         // And also update the CRC with the bytes just read.
         for x in buf[0 ..n].iter() {
             self.state = (self.state << 8)
-                       ^ CRC16_TABLE[((self.state >> 8) as u8 ^ *x) as uint];
+                       ^ CRC16_TABLE[((self.state >> 8) as u8 ^ *x) as usize];
         }
 
         Ok(n)

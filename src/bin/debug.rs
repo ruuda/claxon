@@ -28,14 +28,14 @@ fn main() {
     let n_samples = stream.streaminfo().n_samples.unwrap();
     let mut blocks = stream.blocks::<u16>();
     let mut sample = 0u64;
-    let mut i = 0u;
+    let mut i = 0u64;
     while sample < n_samples {
         let block = blocks.read_next().unwrap();
         let left = block.channel(0);
         let right = block.channel(1);
         println!("block {} decoded\nleft: {:?} .. {:?}\nright: {:?} .. {:?}",
-                 i, left.slice_to(12), left.slice_from(block.len() as uint - 12),
-                 right.slice_to(12), right.slice_from(block.len() as uint - 12));
+                 i, left.slice_to(12), left.slice_from(block.len() as usize - 12),
+                 right.slice_to(12), right.slice_from(block.len() as usize - 12));
         sample = sample + block.len() as u64;
         i = i + 1;
     }
