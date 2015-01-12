@@ -14,3 +14,5 @@ love and use on a daily basis: FLAC.
 It is licensed under the [GNU General Public License][gplv3].
 
 [gplv3]: https://www.gnu.org/licenses/gpl.html
+
+[![Build Status](https://travis-ci.org/ruud-v-a/claxon.svg?branch=master)](https://travis-ci.org/ruud-v-a/claxon)
