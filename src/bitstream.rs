@@ -35,7 +35,7 @@ impl<'r> Bitstream<'r> {
     /// Generates a bitmask with 1s in the `bits` most significant bits.
     fn mask_u8(bits: u8) -> u8 {
         debug_assert!(bits <= 8);
-        0xffu8 << (8 - bits) as uint
+        0xffu8 << (8 - bits) as usize
     }
 
     /// Skips bits such that the next read will be byte-aligned.
@@ -59,10 +59,10 @@ impl<'r> Bitstream<'r> {
             // that it does not overlap with what we have already.
             self.data = try!(self.reader.read_byte());
             let lsb = (self.data & Bitstream::mask_u8(bits - self.bits_left))
-                    >> self.bits_left as uint;
+                    >> self.bits_left as usize;
 
             // Shift out the bits that we have consumed.
-            self.data = self.data << (bits - self.bits_left) as uint;
+            self.data = self.data << (bits - self.bits_left) as usize;
             self.bits_left = 8 - (bits - self.bits_left);
 
             msb | lsb
@@ -70,7 +70,7 @@ impl<'r> Bitstream<'r> {
             let result = self.data & Bitstream::mask_u8(bits);
 
             // Shift out the bits that we have consumed.
-            self.data = self.data << bits as uint;
+            self.data = self.data << bits as usize;
             self.bits_left = self.bits_left - bits;
 
             result
@@ -81,7 +81,7 @@ impl<'r> Bitstream<'r> {
 
         // The resulting data is padded with zeroes in the least significant
         // bits, but we want to pad in the most significant bits, so shift.
-        Ok(result >> (8 - bits) as uint)
+        Ok(result >> (8 - bits) as usize)
     }
 
     /// Reads at most 16 bits.
@@ -99,7 +99,7 @@ impl<'r> Bitstream<'r> {
             // First read the 8 most significant bits, then read what is left.
             let msb = try!(self.read_leq_u8(8)) as u16;
             let lsb = try!(self.read_leq_u8(bits - 8)) as u16;
-            Ok((msb << (bits - 8) as uint) | lsb)
+            Ok((msb << (bits - 8) as usize) | lsb)
         }
     }
 
@@ -118,7 +118,7 @@ impl<'r> Bitstream<'r> {
             // First read the 16 most significant bits, then read what is left.
             let msb = try!(self.read_leq_u16(16)) as u32;
             let lsb = try!(self.read_leq_u16(bits - 16)) as u32;
-            Ok((msb << (bits - 16) as uint) | lsb)
+            Ok((msb << (bits - 16) as usize) | lsb)
         }
     }
 }
