@@ -63,7 +63,7 @@ fn read_var_length_int(input: &mut Reader) -> FlacResult<u64> {
     // The number of consecutive 1s followed by a 0 is the number of additional
     // bytes to read.
     let first = try!(input.read_byte());
-    let mut read_additional = 0u;
+    let mut read_additional = 0u8;
     let mut mask_data = 0b0111_1111u8;
     let mut mask_mark = 0b1000_0000u8;
 
@@ -88,7 +88,7 @@ fn read_var_length_int(input: &mut Reader) -> FlacResult<u64> {
     // Each additional byte will yield 6 extra bits, so shift the most
     // significant bits into the correct position.
     let mut result = ((first & mask_data) as u64) << (6 * read_additional);
-    for i in range_step_inclusive(read_additional as int - 1, 0, -1) {
+    for i in range_step_inclusive(read_additional as i16 - 1, 0, -1) {
         let byte = try!(input.read_byte());
 
         // The two most significant bits _must_ be 10.
@@ -96,7 +96,7 @@ fn read_var_length_int(input: &mut Reader) -> FlacResult<u64> {
             return Err(FlacError::InvalidVarLengthInt);
         }
 
-        result = result | (((byte & 0b0011_1111) as u64) << (6 * i as uint));
+        result = result | (((byte & 0b0011_1111) as u64) << (6 * i as usize));
     }
 
     Ok(result)
@@ -162,10 +162,10 @@ fn read_frame_header(input: &mut Reader) -> FlacResult<FrameHeader> {
         // The value 0000 is reserved.
         0b0000 => return Err(FlacError::InvalidFrameHeader),
         0b0001 => block_size = 192,
-        n if 0b0010 <= n && n <= 0b0101 => block_size = 576 * (1 << (n - 2) as uint),
+        n if 0b0010 <= n && n <= 0b0101 => block_size = 576 * (1 << (n - 2) as usize),
         0b0110 => read_8bit_bs = true,
         0b0111 => read_16bit_bs = true,
-        n => block_size = 256 * (1 << (n - 8) as uint)
+        n => block_size = 256 * (1 << (n - 8) as usize)
     }
 
     // For the sample rate there is a number of pre-defined bit patterns as
@@ -389,7 +389,7 @@ impl <'b, Sample> Block<'b, Sample> where Sample: UnsignedInt {
         Block {
             first_sample_number: time,
             block_size: bs,
-            n_channels: (buffer.len() / bs as uint) as u8,
+            n_channels: (buffer.len() / bs as usize) as u8,
             samples: buffer
         }
     }
@@ -415,8 +415,8 @@ impl <'b, Sample> Block<'b, Sample> where Sample: UnsignedInt {
     /// # Panics
     /// Panics if `ch` is larger than `channels()`.
     pub fn channel(&'b self, ch: u8) -> &'b [Sample] {
-        self.samples.slice(ch as uint * self.block_size as uint,
-                          (ch as uint + 1) * self.block_size as uint)
+        self.samples.slice(ch as usize * self.block_size as usize,
+                          (ch as usize + 1) * self.block_size as usize)
     }
 }
 
@@ -455,7 +455,7 @@ impl<'r, Sample> FrameReader<'r, Sample> where Sample: UnsignedInt {
 
         // We must allocate enough space for all channels in the block to be
         // decoded.
-        let total_samples = header.n_channels as uint * header.block_size as uint;
+        let total_samples = header.n_channels as usize * header.block_size as usize;
         if self.buffer.len() < total_samples {
             // Previous data will be overwritten, so instead of resizing the
             // vector if it is too small, we might as well allocate a new one.
@@ -471,7 +471,7 @@ impl<'r, Sample> FrameReader<'r, Sample> where Sample: UnsignedInt {
         let bps = header.bits_per_sample.unwrap();
 
         // The sample size must be wide enough to accomodate for the bits per sample.
-        debug_assert!(bps as uint <= size_of::<Sample>() * 8);
+        debug_assert!(bps as usize <= size_of::<Sample>() * 8);
 
         // In the next part of the stream, nothing is byte-aligned any more,
         // we need a bitstream. Then we can decode subframes from the bitstream.
@@ -482,8 +482,8 @@ impl<'r, Sample> FrameReader<'r, Sample> where Sample: UnsignedInt {
             for ch in range(0, header.n_channels) {
                 println!("decoding subframe {}", ch); // TODO: remove this.
                 try!(decoder.decode(self.buffer.slice_mut(
-                     (ch as uint) * header.block_size as uint,
-                     (ch as uint + 1) * header.block_size as uint)));
+                     (ch as usize) * header.block_size as usize,
+                     (ch as usize + 1) * header.block_size as usize)));
             }
 
             // When the bitstream goes out of scope, we can use the `input`
@@ -503,7 +503,7 @@ impl<'r, Sample> FrameReader<'r, Sample> where Sample: UnsignedInt {
 
         // If a special stereo channel mode was used, decode to left-right.
         {
-            let stereo_chs = self.buffer.slice_mut(0, header.block_size as uint * 2);
+            let stereo_chs = self.buffer.slice_mut(0, header.block_size as usize * 2);
             match header.channel_mode {
                 ChannelMode::LeftSideStereo => decode_left_side(stereo_chs),
                 ChannelMode::RightSideStereo => decode_right_side(stereo_chs),
