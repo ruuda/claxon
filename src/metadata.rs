@@ -237,7 +237,7 @@ fn read_application_block(input: &mut Reader, length: u32)
     let id = try!(input.read_be_u32());
 
     // Four bytes of the block have been used for the ID, the rest is payload.
-    let data = try!(input.read_exact((length - 4) as uint));
+    let data = try!(input.read_exact((length - 4) as usize));
 
     Ok((id, data))
 }
@@ -291,7 +291,7 @@ impl<'r, R> Iterator
         }
     }
 
-    fn size_hint(&self) -> (uint, Option<uint>) {
+    fn size_hint(&self) -> (usize, Option<usize>) {
         // When done, there will be no more blocks,
         // when not done, there will be at least one more.
         if self.done {
