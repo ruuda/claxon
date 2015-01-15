@@ -94,10 +94,10 @@ fn read_subframe_header(input: &mut Bitstream) -> FlacResult<SubframeHeader> {
 /// Given a signed two's complement integer in the `bits` least significant
 /// bits of `val`, extends the sign bit to a valid 16-bit signed integer.
 fn extend_sign(val: u16, bits: u8) -> i16 {
-    let sign_bit = val >> (bits as uint - 1);
+    let sign_bit = val >> (bits as usize - 1);
 
     // Extend the sign bit into the remaining bits.
-    let sign_extension = range(bits as uint, 16)
+    let sign_extension = range(bits as usize, 16)
                          .fold(0, |s, i| s | (sign_bit << i));
 
     // Note: overflow in the cast is intended.
@@ -167,7 +167,7 @@ impl<'r, Sample> SubframeDecoder<'r, Sample> where Sample: UnsignedInt {
         // the stream, but this can be verified at a higher level than here.
         // Still, it is a good idea to make the assumption explicit.
         use std::mem::size_of;
-        debug_assert!(bits_per_sample as uint <= size_of::<Sample>() * 8);
+        debug_assert!(bits_per_sample as usize <= size_of::<Sample>() * 8);
 
         SubframeDecoder { bits_per_sample: bits_per_sample, input: input }
     }
@@ -194,7 +194,7 @@ impl<'r, Sample> SubframeDecoder<'r, Sample> where Sample: UnsignedInt {
         // the fly while decoding. That could be done if this is a bottleneck.
         if header.wasted_bits_per_sample > 0 {
             for s in buffer.iter_mut() {
-                *s = *s << header.wasted_bits_per_sample as uint;
+                *s = *s << header.wasted_bits_per_sample as usize;
             }
         }
 
@@ -230,8 +230,8 @@ impl<'r, Sample> SubframeDecoder<'r, Sample> where Sample: UnsignedInt {
         // partitions, but the block size is a 16-bit number, so there are at
         // most 2^16 - 1 samples in the block. No values have been marked as
         // invalid by the specification though.
-        let n_partitions = 1u32 << order as uint;
-        let n_samples = block_size >> order as uint;
+        let n_partitions = 1u32 << order as usize;
+        let n_samples = block_size >> order as usize;
         let n_warm_up = block_size - buffer.len() as u16;
 
         println!("  order: {}, partitions: {}, samples: {}",
@@ -241,14 +241,14 @@ impl<'r, Sample> SubframeDecoder<'r, Sample> where Sample: UnsignedInt {
         // samples, otherwise the size of the first partition is negative.
         if n_warm_up > n_samples { return Err(FlacError::InvalidResidual); }
 
-        let mut start = 0u;
+        let mut start = 0us;
         for i in range(0, n_partitions) {
             let partition_size = n_samples - if i == 0 { n_warm_up } else { 0 };
             println!("  > decoding partition {}, from {} to {}",
-                     i, start, start + partition_size as uint); // TODO: Remove this.
+                     i, start, start + partition_size as usize); // TODO: Remove this.
             try!(self.decode_rice_partition(buffer.slice_mut(start,
-                                            start + partition_size as uint)));
-            start = start + partition_size as uint;
+                                            start + partition_size as usize)));
+            start = start + partition_size as usize;
         }
 
         Ok(())
@@ -274,7 +274,7 @@ impl<'r, Sample> SubframeDecoder<'r, Sample> where Sample: UnsignedInt {
             panic!("unencoded binary is not yet implemented"); // TODO
         } else {
             let max_sample: Sample = Int::max_value();
-            let max_q = max_sample >> rice_param as uint;
+            let max_q = max_sample >> rice_param as usize;
 
             // TODO: It is possible for the rice_param to be larger than the
             // sample width, which would be invalid. Check for that.
@@ -295,7 +295,7 @@ impl<'r, Sample> SubframeDecoder<'r, Sample> where Sample: UnsignedInt {
                 let r_u16 = try!(self.input.read_leq_u16(rice_param));
                 let r: Sample = num::cast(r_u16).unwrap();
 
-                *sample = rice_to_signed((q << rice_param as uint) | r);
+                *sample = rice_to_signed((q << rice_param as usize) | r);
             }
         }
 
@@ -339,9 +339,9 @@ impl<'r, Sample> SubframeDecoder<'r, Sample> where Sample: UnsignedInt {
                     -> FlacResult<()> {
         println!("begin decoding fixed subframe"); // TODO: Remove this.
         // There are order * bits per sample unencoded warm-up sample bits.
-        try!(self.decode_verbatim(buffer.slice_to_mut(order as uint)));
+        try!(self.decode_verbatim(buffer.slice_to_mut(order as usize)));
 
-        println!("the warm-up samples are {:?}", buffer[0 .. order as uint].iter()
+        println!("the warm-up samples are {:?}", buffer[0 .. order as usize].iter()
                  .map(|x| show_sample(*x))
                  .collect::<Vec<i16>>()); // TODO: Remove this.
 
@@ -349,7 +349,7 @@ impl<'r, Sample> SubframeDecoder<'r, Sample> where Sample: UnsignedInt {
         // predictor contributions will be added in a second pass. The first
         // `order` samples have been decoded already, so continue after that.
         try!(self.decode_residual(buffer.len() as u16,
-                                  buffer.slice_from_mut(order as uint)));
+                                  buffer.slice_from_mut(order as usize)));
 
         // TODO: do prediction.
 
@@ -360,9 +360,9 @@ impl<'r, Sample> SubframeDecoder<'r, Sample> where Sample: UnsignedInt {
                   -> FlacResult<()> {
         println!("begin decoding of LPC subframe"); // TODO: Remove this.
         // There are order * bits per sample unencoded warm-up sample bits.
-        try!(self.decode_verbatim(buffer.slice_to_mut(order as uint)));
+        try!(self.decode_verbatim(buffer.slice_to_mut(order as usize)));
 
-        println!("the warm-up samples are {:?}", buffer[0 .. order as uint].iter()
+        println!("the warm-up samples are {:?}", buffer[0 .. order as usize].iter()
                  .map(|x| show_sample(*x))
                  .collect::<Vec<i16>>()); // TODO: Remove this.
 
@@ -397,10 +397,10 @@ impl<'r, Sample> SubframeDecoder<'r, Sample> where Sample: UnsignedInt {
         // predictor contributions will be added in a second pass. The first
         // `order` samples have been decoded already, so continue after that.
         try!(self.decode_residual(buffer.len() as u16,
-                                  buffer.slice_from_mut(order as uint)));
+                                  buffer.slice_from_mut(order as usize)));
 
         println!("  > first residual: {}, last residual: {}",
-                 show_sample(buffer[order as uint]),
+                 show_sample(buffer[order as usize]),
                  show_sample(buffer[buffer.len() - 1])); // TODO: Remove this.
 
         // TODO: do prediction.
