@@ -18,7 +18,7 @@ use std::error::FromError;
 use std::io::IoError;
 
 #[derive(PartialEq, Eq, Show)]
-pub enum FlacError {
+pub enum Error {
     /// Not a decoding error, but a problem with the underlying IO.
     IoError(IoError),
 
@@ -70,12 +70,12 @@ pub enum FlacError {
     SampleTooWide
 }
 
-// TODO: implement the Error trait for FlacError.
+// TODO: implement the Error trait for claxon::error::Error.
 
-impl FromError<IoError> for FlacError {
-    fn from_error(err: IoError) -> FlacError {
-        FlacError::IoError(err)
+impl FromError<IoError> for Error {
+    fn from_error(err: IoError) -> Error {
+        Error::IoError(err)
     }
 }
 
-pub type FlacResult<T> = Result<T, FlacError>;
+pub type FlacResult<T> = Result<T, Error>;

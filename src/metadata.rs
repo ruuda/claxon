@@ -14,7 +14,7 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-use error::{FlacError, FlacResult};
+use error::{Error, FlacResult};
 
 #[derive(Copy)]
 struct MetadataBlockHeader {
@@ -100,7 +100,7 @@ fn read_metadata_block(input: &mut Reader, block_type: u8, length: u32)
                 let streaminfo = try!(read_streaminfo_block(input));
                 Ok(MetadataBlock::StreamInfo(streaminfo))
             } else {
-                Err(FlacError::InvalidMetadataBlockLength)
+                Err(Error::InvalidMetadataBlockLength)
             }
         },
         1 => {
@@ -133,7 +133,7 @@ fn read_metadata_block(input: &mut Reader, block_type: u8, length: u32)
         },
         127 => {
             // This code is invalid to avoid confusion with a frame sync code.
-            Err(FlacError::InvalidMetadataBlockType)
+            Err(Error::InvalidMetadataBlockType)
         },
         _ => {
             // Any other block type is 'reserved' at the moment of writing. The
@@ -186,19 +186,19 @@ fn read_streaminfo_block(input: &mut Reader) -> FlacResult<StreamInfo> {
     // Lower bounds can never be larger than upper bounds. Note that 0 indicates
     // unknown for the frame size. Also, the block size must be at least 16.
     if min_block_size > max_block_size {
-        return Err(FlacError::InconsistentBounds);
+        return Err(Error::InconsistentBounds);
     }
     if min_block_size < 16 {
-        return Err(FlacError::InvalidBlockSize);
+        return Err(Error::InvalidBlockSize);
     }
     if min_frame_size > max_frame_size && max_frame_size != 0 {
-        return Err(FlacError::InconsistentBounds);
+        return Err(Error::InconsistentBounds);
     }
 
     // A sample rate of 0 is invalid, and the maximum sample rate is limited by
     // the structure of the frame headers to 655350 Hz.
     if sample_rate == 0 || sample_rate > 655350 {
-        return Err(FlacError::InvalidSampleRate);
+        return Err(Error::InvalidSampleRate);
     }
 
     let stream_info = StreamInfo {
@@ -253,7 +253,7 @@ pub struct MetadataBlockReader<'r, R> where R: 'r {
     done: bool
 }
 
-/// Either a `MetadataBlock` or a `FlacError`.
+/// Either a `MetadataBlock` or an `Error`.
 pub type MetadataBlockResult = FlacResult<MetadataBlock>;
 
 impl<'r, R> MetadataBlockReader<'r, R> where R: Reader + 'r {

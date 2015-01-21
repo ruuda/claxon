@@ -18,7 +18,7 @@
 #![allow(unstable)]
 
 use std::num::UnsignedInt;
-use error::{FlacError, FlacResult};
+use error::{Error, FlacResult};
 use frame::{FrameReader};
 use metadata::{MetadataBlock, MetadataBlockReader, StreamInfo};
 
@@ -39,7 +39,7 @@ fn read_stream_header(input: &mut Reader) -> FlacResult<()> {
     // A FLAC stream starts with a 32-bit header 'fLaC' (big endian).
     const HEADER: u32 = 0x66_4c_61_43;
     let header = try!(input.read_be_u32());
-    if header != HEADER { return Err(FlacError::InvalidStreamHeader); }
+    if header != HEADER { return Err(Error::InvalidStreamHeader); }
     Ok(())
 }
 
@@ -61,7 +61,7 @@ impl<'r> FlacStream<'r> {
             let streaminfo_block = try!(metadata_iter.next().unwrap());
             let streaminfo = match streaminfo_block {
                 MetadataBlock::StreamInfo(info) => info,
-                _ => return Err(FlacError::MissingStreamInfoBlock)
+                _ => return Err(Error::MissingStreamInfoBlock)
             };
 
             // There might be more metadata blocks, read and store them.

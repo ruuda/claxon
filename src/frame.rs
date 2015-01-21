@@ -18,7 +18,7 @@ use std::iter::repeat;
 use std::num::{Int, UnsignedInt};
 use bitstream::Bitstream;
 use crc::Crc8Reader;
-use error::{FlacError, FlacResult};
+use error::{Error, FlacResult};
 use subframe::SubframeDecoder;
 
 #[derive(Copy)]
@@ -77,7 +77,7 @@ fn read_var_length_int(input: &mut Reader) -> FlacResult<u64> {
     // A single leading 1 is a follow-up byte and thus invalid.
     if read_additional > 0 {
         if read_additional == 1 {
-            return Err(FlacError::InvalidVarLengthInt);
+            return Err(Error::InvalidVarLengthInt);
         } else {
             // The number of 1s (if > 1) is the total number of bytes, not the
             // number of additional bytes.
@@ -93,7 +93,7 @@ fn read_var_length_int(input: &mut Reader) -> FlacResult<u64> {
 
         // The two most significant bits _must_ be 10.
         if byte & 0b1100_0000 != 0b1000_0000 {
-            return Err(FlacError::InvalidVarLengthInt);
+            return Err(Error::InvalidVarLengthInt);
         }
 
         result = result | (((byte & 0b0011_1111) as u64) << (6 * i as usize));
@@ -115,10 +115,10 @@ fn verify_read_var_length_int() {
     assert_eq!(read_var_length_int(&mut reader).unwrap(), 0x010348);
     // Two-byte integer with invalid continuation byte should fail.
     assert_eq!(read_var_length_int(&mut reader).err().unwrap(),
-               FlacError::InvalidVarLengthInt);
+               Error::InvalidVarLengthInt);
     // Continuation byte can never be the first byte.
     assert_eq!(read_var_length_int(&mut reader).err().unwrap(),
-               FlacError::InvalidVarLengthInt);
+               Error::InvalidVarLengthInt);
 }
 
 fn read_frame_header(input: &mut Reader) -> FlacResult<FrameHeader> {
@@ -133,14 +133,14 @@ fn read_frame_header(input: &mut Reader) -> FlacResult<FrameHeader> {
     // The first 14 bits must be 11111111111110.
     let sync_code = sync_res_block & 0b1111_1111_1111_1100;
     if sync_code != 0b1111_1111_1111_1000 {
-        return Err(FlacError::MissingFrameSyncCode);
+        return Err(Error::MissingFrameSyncCode);
     }
 
     // The next bit has a mandatory value of 0 (at the moment of writing, if
     // the bit has a different value, it could be a future stream that we
     // cannot read).
     if sync_res_block & 0b0000_0000_0000_0010 != 0 {
-        return Err(FlacError::InvalidFrameHeader);
+        return Err(Error::InvalidFrameHeader);
     }
 
     // The final bit determines the blocking strategy.
@@ -160,7 +160,7 @@ fn read_frame_header(input: &mut Reader) -> FlacResult<FrameHeader> {
     // header instead'.
     match bs_sr >> 4 {
         // The value 0000 is reserved.
-        0b0000 => return Err(FlacError::InvalidFrameHeader),
+        0b0000 => return Err(Error::InvalidFrameHeader),
         0b0001 => block_size = 192,
         n if 0b0010 <= n && n <= 0b0101 => block_size = 576 * (1 << (n - 2) as usize),
         0b0110 => read_8bit_bs = true,
@@ -193,7 +193,7 @@ fn read_frame_header(input: &mut Reader) -> FlacResult<FrameHeader> {
         0b1110 => read_16bit_sr_ten = true, // Read tens of Hz from end of header.
         // 1111 is invalid to prevent sync-fooling.
         // Other values are impossible at this point.
-        _ => return Err(FlacError::InvalidFrameHeader)
+        _ => return Err(Error::InvalidFrameHeader)
     }
 
     // Next are 4 bits channel assignment, 3 bits sample size, and 1 reserved bit.
@@ -207,7 +207,7 @@ fn read_frame_header(input: &mut Reader) -> FlacResult<FrameHeader> {
         0b1001 => (2, ChannelMode::RightSideStereo),
         0b1010 => (2, ChannelMode::MidSideStereo),
         // Values 1011 through 1111 are reserved and thus invalid.
-        _ => return Err(FlacError::InvalidFrameHeader)
+        _ => return Err(Error::InvalidFrameHeader)
     };
 
     // The next three bits indicate bits per sample.
@@ -219,12 +219,12 @@ fn read_frame_header(input: &mut Reader) -> FlacResult<FrameHeader> {
         0b101 => Some(20),
         0b110 => Some(24),
         // Values 011 and 111 are reserved. Other values are impossible.
-        _ => return Err(FlacError::InvalidFrameHeader)
+        _ => return Err(Error::InvalidFrameHeader)
     };
 
     // The final bit has a mandatory value of 0.
     if chan_bps_res & 0b0000_0001 != 0 {
-        return Err(FlacError::InvalidFrameHeader);
+        return Err(Error::InvalidFrameHeader);
     }
 
     let block_time = match blocking_strategy {
@@ -238,7 +238,7 @@ fn read_frame_header(input: &mut Reader) -> FlacResult<FrameHeader> {
             let frame = try!(read_var_length_int(&mut crc_input));
             // A frame number larger than 31 bits is therefore invalid.
             if frame > 0x7fffffff {
-                return Err(FlacError::InvalidFrameHeader);
+                return Err(Error::InvalidFrameHeader);
             }
             BlockTime::FrameNumber(frame as u32)
         }
@@ -255,7 +255,7 @@ fn read_frame_header(input: &mut Reader) -> FlacResult<FrameHeader> {
         // value of 0xffff would be invalid because it exceeds the max block
         // size, though this is not mentioned explicitly in the specification.
         let bs = try!(crc_input.read_be_u16());
-        if bs == 0xffff { return Err(FlacError::InvalidBlockSize); }
+        if bs == 0xffff { return Err(Error::InvalidBlockSize); }
         block_size = bs + 1;
     }
 
@@ -277,7 +277,7 @@ fn read_frame_header(input: &mut Reader) -> FlacResult<FrameHeader> {
     let presumed_crc = try!(crc_input.read_byte());
 
     if computed_crc != presumed_crc {
-        return Err(FlacError::FrameHeaderCrcMismatch);
+        return Err(Error::FrameHeaderCrcMismatch);
     }
 
     let frame_header = FrameHeader {
@@ -429,7 +429,7 @@ pub struct FrameReader<'r, Sample> {
     buffer: Vec<Sample>
 }
 
-/// Either a `Block` or a `FlacError`.
+/// Either a `Block` or an `Error`.
 pub type FrameResult<'b, Sample> = FlacResult<Block<'b, Sample>>;
 
 impl<'r, Sample> FrameReader<'r, Sample> where Sample: UnsignedInt {

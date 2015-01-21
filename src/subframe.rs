@@ -17,7 +17,7 @@
 use std::num;
 use std::num::{Int, UnsignedInt};
 use bitstream::Bitstream;
-use error::{FlacError, FlacResult};
+use error::{Error, FlacResult};
 
 #[derive(Copy, Show)] // TODO: this should not implement Show.
 enum SubframeType {
@@ -36,7 +36,7 @@ struct SubframeHeader {
 fn read_subframe_header(input: &mut Bitstream) -> FlacResult<SubframeHeader> {
     // The first bit must be a 0 padding bit.
     if 0 != try!(input.read_leq_u8(1)) {
-        return Err(FlacError::InvalidSubframeHeader);
+        return Err(Error::InvalidSubframeHeader);
     }
 
     // Next is a 6-bit subframe type.
@@ -49,14 +49,14 @@ fn read_subframe_header(input: &mut Bitstream) -> FlacResult<SubframeHeader> {
         n if (n & 0b111_110 == 0b000_010)
           || (n & 0b111_100 == 0b000_100)
           || (n & 0b110_000 == 0b010_000) => {
-            return Err(FlacError::InvalidSubframeHeader);
+            return Err(Error::InvalidSubframeHeader);
         }
 
         n if n & 0b111_000 == 0b001_000 => {
             let order = n & 0b000_111;
 
             // A fixed frame has order up to 4, other bit patterns are reserved.
-            if order > 4 { return Err(FlacError::InvalidSubframeHeader); }
+            if order > 4 { return Err(Error::InvalidSubframeHeader); }
 
             SubframeType::Fixed(order)
         }
@@ -210,7 +210,7 @@ impl<'r, Sample> SubframeDecoder<'r, Sample> where Sample: UnsignedInt {
         match method {
             0b00 => self.decode_partitioned_rice(block_size, buffer),
             0b01 => self.decode_partitioned_rice2(block_size, buffer),
-            _ => Err(FlacError::InvalidResidual) // 10 and 11 are reserved.
+            _ => Err(Error::InvalidResidual) // 10 and 11 are reserved.
         }
     }
 
@@ -239,7 +239,7 @@ impl<'r, Sample> SubframeDecoder<'r, Sample> where Sample: UnsignedInt {
 
         // The partition size must be at least as big as the number of warm-up
         // samples, otherwise the size of the first partition is negative.
-        if n_warm_up > n_samples { return Err(FlacError::InvalidResidual); }
+        if n_warm_up > n_samples { return Err(Error::InvalidResidual); }
 
         let mut start = 0us;
         for i in range(0, n_partitions) {
@@ -268,7 +268,7 @@ impl<'r, Sample> SubframeDecoder<'r, Sample> where Sample: UnsignedInt {
 
             // There cannot be more bits per sample than the sample type.
             if self.bits_per_sample < bps {
-                return Err(FlacError::InvalidBitsPerSample);
+                return Err(Error::InvalidBitsPerSample);
             }
 
             panic!("unencoded binary is not yet implemented"); // TODO
@@ -285,7 +285,7 @@ impl<'r, Sample> SubframeDecoder<'r, Sample> where Sample: UnsignedInt {
                 // should not be more than max_q consecutive zeroes.
                 let mut q: Sample = Int::zero();
                 while try!(self.input.read_leq_u8(1)) == 0 {
-                    if q == max_q { return Err(FlacError::InvalidRiceCode); }
+                    if q == max_q { return Err(Error::InvalidRiceCode); }
                     q = q + Int::one();
                 }
 
@@ -371,7 +371,7 @@ impl<'r, Sample> SubframeDecoder<'r, Sample> where Sample: UnsignedInt {
 
         // The bit pattern 1111 is invalid.
         if qlp_precision - 1 == 0b1111 {
-            return Err(FlacError::InvalidSubframe);
+            return Err(Error::InvalidSubframe);
         }
 
         // Next are five bits quantized linear predictor coefficient shift,
