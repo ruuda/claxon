@@ -14,6 +14,8 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+//! The `frame` module deals with the frames that make up a FLAC stream.
+
 use std::iter::repeat;
 use std::num::{Int, UnsignedInt};
 use bitstream::Bitstream;
@@ -373,6 +375,7 @@ fn decode_mid_side<Sample>(buffer: &mut [Sample]) where Sample: UnsignedInt {
 //     assert_eq!(buffer, result);
 // }
 
+/// A block of raw audio samples.
 pub struct Block<'b, Sample> where Sample: 'b {
     /// The sample number of the first sample in the this block.
     first_sample_number: u64,
@@ -440,6 +443,9 @@ impl<'r, Sample> FrameReader<'r, Sample> where Sample: UnsignedInt {
         FrameReader { input: input, buffer: Vec::new() }
     }
 
+    /// Tries to decode the next frame.
+    ///
+    /// TODO: I should really be consistent with 'read' and 'decode'.
     pub fn read_next<'s>(&'s mut self) -> FrameResult<'s, Sample> {
         use std::mem::size_of;
 

@@ -14,9 +14,12 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+//! The `error` module defines the error and result types.
+
 use std::error::FromError;
 use std::io::IoError;
 
+/// An error that prevents succesful decoding of the FLAC stream.
 #[derive(PartialEq, Eq, Show)]
 pub enum Error {
     /// Not a decoding error, but a problem with the underlying IO.
@@ -78,4 +81,5 @@ impl FromError<IoError> for Error {
     }
 }
 
+/// Either `T` on success, or an `Error` on failure.
 pub type FlacResult<T> = Result<T, Error>;

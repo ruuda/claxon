@@ -14,6 +14,11 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+//! Claxon, a FLAC decoding library.
+//!
+//! TODO: Add some examples here.
+
+#![warn(missing_docs)]
 #![allow(dead_code)] // TODO: Remove for v0.1
 #![allow(unstable)]
 
@@ -29,6 +34,10 @@ pub mod frame;
 pub mod subframe;
 pub mod metadata;
 
+/// A FLAC decoder that can decode the stream from the underlying reader.
+///
+/// TODO: Is stream a good name? Should it be called reader/decoder?
+/// TODO: Add an example.
 pub struct FlacStream<'r> {
     streaminfo: StreamInfo,
     metadata_blocks: Vec<MetadataBlock>,

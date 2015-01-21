@@ -14,6 +14,8 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+//! The `subframe` module deals with subframes that make up a frame of the FLAC stream.
+
 use std::num;
 use std::num::{Int, UnsignedInt};
 use bitstream::Bitstream;
@@ -151,6 +153,7 @@ fn show_sample<Sample: UnsignedInt>(x: Sample) -> i16 {
     x_u16 as i16
 }
 
+/// A decoder that can decode subframes from the associated bitstream.
 pub struct SubframeDecoder<'r, Sample> {
     bits_per_sample: u8,
     input: &'r mut Bitstream<'r>

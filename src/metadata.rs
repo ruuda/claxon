@@ -14,6 +14,8 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+//! The `metadata` module deals with metadata at the beginning of a FLAC stream.
+
 use error::{Error, FlacResult};
 
 #[derive(Copy)]
@@ -49,25 +51,46 @@ pub struct StreamInfo {
 /// A seek point in the seek table.
 #[derive(Copy)]
 pub struct SeekPoint {
+    /// Sample number of the first sample in the target frame, or 2^64 - 1 for a placeholder.
     pub sample: u64,
+    /// Offset in bytes from the first byte of the first frame header to the first byte of the
+    /// target frame's header.
     pub offset: u64,
+    /// Number of samples in the target frame.
     pub n_samples: u16
 }
 
 /// A seek table to aid seeking in the stream.
 pub struct SeekTable {
+    /// The seek points, sorted in ascending order by sample number.
     seekpoints: Vec<SeekPoint>
 }
 
 /// A metadata about the flac stream.
 pub enum MetadataBlock {
+    /// A stream info block.
     StreamInfo(StreamInfo),
-    Padding { length: u32 },
-    Application { id: u32, data: Vec<u8> },
+    /// A padding block (with no meaningful data).
+    Padding {
+        /// The number of padding bytes.
+        length: u32
+    },
+    /// An application block with application-specific data.
+    Application {
+        /// The registered application ID.
+        id: u32,
+        /// The contents of the application block.
+        data: Vec<u8>
+    },
+    /// A seek table block.
     SeekTable(SeekTable),
+    /// A Vorbis comment block, also known as FLAC tags.
     VorbisComment, // TODO
+    /// A CUE sheet block.
     CueSheet, // TODO
+    /// A picture block.
     Picture, // TODO
+    /// A block with a reserved block type, not supported by this library.
     Reserved
 }
 
