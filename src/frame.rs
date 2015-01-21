@@ -423,7 +423,7 @@ impl <'b, Sample> Block<'b, Sample> where Sample: UnsignedInt {
     }
 }
 
-/// Reads frames from a stream and exposes them as an iterator.
+/// Reads frames from a stream and exposes decoded blocks as an iterator.
 ///
 /// TODO: for now, it is assumes that the reader starts at a frame header;
 /// no searching for a sync code is performed at the moment.
