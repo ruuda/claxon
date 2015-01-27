@@ -35,7 +35,7 @@ enum BlockTime {
     SampleNumber(u64)
 }
 
-#[derive(Copy, Show)] // TODO: should not derive show.
+#[derive(Copy, Debug)]
 enum ChannelMode {
     /// The channels are coded as-is.
     Independent,

@@ -20,7 +20,7 @@ use std::error::FromError;
 use std::io::IoError;
 
 /// An error that prevents succesful decoding of the FLAC stream.
-#[derive(PartialEq, Eq, Show)]
+#[derive(PartialEq, Eq, Debug)]
 pub enum Error {
     /// Not a decoding error, but a problem with the underlying IO.
     IoError(IoError),

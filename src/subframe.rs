@@ -21,7 +21,7 @@ use std::num::{Int, UnsignedInt};
 use bitstream::Bitstream;
 use error::{Error, FlacResult};
 
-#[derive(Copy, Show)] // TODO: this should not implement Show.
+#[derive(Copy, Debug)]
 enum SubframeType {
     Constant,
     Verbatim,
