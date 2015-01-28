@@ -249,8 +249,8 @@ impl<'r, Sample> SubframeDecoder<'r, Sample> where Sample: UnsignedInt {
             let partition_size = n_samples - if i == 0 { n_warm_up } else { 0 };
             println!("  > decoding partition {}, from {} to {}",
                      i, start, start + partition_size as usize); // TODO: Remove this.
-            try!(self.decode_rice_partition(buffer.slice_mut(start,
-                                            start + partition_size as usize)));
+            try!(self.decode_rice_partition(&mut buffer[start ..
+                                            start + partition_size as usize]));
             start = start + partition_size as usize;
         }
 
@@ -342,7 +342,7 @@ impl<'r, Sample> SubframeDecoder<'r, Sample> where Sample: UnsignedInt {
                     -> FlacResult<()> {
         println!("begin decoding fixed subframe"); // TODO: Remove this.
         // There are order * bits per sample unencoded warm-up sample bits.
-        try!(self.decode_verbatim(buffer.slice_to_mut(order as usize)));
+        try!(self.decode_verbatim(&mut buffer[.. order as usize]));
 
         println!("the warm-up samples are {:?}", buffer[0 .. order as usize].iter()
                  .map(|x| show_sample(*x))
@@ -352,7 +352,7 @@ impl<'r, Sample> SubframeDecoder<'r, Sample> where Sample: UnsignedInt {
         // predictor contributions will be added in a second pass. The first
         // `order` samples have been decoded already, so continue after that.
         try!(self.decode_residual(buffer.len() as u16,
-                                  buffer.slice_from_mut(order as usize)));
+                                  &mut buffer[order as usize ..]));
 
         // TODO: do prediction.
 
@@ -363,7 +363,7 @@ impl<'r, Sample> SubframeDecoder<'r, Sample> where Sample: UnsignedInt {
                   -> FlacResult<()> {
         println!("begin decoding of LPC subframe"); // TODO: Remove this.
         // There are order * bits per sample unencoded warm-up sample bits.
-        try!(self.decode_verbatim(buffer.slice_to_mut(order as usize)));
+        try!(self.decode_verbatim(&mut buffer[.. order as usize]));
 
         println!("the warm-up samples are {:?}", buffer[0 .. order as usize].iter()
                  .map(|x| show_sample(*x))
@@ -400,7 +400,7 @@ impl<'r, Sample> SubframeDecoder<'r, Sample> where Sample: UnsignedInt {
         // predictor contributions will be added in a second pass. The first
         // `order` samples have been decoded already, so continue after that.
         try!(self.decode_residual(buffer.len() as u16,
-                                  buffer.slice_from_mut(order as usize)));
+                                  &mut buffer[order as usize ..]));
 
         println!("  > first residual: {}, last residual: {}",
                  show_sample(buffer[order as usize]),
