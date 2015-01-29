@@ -106,7 +106,7 @@ fn read_var_length_int(input: &mut Reader) -> FlacResult<u64> {
 
 #[test]
 fn verify_read_var_length_int() {
-    use std::io::MemReader;
+    use std::old_io::MemReader;
 
     let mut reader = MemReader::new(vec!(0x24, 0xc2, 0xa2, 0xe2, 0x82, 0xac,
                                          0xf0, 0x90, 0x8d, 0x88, 0xc2, 0x00,

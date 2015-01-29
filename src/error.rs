@@ -17,7 +17,7 @@
 //! The `error` module defines the error and result types.
 
 use std::error::FromError;
-use std::io::IoError;
+use std::old_io::IoError;
 
 /// An error that prevents succesful decoding of the FLAC stream.
 #[derive(PartialEq, Eq, Debug)]

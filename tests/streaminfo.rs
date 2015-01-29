@@ -19,7 +19,7 @@
 extern crate claxon;
 
 fn run_metaflac(fname: &Path) -> String {
-    use std::io::Command;
+    use std::old_io::Command;
 
     // Run metaflac on the specified file and print all streaminfo data.
     let mut child = Command::new("metaflac")
@@ -52,8 +52,8 @@ fn print_hex(seq: &[u8]) -> String {
 }
 
 fn read_streaminfo(fname: &Path) -> String {
-    use std::io::fs::File;
-    use std::io::BufferedReader;
+    use std::old_io::fs::File;
+    use std::old_io::BufferedReader;
     use claxon::FlacStream;
 
     // Use a buffered reader, this speeds up the test by 120%.
@@ -91,7 +91,7 @@ fn compare_metaflac(fname: &Path) {
 
 #[test]
 fn verify_streaminfo() {
-    use std::io::fs::{readdir, PathExtensions};
+    use std::old_io::fs::{readdir, PathExtensions};
 
     // Compare our streaminfo parsing with metaflac on all flac files in the
     // testsamples directory.

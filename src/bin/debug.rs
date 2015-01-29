@@ -19,7 +19,7 @@
 extern crate claxon;
 
 fn main() {
-    use std::io::{File, BufferedReader};
+    use std::old_io::{File, BufferedReader};
     use std::os::args;
     use claxon::FlacStream;
     let input = File::open(&Path::new(&args()[1])).unwrap();

@@ -14,7 +14,7 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-use std::io::IoResult;
+use std::old_io::IoResult;
 
 /// Wraps a `Reader` to facilitate reading that is not byte-aligned.
 pub struct Bitstream<'r> {
@@ -125,7 +125,7 @@ impl<'r> Bitstream<'r> {
 
 #[test]
 fn verify_read_leq_u8() {
-    use std::io::MemReader;
+    use std::old_io::MemReader;
 
     let mut data = MemReader::new(vec!(0b1010_0101, 0b1110_0001,
                                        0b1101_0010, 0b0101_0101,
@@ -155,7 +155,7 @@ fn verify_read_leq_u8() {
 
 #[test]
 fn verify_read_leq_u16() {
-    use std::io::MemReader;
+    use std::old_io::MemReader;
 
     let mut data = MemReader::new(vec!(0b1010_0101, 0b1110_0001,
                                        0b1101_0010, 0b0101_0101));
@@ -169,7 +169,7 @@ fn verify_read_leq_u16() {
 
 #[test]
 fn verify_read_leq_u32() {
-    use std::io::MemReader;
+    use std::old_io::MemReader;
 
     let mut data = MemReader::new(vec!(0b1010_0101, 0b1110_0001,
                                        0b1101_0010, 0b0101_0101));
@@ -182,7 +182,7 @@ fn verify_read_leq_u32() {
 
 #[test]
 fn verify_align() {
-    use std::io::MemReader;
+    use std::old_io::MemReader;
 
     let mut data = MemReader::new(vec!(0x00, 0xff));
     let mut bits = Bitstream::new(&mut data);

@@ -14,7 +14,7 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-use std::io::IoResult;
+use std::old_io::IoResult;
 
 // These tables were taken from the tables in crc.c in libflac.
 
@@ -159,7 +159,7 @@ impl<'r> Reader for Crc16Reader<'r> {
 
 #[cfg(test)]
 fn verify_crc8(test_vector: Vec<u8>, result: u8) {
-    use std::io::MemReader;
+    use std::old_io::MemReader;
 
     let mut data = MemReader::new(test_vector);
     let mut reader = Crc8Reader::new(&mut data);
@@ -169,7 +169,7 @@ fn verify_crc8(test_vector: Vec<u8>, result: u8) {
 
 #[cfg(test)]
 fn verify_crc16(test_vector: Vec<u8>, result: u16) {
-    use std::io::MemReader;
+    use std::old_io::MemReader;
 
     let mut data = MemReader::new(test_vector);
     let mut reader = Crc16Reader::new(&mut data);
