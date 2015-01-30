@@ -313,7 +313,7 @@ fn verify_decode_left_side() {
                           007, 038, 142, 238, 000, 104, 204, 238);
     let result =     vec!(2u8, 005, 083, 113, 127, 193, 211, 241,
                           251, 223, 197, 131, 127, 089, 007, 003);
-    decode_left_side(buffer.as_mut_slice());
+    decode_left_side(&mut buffer[]);
     assert_eq!(buffer, result);
 }
 
@@ -337,7 +337,7 @@ fn verify_decode_right_side() {
                           251, 223, 197, 131, 127, 089, 007, 003);
     let result =     vec!(2u8, 005, 083, 113, 127, 193, 211, 241,
                           251, 223, 197, 131, 127, 089, 007, 003);
-    decode_right_side(buffer.as_mut_slice());
+    decode_right_side(&mut buffer[]);
     assert_eq!(buffer, result);
 }
 
@@ -418,8 +418,8 @@ impl <'b, Sample> Block<'b, Sample> where Sample: UnsignedInt {
     /// # Panics
     /// Panics if `ch` is larger than `channels()`.
     pub fn channel(&'b self, ch: u8) -> &'b [Sample] {
-        self.samples.slice(ch as usize * self.block_size as usize,
-                          (ch as usize + 1) * self.block_size as usize)
+        &self.samples[ch as usize * self.block_size as usize ..
+                     (ch as usize + 1) * self.block_size as usize]
     }
 }
 
@@ -487,9 +487,9 @@ impl<'r, Sample> FrameReader<'r, Sample> where Sample: UnsignedInt {
 
             for ch in range(0, header.n_channels) {
                 println!("decoding subframe {}", ch); // TODO: remove this.
-                try!(decoder.decode(self.buffer.slice_mut(
-                     (ch as usize) * header.block_size as usize,
-                     (ch as usize + 1) * header.block_size as usize)));
+                try!(decoder.decode(&mut self.buffer[
+                     (ch as usize) * header.block_size as usize ..
+                     (ch as usize + 1) * header.block_size as usize]));
             }
 
             // When the bitstream goes out of scope, we can use the `input`
@@ -509,7 +509,7 @@ impl<'r, Sample> FrameReader<'r, Sample> where Sample: UnsignedInt {
 
         // If a special stereo channel mode was used, decode to left-right.
         {
-            let stereo_chs = self.buffer.slice_mut(0, header.block_size as usize * 2);
+            let stereo_chs = &mut self.buffer[.. header.block_size as usize * 2];
             match header.channel_mode {
                 ChannelMode::LeftSideStereo => decode_left_side(stereo_chs),
                 ChannelMode::RightSideStereo => decode_right_side(stereo_chs),
@@ -526,7 +526,7 @@ impl<'r, Sample> FrameReader<'r, Sample> where Sample: UnsignedInt {
         };
 
         let block = Block::new(time, header.block_size,
-                               self.buffer.slice_to(total_samples));
+                               &self.buffer[.. total_samples]);
 
         Ok(block)
     }
