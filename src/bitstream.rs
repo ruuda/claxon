@@ -200,8 +200,7 @@ fn verify_read_leq_u32() {
 fn verify_read_mixed() {
     use std::old_io::MemReader;
 
-    // The test data for this test is actual data from the warmup samples in an
-    // LPC subframe.
+    // These test data are warm-up samples from an actual stream.
     let mut data = MemReader::new(vec!(0x03, 0xc7, 0xbf, 0xe5, 0x9b, 0x74,
                                        0x1e, 0x3a, 0xdd, 0x7d, 0xc5, 0x5e,
                                        0xf6, 0xbf, 0x78, 0x1b, 0xbd));
@@ -209,7 +208,14 @@ fn verify_read_mixed() {
 
     assert_eq!(bits.read_leq_u8(6).unwrap(), 0);
     assert_eq!(bits.read_leq_u8(1).unwrap(), 1);
-    assert_eq!(bits.read_leq_u32(16).unwrap() as u16, -14401_i16 as u16);
+    let minus = 1u32 << 16;
+    assert_eq!(bits.read_leq_u32(17).unwrap(), minus | (-14401_i16 as u16 as u32));
+    assert_eq!(bits.read_leq_u32(17).unwrap(), minus | (-13514_i16 as u16 as u32));
+    assert_eq!(bits.read_leq_u32(17).unwrap(), minus | (-12168_i16 as u16 as u32));
+    assert_eq!(bits.read_leq_u32(17).unwrap(), minus | (-10517_i16 as u16 as u32));
+    assert_eq!(bits.read_leq_u32(17).unwrap(), minus | (-09131_i16 as u16 as u32));
+    assert_eq!(bits.read_leq_u32(17).unwrap(), minus | (-08489_i16 as u16 as u32));
+    assert_eq!(bits.read_leq_u32(17).unwrap(), minus | (-08698_i16 as u16 as u32));
 }
 
 #[test]
