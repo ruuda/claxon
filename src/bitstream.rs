@@ -43,6 +43,19 @@ impl<'r> Bitstream<'r> {
         self.bits_left = 0;
     }
 
+    // TODO: Remove this method.
+    pub fn dump_some(&mut self, bytes: u8) -> IoResult<()> {
+        println!(">=== begin bitstream dump ===>");
+        println!("     data = {:x}, {} bits left", self.data, self.bits_left);
+        print!("     more: [");
+        for _ in 0 .. bytes - 1 {
+            print!("{:x}, ", try!(self.reader.read_byte()));
+        }
+        println!("{:x}]", try!(self.reader.read_byte()));
+        println!("<=== end bitstream dump <===");
+        Ok(())
+    }
+
     /// Reads at most eight bits.
     pub fn read_leq_u8(&mut self, bits: u8) -> IoResult<u8> {
         // Of course we can read no more than 8 bits, but we do not want the
@@ -78,6 +91,9 @@ impl<'r> Bitstream<'r> {
 
         // If there are more than 8 bits left, we read too far.
         debug_assert!(self.bits_left < 8);
+
+        // The least significant bits should be zero.
+        debug_assert_eq!(self.data & !Bitstream::mask_u8(self.bits_left), 0u8);
 
         // The resulting data is padded with zeroes in the least significant
         // bits, but we want to pad in the most significant bits, so shift.
@@ -178,6 +194,22 @@ fn verify_read_leq_u32() {
     assert_eq!(bits.read_leq_u32(1).unwrap(), 1);
     assert_eq!(bits.read_leq_u32(17).unwrap(), 0b010_0101_1110_0001_11);
     assert_eq!(bits.read_leq_u32(14).unwrap(), 0b01_0010_0101_0101);
+}
+
+#[test]
+fn verify_read_mixed() {
+    use std::old_io::MemReader;
+
+    // The test data for this test is actual data from the warmup samples in an
+    // LPC subframe.
+    let mut data = MemReader::new(vec!(0x03, 0xc7, 0xbf, 0xe5, 0x9b, 0x74,
+                                       0x1e, 0x3a, 0xdd, 0x7d, 0xc5, 0x5e,
+                                       0xf6, 0xbf, 0x78, 0x1b, 0xbd));
+    let mut bits = Bitstream::new(&mut data);
+
+    assert_eq!(bits.read_leq_u8(6).unwrap(), 0);
+    assert_eq!(bits.read_leq_u8(1).unwrap(), 1);
+    assert_eq!(bits.read_leq_u32(16).unwrap() as u16, -14401_i16 as u16);
 }
 
 #[test]

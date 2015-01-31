@@ -81,10 +81,12 @@ fn read_subframe_header(input: &mut Bitstream) -> FlacResult<SubframeHeader> {
     } else {
         let mut wbits = 1;
         while 1 != try!(input.read_leq_u8(1)) {
-            wbits = wbits + 1;
+            wbits += 1;
         }
         wbits
     };
+
+    println!("subframe has {} wasted bits per sample", wasted_bits); // TODO: remove this.
 
     let subframe_header = SubframeHeader {
         sf_type: sf_type,
