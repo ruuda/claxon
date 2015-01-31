@@ -248,7 +248,7 @@ fn read_padding_block(input: &mut Reader, length: u32) -> FlacResult<()> {
 }
 
 fn skip_block(input: &mut Reader, length: u32) -> FlacResult<()> {
-    for _ in range(0, length) {
+    for _ in 0 .. length {
         try!(input.read_byte());
     }
 

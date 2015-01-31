@@ -99,7 +99,7 @@ fn extend_sign(val: u16, bits: u8) -> i16 {
     let sign_bit = val >> (bits as usize - 1);
 
     // Extend the sign bit into the remaining bits.
-    let sign_extension = range(bits as usize, 16)
+    let sign_extension = (bits as usize .. 16)
                          .fold(0, |s, i| s | (sign_bit << i));
 
     // Note: overflow in the cast is intended.
@@ -245,7 +245,7 @@ impl<'r, Sample> SubframeDecoder<'r, Sample> where Sample: UnsignedInt {
         if n_warm_up > n_samples { return Err(Error::InvalidResidual); }
 
         let mut start = 0us;
-        for i in range(0, n_partitions) {
+        for i in 0 .. n_partitions {
             let partition_size = n_samples - if i == 0 { n_warm_up } else { 0 };
             println!("  > decoding partition {}, from {} to {}",
                      i, start, start + partition_size as usize); // TODO: Remove this.
@@ -388,7 +388,7 @@ impl<'r, Sample> SubframeDecoder<'r, Sample> where Sample: UnsignedInt {
         // Finally, the coefficients themselves.
         // TODO: get rid of the allocation by pre-allocating a vector in the decoder.
         let mut coefficients = Vec::new();
-        for _ in range(0, order) {
+        for _ in 0 .. order {
             // We can safely read into an u16, qlp_precision is at most 15.
             let coef_unsig = try!(self.input.read_leq_u16(qlp_precision));
             let coef = extend_sign(coef_unsig, qlp_precision);

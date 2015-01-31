@@ -296,7 +296,7 @@ fn read_frame_header(input: &mut Reader) -> FlacResult<FrameHeader> {
 /// Converts a buffer left ++ right in-place to left ++ right.
 fn decode_left_side<Sample>(buffer: &mut [Sample]) where Sample: UnsignedInt {
     let block_size = buffer.len() / 2;
-    for i in range(0, block_size) {
+    for i in 0 .. block_size {
         let left = buffer[i];
         let side = buffer[block_size + i];
 
@@ -320,7 +320,7 @@ fn verify_decode_left_side() {
 /// Converts a buffer side ++ right in-place to left ++ right.
 fn decode_right_side<Sample>(buffer: &mut [Sample]) where Sample: UnsignedInt {
     let block_size = buffer.len() / 2;
-    for i in range(0, block_size) {
+    for i in 0 .. block_size {
         let side = buffer[i];
         let right = buffer[block_size + i];
 
@@ -344,7 +344,7 @@ fn verify_decode_right_side() {
 /// Converts a buffer mid ++ side in-place to left ++ right.
 fn decode_mid_side<Sample>(buffer: &mut [Sample]) where Sample: UnsignedInt {
     let block_size = buffer.len() / 2;
-    for i in range(0, block_size) {
+    for i in 0 .. block_size {
         let mid = buffer[i];
         let side = buffer[block_size + i];
 
@@ -485,7 +485,7 @@ impl<'r, Sample> FrameReader<'r, Sample> where Sample: UnsignedInt {
             let mut bitstream = Bitstream::new(self.input);
             let mut decoder = SubframeDecoder::new(bps, &mut bitstream);
 
-            for ch in range(0, header.n_channels) {
+            for ch in 0 .. header.n_channels {
                 println!("decoding subframe {}", ch); // TODO: remove this.
                 try!(decoder.decode(&mut self.buffer[
                      (ch as usize) * header.block_size as usize ..
