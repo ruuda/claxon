@@ -311,7 +311,6 @@ impl<'r, Sample> SubframeDecoder<'r, Sample> where Sample: UnsignedInt {
                                 buffer: &mut [Sample]) -> FlacResult<()> {
         println!("  decoding partitioned Rice 2"); // TODO: Remove this.
         panic!("partitioned_rice2 is not yet implemented"); // TODO
-        Ok(())
     }
 
     fn decode_constant(&mut self, buffer: &mut [Sample]) -> FlacResult<()> {
