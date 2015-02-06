@@ -22,6 +22,10 @@ fn main() {
     use std::old_io::{File, BufferedReader};
     use std::os::args;
     use claxon::FlacStream;
+    // NOTE: args() is deprecated and should be replaced with std::env::args().nth(1).
+    // However, then you get an OsString, which does not work well with old_path.
+    // So we should upgrade to the new path. But the new path does not work well
+    // with old File, so just wait until std::io is stable ...
     let input = File::open(&Path::new(&args()[1])).unwrap();
     let mut reader = BufferedReader::new(input);
     let mut stream = FlacStream::new(&mut reader).unwrap();
