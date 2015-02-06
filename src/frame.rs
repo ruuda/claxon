@@ -21,7 +21,7 @@ use std::num::{Int, UnsignedInt};
 use bitstream::Bitstream;
 use crc::Crc8Reader;
 use error::{Error, FlacResult};
-use subframe::SubframeDecoder;
+use subframe;
 
 #[derive(Copy)]
 enum BlockingStrategy {
@@ -504,13 +504,15 @@ impl<'r, Sample> FrameReader<'r, Sample> where Sample: UnsignedInt {
         // we need a bitstream. Then we can decode subframes from the bitstream.
         {
             let mut bitstream = Bitstream::new(self.input);
-            let mut decoder = SubframeDecoder::new(bps, &mut bitstream);
 
             for ch in 0 .. header.n_channels {
                 println!("decoding subframe {}", ch); // TODO: remove this.
-                try!(decoder.decode(&mut self.buffer[
-                     (ch as usize) * header.block_size as usize ..
-                     (ch as usize + 1) * header.block_size as usize]));
+                try!(subframe::decode(
+                     &mut bitstream, bps,
+                     &mut self.buffer[
+                         (ch as usize) * header.block_size as usize ..
+                         (ch as usize + 1) * header.block_size as usize]
+                ));
             }
 
             // When the bitstream goes out of scope, we can use the `input`
