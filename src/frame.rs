@@ -429,7 +429,8 @@ impl <'b, Sample> Block<'b, Sample> where Sample: UnsignedInt {
 /// no searching for a sync code is performed at the moment.
 pub struct FrameReader<'r, Sample> {
     input: &'r mut (Reader + 'r),
-    buffer: Vec<Sample>
+    buffer: Vec<Sample>,
+    i32_buffer: Vec<i32>
 }
 
 /// Either a `Block` or an `Error`.
@@ -440,7 +441,35 @@ impl<'r, Sample> FrameReader<'r, Sample> where Sample: UnsignedInt {
     /// Creates a new frame reader that will yield at least one element.
     pub fn new(input: &'r mut Reader) -> FrameReader<'r, Sample> {
         // TODO: a hit for the vector size can be provided.
-        FrameReader { input: input, buffer: Vec::new() }
+        FrameReader {
+            input: input,
+            buffer: Vec::new(),
+            i32_buffer: Vec::new()
+        }
+    }
+ 
+    fn ensure_buffer_len(&mut self, new_len: usize) {
+        if self.buffer.len() < new_len {
+            // Previous data will be overwritten, so instead of resizing the
+            // vector if it is too small, we might as well allocate a new one.
+            if self.buffer.capacity() < new_len {
+                self.buffer = Vec::with_capacity(new_len);
+            }
+            let len = self.buffer.len();
+            self.buffer.extend(repeat(Int::zero()).take(new_len - len));
+        }
+    }
+
+    fn ensure_i32_buffer_len(&mut self, new_len: usize) {
+        if self.i32_buffer.len() < new_len {
+            // Previous data will be overwritten, so instead of resizing the
+            // vector if it is too small, we might as well allocate a new one.
+            if self.i32_buffer.capacity() < new_len {
+                self.i32_buffer = Vec::with_capacity(new_len);
+            }
+            let len = self.i32_buffer.len();
+            self.i32_buffer.extend(repeat(Int::zero()).take(new_len - len));
+        }
     }
 
     /// Tries to decode the next frame.
@@ -462,15 +491,7 @@ impl<'r, Sample> FrameReader<'r, Sample> where Sample: UnsignedInt {
         // We must allocate enough space for all channels in the block to be
         // decoded.
         let total_samples = header.n_channels as usize * header.block_size as usize;
-        if self.buffer.len() < total_samples {
-            // Previous data will be overwritten, so instead of resizing the
-            // vector if it is too small, we might as well allocate a new one.
-            if self.buffer.capacity() < total_samples {
-                self.buffer = Vec::with_capacity(total_samples);
-            }
-            let len = self.buffer.len();
-            self.buffer.extend(repeat(Int::zero()).take(total_samples - len));
-        }
+        self.ensure_buffer_len(total_samples);
 
         // TODO: if the bps is missing from the header, we must get it from
         // the streaminfo block.
