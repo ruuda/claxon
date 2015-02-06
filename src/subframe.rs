@@ -161,6 +161,11 @@ pub struct SubframeDecoder<'r, Sample> {
     input: &'r mut Bitstream<'r>
 }
 
+fn assert_wide_enough<Sample>(bps: u8) {
+    use std::mem;
+    debug_assert!(bps as usize <= mem::size_of::<Sample>() * 8);
+}
+
 impl<'r, Sample> SubframeDecoder<'r, Sample> where Sample: UnsignedInt {
     /// Creates a new subframe decoder capable of decoding several subframes.
     ///
@@ -171,8 +176,7 @@ impl<'r, Sample> SubframeDecoder<'r, Sample> where Sample: UnsignedInt {
         // The sample type should be wide enough to accomodate for all bits of
         // the stream, but this can be verified at a higher level than here.
         // Still, it is a good idea to make the assumption explicit.
-        use std::mem::size_of;
-        debug_assert!(bits_per_sample as usize <= size_of::<Sample>() * 8);
+        assert_wide_enough::<Sample>(bits_per_sample);
 
         SubframeDecoder { bits_per_sample: bits_per_sample, input: input }
     }
