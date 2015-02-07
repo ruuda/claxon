@@ -67,6 +67,8 @@ pub enum Error {
     InvalidBitsPerSample,
     /// A bit pattern is not a valid Rice code in the context.
     InvalidRiceCode,
+    /// An overflow occurred when decoding the side channel.
+    InvalidSideSample,
 
     /// The audio stream has more bits per sample than the provided sample
     /// buffer to decode into.
