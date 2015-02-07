@@ -441,7 +441,7 @@ impl <'b, Sample> Block<'b, Sample> where Sample: UnsignedInt {
 pub struct FrameReader<'r, Sample> {
     input: &'r mut (Reader + 'r),
     buffer: Vec<Sample>,
-    i32_buffer: Vec<i32>
+    side_buffer: Vec<i32>
 }
 
 /// Either a `Block` or an `Error`.
@@ -455,7 +455,7 @@ impl<'r, Sample> FrameReader<'r, Sample> where Sample: UnsignedInt {
         FrameReader {
             input: input,
             buffer: Vec::new(),
-            i32_buffer: Vec::new()
+            side_buffer: Vec::new()
         }
     }
  
@@ -471,15 +471,15 @@ impl<'r, Sample> FrameReader<'r, Sample> where Sample: UnsignedInt {
         }
     }
 
-    fn ensure_i32_buffer_len(&mut self, new_len: usize) {
-        if self.i32_buffer.len() < new_len {
+    fn ensure_side_buffer_len(&mut self, new_len: usize) {
+        if self.side_buffer.len() < new_len {
             // Previous data will be overwritten, so instead of resizing the
             // vector if it is too small, we might as well allocate a new one.
-            if self.i32_buffer.capacity() < new_len {
-                self.i32_buffer = Vec::with_capacity(new_len);
+            if self.side_buffer.capacity() < new_len {
+                self.side_buffer = Vec::with_capacity(new_len);
             }
-            let len = self.i32_buffer.len();
-            self.i32_buffer.extend(repeat(Int::zero()).take(new_len - len));
+            let len = self.side_buffer.len();
+            self.side_buffer.extend(repeat(Int::zero()).take(new_len - len));
         }
     }
 
@@ -534,9 +534,9 @@ impl<'r, Sample> FrameReader<'r, Sample> where Sample: UnsignedInt {
                     // it must be sized appropriately.
                     // TODO: A method cannot be used here due to borrowing.
                     // Is there a better way?
-                    let i32_len = self.i32_buffer.len();
-                    if i32_len < bs {
-                        self.i32_buffer.extend(repeat(Int::zero()).take(bs - i32_len));
+                    let side_len = self.side_buffer.len();
+                    if side_len < bs {
+                        self.side_buffer.extend(repeat(Int::zero()).take(bs - side_len));
                     }
 
                     // Decode left regularly and side into the signed buffer.
@@ -544,11 +544,11 @@ impl<'r, Sample> FrameReader<'r, Sample> where Sample: UnsignedInt {
                     try!(subframe::decode(&mut bitstream, bps,
                                           &mut self.buffer[.. bs]));
                     try!(subframe::decode(&mut bitstream, bps + 1,
-                                          &mut self.i32_buffer[.. bs]));
+                                          &mut self.side_buffer[.. bs]));
 
                     // Then decode the side channel into a right channel.
                     decode_left_side(&mut self.buffer[.. bs * 2],
-                                     &self.i32_buffer[.. bs]);
+                                     &self.side_buffer[.. bs]);
                 },
                 _ => panic!("other stereo modes not yes implemented")
             }
