@@ -320,12 +320,13 @@ fn decode_left_side<Sample: Int>(buffer: &mut [Sample], side: &[i32]) -> FlacRes
 
 #[test]
 fn verify_decode_left_side() {
-    let mut buffer = vec!(2u8, 005, 083, 113, 127, 193, 211, 241,
-                          007, 038, 142, 238, 000, 104, 204, 238);
-    let result =     vec!(2u8, 005, 083, 113, 127, 193, 211, 241,
-                          251, 223, 197, 131, 127, 089, 007, 003);
-    // TODO: Fix this test. decode_left_side(&mut buffer[]);
-    // assert_eq!(buffer, result);
+    let mut buffer = vec!(  2u8,    5,   83, 113, 127, 193, 211, 241,
+                              0,    0,    0,   0,   0,   0,   0,   0);
+    let mut side = vec!(-249i32, -218, -114, -18,   0, 104, 204, 238);
+    let result = vec!(      2u8,    5,   83, 113, 127, 193, 211, 241,
+                            251,  223,  197, 131, 127,  89,   7,   3);
+    decode_left_side(&mut buffer[], &side[]);
+    assert_eq!(buffer, result);
 }
 
 /// Converts a buffer side ++ right in-place to left ++ right.
