@@ -330,26 +330,28 @@ fn verify_decode_left_side() {
 }
 
 /// Converts a buffer side ++ right in-place to left ++ right.
-fn decode_right_side<Sample>(buffer: &mut [Sample]) where Sample: UnsignedInt {
+fn decode_right_side<Sample: Int>(buffer: &mut [Sample], side: &[i32]) -> FlacResult<()> {
     let block_size = buffer.len() / 2;
     for i in 0 .. block_size {
-        let side = buffer[i];
         let right = buffer[block_size + i];
 
         // Right is correct already, only the left channel needs to be decoded.
         // side = left - right => left = side + right.
-        // Note: overflow is intentional.
-        buffer[i] = side + right;
+        let left = num::cast(side[i] + num::cast::<Sample, i32>(right).unwrap());
+        buffer[i] = try!(left.ok_or(Error::InvalidSideSample));
     }
+
+    Ok(())
 }
 
 #[test]
 fn verify_decode_right_side() {
-    let mut buffer = vec!(7u8, 038, 142, 238, 000, 104, 204, 238,
-                          251, 223, 197, 131, 127, 089, 007, 003);
-    let result =     vec!(2u8, 005, 083, 113, 127, 193, 211, 241,
-                          251, 223, 197, 131, 127, 089, 007, 003);
-    decode_right_side(&mut buffer[]);
+    let mut buffer = vec!(  0u8,    0,    0,   0,   0,   0,   0,   0,
+                            251,  223,  197, 131, 127,  89,   7,   3);
+    let mut side = vec!(-249i32, -218, -114, -18,   0, 104, 204, 238);
+    let result = vec!(      2u8,    5,   83, 113, 127, 193, 211, 241,
+                            251,  223,  197, 131, 127,  89,   7,   3);
+    decode_right_side(&mut buffer[], &side[]);
     assert_eq!(buffer, result);
 }
 
