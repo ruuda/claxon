@@ -320,13 +320,18 @@ fn decode_left_side<Sample: Int>(buffer: &mut [Sample], side: &[i32]) -> FlacRes
 
 #[test]
 fn verify_decode_left_side() {
-    let mut buffer = vec!(  2u8,    5,   83, 113, 127, 193, 211, 241,
+    let mut buffer =   vec!(2u8,    5,   83, 113, 127, 193, 211, 241,
                               0,    0,    0,   0,   0,   0,   0,   0);
-    let mut side = vec!(-249i32, -218, -114, -18,   0, 104, 204, 238);
-    let result = vec!(      2u8,    5,   83, 113, 127, 193, 211, 241,
+    let side =     vec!(-249i32, -218, -114, -18,   0, 104, 204, 238);
+    let result =       vec!(2u8,    5,   83, 113, 127, 193, 211, 241,
                             251,  223,  197, 131, 127,  89,   7,   3);
-    decode_left_side(&mut buffer[], &side[]);
+    decode_left_side(&mut buffer[], &side[]).ok().unwrap();
     assert_eq!(buffer, result);
+
+    // Overflow should fail.
+    let mut buffer = vec!(255u8, 0);
+    let side = vec!(-1i32);
+    decode_left_side(&mut buffer[], &side[]).err().unwrap();
 }
 
 /// Converts a buffer side ++ right in-place to left ++ right.
@@ -346,13 +351,18 @@ fn decode_right_side<Sample: Int>(buffer: &mut [Sample], side: &[i32]) -> FlacRe
 
 #[test]
 fn verify_decode_right_side() {
-    let mut buffer = vec!(  0u8,    0,    0,   0,   0,   0,   0,   0,
+    let mut buffer =   vec!(0u8,    0,    0,   0,   0,   0,   0,   0,
                             251,  223,  197, 131, 127,  89,   7,   3);
-    let mut side = vec!(-249i32, -218, -114, -18,   0, 104, 204, 238);
-    let result = vec!(      2u8,    5,   83, 113, 127, 193, 211, 241,
+    let side =     vec!(-249i32, -218, -114, -18,   0, 104, 204, 238);
+    let result =       vec!(2u8,    5,   83, 113, 127, 193, 211, 241,
                             251,  223,  197, 131, 127,  89,   7,   3);
-    decode_right_side(&mut buffer[], &side[]);
+    decode_right_side(&mut buffer[], &side[]).ok().unwrap();
     assert_eq!(buffer, result);
+
+    // Overflow should fail.
+    let mut buffer = vec!(0u8, 0);
+    let side = vec!(-1i32);
+    decode_right_side(&mut buffer[], &side[]).err().unwrap();
 }
 
 /// Converts a buffer mid ++ side in-place to left ++ right.
