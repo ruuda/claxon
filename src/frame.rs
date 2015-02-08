@@ -530,40 +530,59 @@ impl<'r, Sample> FrameReader<'r, Sample> where Sample: UnsignedInt {
             let mut bitstream = Bitstream::new(self.input);
             let bs = header.block_size as usize;
 
-            match header.channel_assignment {
-                ChannelAssignment::Independent(n_ch) => {
-                    for ch in 0 .. n_ch as usize {
-                        println!("decoding subframe {}", ch); // TODO: remove this.
-                        try!(subframe::decode(&mut bitstream, bps,
-                                              &mut self.buffer[ch * bs .. (ch + 1) * bs]));
-                    }
-                },
-                ChannelAssignment::LeftSideStereo => {
-                    // TODO: For now we only decode if bps < 32. (Like the
-                    // reference decoder.) Report an error otherwise, or decode
-                    // properly.
-                    assert!(bps < 32);
-                    // We will decode the side channel into the i32 buffer, so
-                    // it must be sized appropriately.
-                    // TODO: A method cannot be used here due to borrowing.
-                    // Is there a better way?
-                    let side_len = self.side_buffer.len();
-                    if side_len < bs {
-                        self.side_buffer.extend(repeat(Int::zero()).take(bs - side_len));
-                    }
-
-                    // Decode left regularly and side into the signed buffer.
-                    // The side channel has one extra bit per sample.
+            if let ChannelAssignment::Independent(n_ch) = header.channel_assignment {
+                for ch in 0 .. n_ch as usize {
+                    println!("decoding subframe {}", ch); // TODO: remove this.
                     try!(subframe::decode(&mut bitstream, bps,
-                                          &mut self.buffer[.. bs]));
-                    try!(subframe::decode(&mut bitstream, bps + 1,
-                                          &mut self.side_buffer[.. bs]));
+                                          &mut self.buffer[ch * bs .. (ch + 1) * bs]));
+                }
+            } else {
+                // If the channel assignment is not independent, it involves
+                // a side channel, so we are going to need the wider buffer.
 
-                    // Then decode the side channel into a right channel.
-                    decode_left_side(&mut self.buffer[.. bs * 2],
-                                     &self.side_buffer[.. bs]);
-                },
-                _ => panic!("other stereo modes not yes implemented")
+                // TODO: For now we only decode if bps < 32. (Like the
+                // reference decoder.) Report an error otherwise, or decode
+                // properly.
+                assert!(bps < 32);
+                // We will decode the side channel into the i32 buffer, so
+                // it must be sized appropriately.
+                // TODO: A method cannot be used here due to borrowing.
+                // Is there a better way?
+                let side_len = self.side_buffer.len();
+                if side_len < bs {
+                    self.side_buffer.extend(repeat(Int::zero()).take(bs - side_len));
+                }
+
+                match header.channel_assignment {
+                    ChannelAssignment::Independent(_) => unreachable!(),
+                    ChannelAssignment::LeftSideStereo => {
+                        // Decode left regularly and side into the signed buffer.
+                        // The side channel has one extra bit per sample.
+                        try!(subframe::decode(&mut bitstream, bps,
+                                              &mut self.buffer[.. bs]));
+                        try!(subframe::decode(&mut bitstream, bps + 1,
+                                              &mut self.side_buffer[.. bs]));
+
+                        // Then decode the side channel into the right channel.
+                        try!(decode_left_side(&mut self.buffer[.. bs * 2],
+                                              &self.side_buffer[.. bs]));
+                    },
+                    ChannelAssignment::RightSideStereo => {
+                        // Decode right regularly and side into the signed buffer.
+                        // The side channel has one extra bit per sample.
+                        try!(subframe::decode(&mut bitstream, bps + 1,
+                                              &mut self.side_buffer[.. bs]));
+                        try!(subframe::decode(&mut bitstream, bps,
+                                              &mut self.buffer[bs .. bs * 2]));
+
+                        // Then decode the side channel into the left channel.
+                        try!(decode_right_side(&mut self.buffer[.. bs * 2],
+                                               &self.side_buffer[.. bs]));
+                    },
+                    ChannelAssignment::MidSideStereo => {
+                        panic!("mid-side decoding not yet implemented")
+                    }
+                }
             }
 
             // When the bitstream goes out of scope, we can use the `input`
