@@ -303,7 +303,7 @@ fn read_frame_header(input: &mut Reader) -> FlacResult<FrameHeader> {
     Ok(frame_header)
 }
 
-/// Converts a buffer left ++ right in-place to left ++ right.
+/// Converts a buffer with left samples and a side channel in-place to left ++ right.
 fn decode_left_side<Sample: Int>(buffer: &mut [Sample], side: &[i32]) -> FlacResult<()> {
     let block_size = buffer.len() / 2;
     for i in 0 .. block_size {
@@ -334,7 +334,7 @@ fn verify_decode_left_side() {
     decode_left_side(&mut buffer[], &side[]).err().unwrap();
 }
 
-/// Converts a buffer side ++ right in-place to left ++ right.
+/// Converts a buffer with right samples and a side channel in-place to left ++ right.
 fn decode_right_side<Sample: Int>(buffer: &mut [Sample], side: &[i32]) -> FlacResult<()> {
     let block_size = buffer.len() / 2;
     for i in 0 .. block_size {
@@ -365,39 +365,42 @@ fn verify_decode_right_side() {
     decode_right_side(&mut buffer[], &side[]).err().unwrap();
 }
 
-/// Converts a buffer mid ++ side in-place to left ++ right.
-fn decode_mid_side<Sample>(buffer: &mut [Sample]) where Sample: UnsignedInt {
+/// Converts a buffer with mid samples and a side channel in-place to left ++ right.
+fn decode_mid_side<Sample: Int>(buffer: &mut [Sample], side: &[i32]) -> FlacResult<()> {
     let block_size = buffer.len() / 2;
     for i in 0 .. block_size {
-        let mid = buffer[i];
-        let side = buffer[block_size + i];
+        let mid: i32 = num::cast(buffer[i]).unwrap();
 
         // The code below uses shifts insead of multiplication/division by two,
         // because Rust does not infer a literal `2` to be of type `Sample`.
 
         // Double mid first, and then correct for truncated rounding that
         // will have occured if side is odd.
-        // TODO: this fails if (mid + side) overflows. It would be possible
-        // to use a wider integer, but then adding/subtracting side does not
-        // wrap as desired. The reference implementation does not take special
-        // care of this; maybe the encoder encodes in such a way that this works
-        // out, and my assumption about the encoding is wrong?
-        let mid = (mid << 1) | (side & Int::one());
-        buffer[i] = (mid + side) >> 1;
-        buffer[block_size + i] = (mid - side) >> 1;
+        let mid = (mid << 1) | (side[i] & Int::one());
+        let left = num::cast((mid + side[i]) >> 1);
+        let right = num::cast((mid - side[i]) >> 1);
+        buffer[i] = try!(left.ok_or(Error::InvalidSideSample));
+        buffer[block_size + i] = try!(right.ok_or(Error::InvalidSideSample));
     }
+
+    Ok(())
 }
 
-// TODO
-// #[test]
-// fn verify_decode_mid_side() {
-//     let mut buffer = vec!(126u8, 114, 140, 122, 127, 141, 109, 122,
-//                             007, 038, 142, 238, 000, 104, 204, 238);
-//     let result =       vec!(2u8, 005, 083, 113, 127, 193, 211, 241,
-//                             251, 223, 197, 131, 127, 089, 007, 003);
-//     decode_mid_side(buffer[mut]);
-//     assert_eq!(buffer, result);
-// }
+#[test]
+fn verify_decode_mid_side() {
+    let mut buffer = vec!(126u8,  114,  140, 122, 127, 141, 109, 122,
+                              0,    1,    2,   3,   4,   5,   6,   7);
+    let side =     vec!(-249i32, -218, -114, -18,   0, 104, 204, 238);
+    let result =       vec!(2u8,    5,   83, 113, 127, 193, 211, 241,
+                            251,  223,  197, 131, 127,  89,   7,   3);
+    decode_mid_side(&mut buffer[], &side[]).ok().unwrap();
+    assert_eq!(buffer, result);
+
+    // Overflow should fail.
+    let mut buffer = vec!(255u8, 0);
+    let side = vec!(-1i32);
+    decode_mid_side(&mut buffer[], &side[]).err().unwrap();
+}
 
 /// A block of raw audio samples.
 pub struct Block<'b, Sample> where Sample: 'b {
