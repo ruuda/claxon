@@ -600,7 +600,17 @@ impl<'r, Sample> FrameReader<'r, Sample> where Sample: UnsignedInt {
                                                &self.side_buffer[.. bs]));
                     },
                     ChannelAssignment::MidSideStereo => {
-                        panic!("mid-side decoding not yet implemented")
+                        // Decode mid as the first channel, and side into the
+                        // signed buffer. The side channel has one extra bit
+                        // per sample.
+                        try!(subframe::decode(&mut bitstream, bps,
+                                              &mut self.buffer[.. bs]));
+                        try!(subframe::decode(&mut bitstream, bps + 1,
+                                              &mut self.side_buffer[.. bs]));
+
+                        // Then decode mid-side channel into left-right.
+                        try!(decode_mid_side(&mut self.buffer[.. bs * 2],
+                                             &self.side_buffer[.. bs]));
                     }
                 }
             }
