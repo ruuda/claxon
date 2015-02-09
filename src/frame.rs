@@ -303,8 +303,17 @@ fn read_frame_header(input: &mut Reader) -> FlacResult<FrameHeader> {
     Ok(frame_header)
 }
 
+fn assert_not_too_wide<Sample>(max_bps: u8) {
+    use std::mem;
+    debug_assert!(max_bps as usize >= mem::size_of::<Sample>() * 8);
+}
+
 /// Converts a buffer with left samples and a side channel in-place to left ++ right.
 fn decode_left_side<Sample: Int>(buffer: &mut [Sample], side: &[i32]) -> FlacResult<()> {
+    // Computations are done on i32 in this function, so the Sample should not
+    // be too wide.
+    assert_not_too_wide::<Sample>(31); // TODO: Fail instead of panic.
+
     let block_size = buffer.len() / 2;
     for i in 0 .. block_size {
         let left = buffer[i];
@@ -336,6 +345,10 @@ fn verify_decode_left_side() {
 
 /// Converts a buffer with right samples and a side channel in-place to left ++ right.
 fn decode_right_side<Sample: Int>(buffer: &mut [Sample], side: &[i32]) -> FlacResult<()> {
+    // Computations are done on i32 in this function, so the Sample should not
+    // be too wide.
+    assert_not_too_wide::<Sample>(31); // TODO: Fail instead of panic.
+
     let block_size = buffer.len() / 2;
     for i in 0 .. block_size {
         let right = buffer[block_size + i];
@@ -367,6 +380,10 @@ fn verify_decode_right_side() {
 
 /// Converts a buffer with mid samples and a side channel in-place to left ++ right.
 fn decode_mid_side<Sample: Int>(buffer: &mut [Sample], side: &[i32]) -> FlacResult<()> {
+    // Computations are done on i32 in this function, so the Sample should not
+    // be too wide.
+    assert_not_too_wide::<Sample>(31); // TODO: Fail instead of panic.
+
     let block_size = buffer.len() / 2;
     for i in 0 .. block_size {
         let mid: i32 = num::cast(buffer[i]).unwrap();
