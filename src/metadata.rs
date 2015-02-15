@@ -16,6 +16,7 @@
 
 //! The `metadata` module deals with metadata at the beginning of a FLAC stream.
 
+use std::io;
 use error::{Error, FlacResult};
 
 #[derive(Copy)]
@@ -94,7 +95,7 @@ pub enum MetadataBlock {
     Reserved
 }
 
-fn read_metadata_block_header(input: &mut Reader)
+fn read_metadata_block_header(input: &mut io::Read)
                               -> FlacResult<MetadataBlockHeader> {
     let byte = try!(input.read_u8());
 
@@ -114,7 +115,7 @@ fn read_metadata_block_header(input: &mut Reader)
     Ok(header)
 }
 
-fn read_metadata_block(input: &mut Reader, block_type: u8, length: u32)
+fn read_metadata_block(input: &mut io::Read, block_type: u8, length: u32)
                        -> FlacResult<MetadataBlock> {
     match block_type {
         0 => {
@@ -170,7 +171,7 @@ fn read_metadata_block(input: &mut Reader, block_type: u8, length: u32)
     }
 }
 
-fn read_streaminfo_block(input: &mut Reader) -> FlacResult<StreamInfo> {
+fn read_streaminfo_block(input: &mut io::Read) -> FlacResult<StreamInfo> {
     let min_block_size = try!(input.read_be_u16());
     let max_block_size = try!(input.read_be_u16());
 
@@ -238,7 +239,7 @@ fn read_streaminfo_block(input: &mut Reader) -> FlacResult<StreamInfo> {
     Ok(stream_info)
 }
 
-fn read_padding_block(input: &mut Reader, length: u32) -> FlacResult<()> {
+fn read_padding_block(input: &mut io::Read, length: u32) -> FlacResult<()> {
     // The specification dictates that all bits of the padding block must be 0.
     // However, the reference implementation does not issue an error when this
     // is not the case, and frankly, when you are going to skip over these
@@ -247,7 +248,7 @@ fn read_padding_block(input: &mut Reader, length: u32) -> FlacResult<()> {
     skip_block(input, length)
 }
 
-fn skip_block(input: &mut Reader, length: u32) -> FlacResult<()> {
+fn skip_block(input: &mut io::Read, length: u32) -> FlacResult<()> {
     for _ in 0 .. length {
         try!(input.read_byte());
     }
@@ -255,7 +256,7 @@ fn skip_block(input: &mut Reader, length: u32) -> FlacResult<()> {
     Ok(())
 }
 
-fn read_application_block(input: &mut Reader, length: u32)
+fn read_application_block(input: &mut io::Read, length: u32)
                           -> FlacResult<(u32, Vec<u8>)> {
     let id = try!(input.read_be_u32());
 
@@ -279,7 +280,7 @@ pub struct MetadataBlockReader<'r, R> where R: 'r {
 /// Either a `MetadataBlock` or an `Error`.
 pub type MetadataBlockResult = FlacResult<MetadataBlock>;
 
-impl<'r, R> MetadataBlockReader<'r, R> where R: Reader + 'r {
+impl<'r, R> MetadataBlockReader<'r, R> where R: io::Read + 'r {
 
     /// Creates a metadata block reader that will yield at least one element.
     pub fn new(input: &'r mut R) -> MetadataBlockReader<'r, R> {
@@ -296,7 +297,7 @@ impl<'r, R> MetadataBlockReader<'r, R> where R: Reader + 'r {
 }
 
 impl<'r, R> Iterator
-    for MetadataBlockReader<'r, R> where R: Reader + 'r {
+    for MetadataBlockReader<'r, R> where R: io::Read + 'r {
 
     type Item = MetadataBlockResult;
 

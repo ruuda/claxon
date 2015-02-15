@@ -22,6 +22,7 @@
 #![allow(dead_code)] // TODO: Remove for v0.1
 #![feature(core, old_io)]
 
+use std::io;
 use std::num::SignedInt;
 use error::{Error, FlacResult};
 use frame::{FrameReader};
@@ -41,10 +42,10 @@ pub mod metadata;
 pub struct FlacStream<'r> {
     streaminfo: StreamInfo,
     metadata_blocks: Vec<MetadataBlock>,
-    input: &'r mut (Reader + 'r)
+    input: &'r mut (io::Read + 'r)
 }
 
-fn read_stream_header(input: &mut Reader) -> FlacResult<()> {
+fn read_stream_header(input: &mut io::Read) -> FlacResult<()> {
     // A FLAC stream starts with a 32-bit header 'fLaC' (big endian).
     const HEADER: u32 = 0x66_4c_61_43;
     let header = try!(input.read_be_u32());
@@ -56,7 +57,7 @@ impl<'r> FlacStream<'r> {
     /// Constructs a flac stream from the given input.
     ///
     /// This will read all metadata and stop at the first audio frame.
-    pub fn new<R>(input: &mut R) -> FlacResult<FlacStream> where R: Reader {
+    pub fn new<R>(input: &mut R) -> FlacResult<FlacStream> where R: io::Read {
         // A flac stream first of all starts with a stream header.
         try!(read_stream_header(input));
 

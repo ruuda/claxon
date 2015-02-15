@@ -14,12 +14,13 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+use std::io;
 use std::old_io::IoResult;
 
 /// Wraps a `Reader` to facilitate reading that is not byte-aligned.
 pub struct Bitstream<'r> {
     /// The source where bits are read from.
-    reader: &'r mut (Reader + 'r),
+    reader: &'r mut (io::Read + 'r),
     /// Data read from the reader, but not yet fully consumed.
     data: u8,
     /// The number of bits of `data` that have not been consumed.
@@ -28,7 +29,7 @@ pub struct Bitstream<'r> {
 
 impl<'r> Bitstream<'r> {
     /// Wraps the reader with a reader that facilitates reading individual bits.
-    pub fn new(reader: &'r mut Reader) -> Bitstream<'r> {
+    pub fn new(reader: &'r mut io::Read) -> Bitstream<'r> {
         Bitstream { reader: reader, data: 0, bits_left: 0 }
     }
 
