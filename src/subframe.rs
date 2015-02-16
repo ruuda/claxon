@@ -110,8 +110,8 @@ fn extend_sign(val: u16, bits: u8) -> i16 {
 
 #[test]
 fn verify_extend_sign() {
-    assert_eq!(-5_i16, extend_sign(16 - 5, 4));
-    assert_eq!(-3_i16, extend_sign(512 - 3, 9));
+    assert_eq!(-5, extend_sign(16 - 5, 4));
+    assert_eq!(-3, extend_sign(512 - 3, 9));
 }
 
 /// Decodes a signed number from Rice coding to the two's complement.

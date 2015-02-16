@@ -419,6 +419,25 @@ fn verify_decode_mid_side() {
     decode_mid_side(&mut buffer[], &side[]).err().unwrap();
 }
 
+/// Given a signed two's complement integer in the `bits` least significant
+/// bits of `val`, extends the sign bit to a valid 32-bit signed integer.
+fn extend_sign(val: i32, bits: u8) -> i32 {
+    let sign_bit = val as u32 >> (bits as usize - 1);
+
+    // Extend the sign bit into the remaining bits.
+    let sign_extension = (bits as usize .. 32)
+                         .fold(0, |s, i| s | (sign_bit << i));
+
+    // Note: overflow in the cast is intended.
+    (val as u32 | sign_extension) as i32
+}
+
+#[test]
+fn verify_extend_sign() {
+    assert_eq!(-5, extend_sign(16 - 5, 4));
+    assert_eq!(-3, extend_sign(512 - 3, 9));
+}
+
 /// A block of raw audio samples.
 pub struct Block<'b, Sample> where Sample: 'b {
     /// The sample number of the first sample in the this block.
