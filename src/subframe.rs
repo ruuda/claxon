@@ -98,20 +98,27 @@ fn read_subframe_header(input: &mut Bitstream) -> FlacResult<SubframeHeader> {
 /// Given a signed two's complement integer in the `bits` least significant
 /// bits of `val`, extends the sign bit to a valid 16-bit signed integer.
 fn extend_sign(val: u16, bits: u8) -> i16 {
-    let sign_bit = val >> (bits as usize - 1);
-
-    // Extend the sign bit into the remaining bits.
-    let sign_extension = (bits as usize .. 16)
-                         .fold(0, |s, i| s | (sign_bit << i));
-
-    // Note: overflow in the cast is intended.
-    (val | sign_extension) as i16
+    // For 32-bit integers, shifting by 32 bits causes different behaviour in
+    // release and debug builds. While `(1_i16 << 16) == 0` both in debug and
+    // release mode on my machine, I do not want to rely on it.
+    if bits >= 16 {
+        val as i16
+    } else if val < (1 << (bits - 1)) {
+        val as i16
+    } else {
+        val as i16 - (1 << bits)
+    }
 }
 
 #[test]
 fn verify_extend_sign() {
+    assert_eq!(5, extend_sign(5, 4));
+    assert_eq!(0x3ffe, extend_sign(0x3ffe, 15));
     assert_eq!(-5, extend_sign(16 - 5, 4));
     assert_eq!(-3, extend_sign(512 - 3, 9));
+    assert_eq!(-1, extend_sign(0xffff, 16));
+    assert_eq!(-2, extend_sign(0xfffe, 16));
+    assert_eq!(-1, extend_sign(0x7fff, 15));
 }
 
 /// Decodes a signed number from Rice coding to the two's complement.

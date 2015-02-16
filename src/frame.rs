@@ -422,20 +422,34 @@ fn verify_decode_mid_side() {
 /// Given a signed two's complement integer in the `bits` least significant
 /// bits of `val`, extends the sign bit to a valid 32-bit signed integer.
 fn extend_sign(val: i32, bits: u8) -> i32 {
-    let sign_bit = val as u32 >> (bits as usize - 1);
-
-    // Extend the sign bit into the remaining bits.
-    let sign_extension = (bits as usize .. 32)
-                         .fold(0, |s, i| s | (sign_bit << i));
-
-    // Note: overflow in the cast is intended.
-    (val as u32 | sign_extension) as i32
+    // I would expect that shifting an i32 by 32 bits results in 0, but in fact
+    // it does not, and behaviour is different in release and debug mode, so we
+    // ensure first to shift no more than 31 bits.
+    if bits >= 32 {
+        val
+    } else if (val as u32) < (1 << (bits - 1)) {
+        val
+    } else {
+        val - (1 << bits) as i32
+    }
 }
 
 #[test]
 fn verify_extend_sign() {
+    assert_eq!(5, extend_sign(5, 4));
+    assert_eq!(0x3ffffffe, extend_sign(0x3ffffffe, 31));
     assert_eq!(-5, extend_sign(16 - 5, 4));
     assert_eq!(-3, extend_sign(512 - 3, 9));
+    assert_eq!(-2, extend_sign(0xfffe, 16));
+    assert_eq!(-1, extend_sign(0xffffffff, 32));
+    assert_eq!(-2, extend_sign(0xfffffffe, 32));
+    assert_eq!(-1, extend_sign(0x7fffffff, 31));
+
+    // The data below are samples from a real FLAC stream.
+    assert_eq!(-6392, extend_sign(124680, 17));
+    assert_eq!(-6605, extend_sign(124467, 17));
+    assert_eq!(-6850, extend_sign(124222, 17));
+    assert_eq!(-7061, extend_sign(124011, 17));
 }
 
 /// A block of raw audio samples.
