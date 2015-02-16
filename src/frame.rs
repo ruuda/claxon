@@ -616,6 +616,11 @@ impl<'r, Sample> FrameReader<'r, Sample> where Sample: UnsignedInt {
                         try!(subframe::decode(&mut bitstream, bps + 1,
                                               &mut self.side_buffer[.. bs]));
 
+                        // Widen the side channel to a 32-bit signed integer.
+                        for x in &mut self.side_buffer[.. bs] {
+                            *x = extend_sign(*x, bps + 1);
+                        }
+
                         // Then decode the side channel into the right channel.
                         try!(decode_left_side(&mut self.buffer[.. bs * 2],
                                               &self.side_buffer[.. bs]));
@@ -627,6 +632,11 @@ impl<'r, Sample> FrameReader<'r, Sample> where Sample: UnsignedInt {
                                               &mut self.side_buffer[.. bs]));
                         try!(subframe::decode(&mut bitstream, bps,
                                               &mut self.buffer[bs .. bs * 2]));
+
+                        // Widen the side channel to a 32-bit signed integer.
+                        for x in &mut self.side_buffer[.. bs] {
+                            *x = extend_sign(*x, bps + 1);
+                        }
 
                         // Then decode the side channel into the left channel.
                         try!(decode_right_side(&mut self.buffer[.. bs * 2],
@@ -640,6 +650,11 @@ impl<'r, Sample> FrameReader<'r, Sample> where Sample: UnsignedInt {
                                               &mut self.buffer[.. bs]));
                         try!(subframe::decode(&mut bitstream, bps + 1,
                                               &mut self.side_buffer[.. bs]));
+
+                        // Widen the side channel to a 32-bit signed integer.
+                        for x in &mut self.side_buffer[.. bs] {
+                            *x = extend_sign(*x, bps + 1);
+                        }
 
                         // Then decode mid-side channel into left-right.
                         try!(decode_mid_side(&mut self.buffer[.. bs * 2],
