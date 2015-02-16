@@ -149,9 +149,9 @@ fn verify_rice_to_signed() {
 }
 
 // TODO: Remove this function.
-fn show_sample<Sample: Int>(x: Sample) -> i16 {
-    let x_u16: u16 = num::cast(x).unwrap();
-    x_u16 as i16
+fn show_sample<Sample: Int>(x: Sample) -> Option<i16> {
+    let x_u16: Option<u16> = num::cast(x);
+    x_u16.map(|x| x as i16)
 }
 
 fn assert_wide_enough<Sample>(bps: u8) {
@@ -369,7 +369,7 @@ fn decode_fixed<Sample: Int>
 
     println!("the warm-up samples are {:?}", buffer[0 .. order as usize].iter()
              .map(|x| show_sample(*x))
-             .collect::<Vec<i16>>()); // TODO: Remove this.
+             .collect::<Vec<Option<i16>>>()); // TODO: Remove this.
 
     // Next up is the residual. We decode into the buffer directly, the
     // predictor contributions will be added in a second pass. The first
@@ -394,7 +394,7 @@ fn decode_lpc<Sample: Int>
 
     println!("the warm-up samples are {:?}", buffer[0 .. order as usize].iter()
              .map(|x| show_sample(*x))
-             .collect::<Vec<i16>>()); // TODO: Remove this.
+             .collect::<Vec<Option<i16>>>()); // TODO: Remove this.
 
     // Next are four bits quantised linear predictor coefficient precision - 1.
     let qlp_precision = try!(input.read_leq_u8(4)) + 1;
@@ -429,7 +429,7 @@ fn decode_lpc<Sample: Int>
     try!(decode_residual(input, bps, buffer.len() as u16,
                          &mut buffer[order as usize ..]));
 
-    println!("  > first residual: {}, last residual: {}",
+    println!("  > first residual: {:?}, last residual: {:?}",
              show_sample(buffer[order as usize]),
              show_sample(buffer[buffer.len() - 1])); // TODO: Remove this.
 
