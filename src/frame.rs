@@ -441,8 +441,8 @@ fn verify_extend_sign() {
     assert_eq!(-5, extend_sign(16 - 5, 4));
     assert_eq!(-3, extend_sign(512 - 3, 9));
     assert_eq!(-2, extend_sign(0xfffe, 16));
-    assert_eq!(-1, extend_sign(0xffffffff, 32));
-    assert_eq!(-2, extend_sign(0xfffffffe, 32));
+    assert_eq!(-1, extend_sign(0xffffffff_u32 as i32, 32));
+    assert_eq!(-2, extend_sign(0xfffffffe_u32 as i32, 32));
     assert_eq!(-1, extend_sign(0x7fffffff, 31));
 
     // The data below are samples from a real FLAC stream.
