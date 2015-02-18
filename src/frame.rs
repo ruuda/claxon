@@ -396,6 +396,13 @@ fn decode_mid_side<Sample: Int>(buffer: &mut [Sample], side: &[i32]) -> FlacResu
         let mid = (mid << 1) | (side[i] & Int::one());
         let left = num::cast((mid + side[i]) >> 1);
         let right = num::cast((mid - side[i]) >> 1);
+
+        // TODO: Remove this debug print.
+        if left.is_none() || right.is_none() {
+            println!("  overflow! mid: {}, side: {}, left: {}, right: {}",
+                     mid, side[i], (mid + side[i]) >> 1, (mid - side[i]) >> 1);
+        }
+
         buffer[i] = try!(left.ok_or(Error::InvalidSideSample));
         buffer[block_size + i] = try!(right.ok_or(Error::InvalidSideSample));
     }
