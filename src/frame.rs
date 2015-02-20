@@ -334,13 +334,13 @@ fn verify_decode_left_side() {
     let side =     vec!(-249i32, -218, -114, -18,   0, 104, 204, 238);
     let result =       vec!(2u8,    5,   83, 113, 127, 193, 211, 241,
                             251,  223,  197, 131, 127,  89,   7,   3);
-    decode_left_side(&mut buffer[], &side[]).ok().unwrap();
+    decode_left_side(&mut buffer, &side).ok().unwrap();
     assert_eq!(buffer, result);
 
     // Overflow should fail.
     let mut buffer = vec!(255u8, 0);
     let side = vec!(-1i32);
-    decode_left_side(&mut buffer[], &side[]).err().unwrap();
+    decode_left_side(&mut buffer, &side).err().unwrap();
 }
 
 /// Converts a buffer with right samples and a side channel in-place to left ++ right.
@@ -369,13 +369,13 @@ fn verify_decode_right_side() {
     let side =     vec!(-249i32, -218, -114, -18,   0, 104, 204, 238);
     let result =       vec!(2u8,    5,   83, 113, 127, 193, 211, 241,
                             251,  223,  197, 131, 127,  89,   7,   3);
-    decode_right_side(&mut buffer[], &side[]).ok().unwrap();
+    decode_right_side(&mut buffer, &side).ok().unwrap();
     assert_eq!(buffer, result);
 
     // Overflow should fail.
     let mut buffer = vec!(0u8, 0);
     let side = vec!(-1i32);
-    decode_right_side(&mut buffer[], &side[]).err().unwrap();
+    decode_right_side(&mut buffer, &side).err().unwrap();
 }
 
 /// Converts a buffer with mid samples and a side channel in-place to left ++ right.
@@ -417,13 +417,13 @@ fn verify_decode_mid_side() {
     let side =     vec!(-249i32, -218, -114, -18,   0, 104, 204, 238);
     let result =       vec!(2u8,    5,   83, 113, 127, 193, 211, 241,
                             251,  223,  197, 131, 127,  89,   7,   3);
-    decode_mid_side(&mut buffer[], &side[]).ok().unwrap();
+    decode_mid_side(&mut buffer, &side).ok().unwrap();
     assert_eq!(buffer, result);
 
     // Overflow should fail.
     let mut buffer = vec!(255u8, 0);
     let side = vec!(-1i32);
-    decode_mid_side(&mut buffer[], &side[]).err().unwrap();
+    decode_mid_side(&mut buffer, &side).err().unwrap();
 }
 
 /// Given a signed two's complement integer in the `bits` least significant
