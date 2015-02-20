@@ -20,7 +20,7 @@
 
 #![warn(missing_docs)]
 #![allow(dead_code)] // TODO: Remove for v0.1
-#![feature(core, io)]
+#![feature(core, old_io)]
 
 use std::num::UnsignedInt;
 use error::{Error, FlacResult};

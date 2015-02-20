@@ -14,7 +14,7 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-#![feature(io, os, path)]
+#![feature(old_io, os, old_path)]
 
 extern crate claxon;
 
