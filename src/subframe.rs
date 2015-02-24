@@ -258,7 +258,7 @@ fn decode_partitioned_rice<Sample: Int>
     // samples, otherwise the size of the first partition is negative.
     if n_warm_up > n_samples { return Err(Error::InvalidResidual); }
 
-    let mut start = 0us;
+    let mut start = 0;
     for i in 0 .. n_partitions {
         let partition_size = n_samples - if i == 0 { n_warm_up } else { 0 };
         println!("  > decoding partition {}, from {} to {}",
