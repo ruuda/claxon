@@ -16,6 +16,7 @@
 
 //! The `subframe` module deals with subframes that make up a frame of the FLAC stream.
 
+use std::iter::AdditiveIterator;
 use std::num;
 use std::num::Int;
 use bitstream::Bitstream;
@@ -169,7 +170,14 @@ fn show_sample<Sample: Int>(x: Sample) -> Option<i16> {
 
 fn assert_wide_enough<Sample>(bps: u8) {
     use std::mem;
+    // TODO: Should this be a full assert, instead of a debug assert?
     debug_assert!(bps as usize <= mem::size_of::<Sample>() * 8);
+}
+
+fn assert_narrow_enough<Sample>(max_bps: u8) {
+    use std::mem;
+    // TODO: Should this be a full assert, instead of a debug assert?
+    debug_assert!(mem::size_of::<Sample>() * 8 <= max_bps as usize);
 }
 
 /// Decodes a subframe into the provided block-size buffer.
@@ -395,6 +403,42 @@ fn decode_fixed<Sample: Int>
     Ok(())
 }
 
+fn predict_lpc<Sample: Int>
+              (coefficients: &[i16],
+               qlp_shift: i16,
+               buffer: &mut [Sample])
+               -> FlacResult<()> {
+    // The linear prediction is essentially an inner product of the known
+    // samples with the coefficients, followed by the shift. The
+    // coefficients are 16-bit at most, and there are at most 32 (2^5)
+    // coefficients, so multiplying and summing fits in an i64 for sample
+    // widths up to 32 bits (the next is 64, which certainly does not fit).
+    assert_narrow_enough::<Sample>(32);
+
+    for window in buffer.windows(coefficients.len() + 1) {
+
+        // The #coefficcients elements of the window store already decoded
+        // samples, the last element of the window is the delta. Therefore,
+        // predict based on the first #coefficients samples.
+        let prediction = coefficients.iter().zip(window.iter())
+                                     .map(|(&c, &s)| c as i64 * num::cast(s).unwrap())
+                                     .sum() << qlp_shift;
+
+        // Cast the i64 back to the `Sample` type, which _should_ be safe after
+        // the shift.
+        let prediction: FlacResult<Sample> = num::cast(prediction).ok_or(Error::InvalidLpcSample);
+
+        // The delta is stored, so the sample is the prediction + delta.
+        let sample = window[coefficients.len()] + try!(prediction);
+
+        // Then add the prediction to the delta that is already stored.
+        // TODO: We need a mutable window to store the sample.
+        // window[coefficients.len()] = sample;
+    }
+
+    Ok(())
+}
+
 fn decode_lpc<Sample: Int>
              (input: &mut Bitstream,
               bps: u8,
@@ -447,6 +491,7 @@ fn decode_lpc<Sample: Int>
              show_sample(buffer[buffer.len() - 1])); // TODO: Remove this.
 
     // TODO: do prediction.
+    try!(predict_lpc(&coefficients, qlp_shift, buffer));
 
     Ok(())
 }

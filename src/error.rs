@@ -69,6 +69,8 @@ pub enum Error {
     InvalidRiceCode,
     /// An overflow occurred when decoding the side channel.
     InvalidSideSample,
+    /// An overflow occurred when doing LPC prediction.
+    InvalidLpcSample,
 
     /// The audio stream has more bits per sample than the provided sample
     /// buffer to decode into.
