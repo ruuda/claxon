@@ -415,14 +415,26 @@ fn predict_lpc<Sample: Int>
     // widths up to 32 bits (the next is 64, which certainly does not fit).
     assert_narrow_enough::<Sample>(32);
 
-    for window in buffer.windows(coefficients.len() + 1) {
+    let window_size = coefficients.len() + 1;
+    debug_assert!(buffer.len() >= window_size);
+
+    println!("  predicting using LPC predictor"); // TODO: Remove this.
+
+    for i in 0 .. buffer.len() - window_size {
+
+        // Manually do the windowing, because .windows() returns immutable slices.
+        let window = &mut buffer[i .. i + window_size];
 
         // The #coefficcients elements of the window store already decoded
         // samples, the last element of the window is the delta. Therefore,
         // predict based on the first #coefficients samples.
         let prediction = coefficients.iter().zip(window.iter())
-                                     .map(|(&c, &s)| c as i64 * num::cast(s).unwrap())
-                                     .sum() << qlp_shift;
+                                     .map(|(&c, &s)| c as u64 * num::cast(s).unwrap())
+                                     .sum() >> qlp_shift;
+
+        // TODO: Remove this.
+        println!("  > previous: {}, prediction: {}",
+                 show_sample(window[coefficients.len() - 1]).unwrap(), prediction);
 
         // Cast the i64 back to the `Sample` type, which _should_ be safe after
         // the shift.
@@ -430,10 +442,7 @@ fn predict_lpc<Sample: Int>
 
         // The delta is stored, so the sample is the prediction + delta.
         let sample = window[coefficients.len()] + try!(prediction);
-
-        // Then add the prediction to the delta that is already stored.
-        // TODO: We need a mutable window to store the sample.
-        // window[coefficients.len()] = sample;
+        window[coefficients.len()] = sample;
     }
 
     Ok(())
