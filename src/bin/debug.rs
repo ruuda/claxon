@@ -30,7 +30,7 @@ fn main() {
     let mut reader = BufferedReader::new(input);
     let mut stream = FlacStream::new(&mut reader).unwrap();
     let n_samples = stream.streaminfo().n_samples.unwrap();
-    let mut blocks = stream.blocks::<u16>();
+    let mut blocks = stream.blocks::<i16>();
     let mut sample = 0u64;
     let mut i = 0u64;
     while sample < n_samples {

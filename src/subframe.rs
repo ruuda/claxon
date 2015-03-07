@@ -98,7 +98,7 @@ fn read_subframe_header(input: &mut Bitstream) -> FlacResult<SubframeHeader> {
 
 /// Given a signed two's complement integer in the `bits` least significant
 /// bits of `val`, extends the sign bit to a valid 16-bit signed integer.
-fn extend_sign(val: u16, bits: u8) -> i16 {
+fn extend_sign_u16(val: u16, bits: u8) -> i16 {
     // For 32-bit integers, shifting by 32 bits causes different behaviour in
     // release and debug builds. While `(1_i16 << 16) == 0` both in debug and
     // release mode on my machine, I do not want to rely on it.
@@ -112,14 +112,48 @@ fn extend_sign(val: u16, bits: u8) -> i16 {
 }
 
 #[test]
-fn verify_extend_sign() {
-    assert_eq!(5, extend_sign(5, 4));
-    assert_eq!(0x3ffe, extend_sign(0x3ffe, 15));
-    assert_eq!(-5, extend_sign(16 - 5, 4));
-    assert_eq!(-3, extend_sign(512 - 3, 9));
-    assert_eq!(-1, extend_sign(0xffff, 16));
-    assert_eq!(-2, extend_sign(0xfffe, 16));
-    assert_eq!(-1, extend_sign(0x7fff, 15));
+fn verify_extend_sign_u16() {
+    assert_eq!(5, extend_sign_u16(5, 4));
+    assert_eq!(0x3ffe, extend_sign_u16(0x3ffe, 15));
+    assert_eq!(-5, extend_sign_u16(16 - 5, 4));
+    assert_eq!(-3, extend_sign_u16(512 - 3, 9));
+    assert_eq!(-1, extend_sign_u16(0xffff, 16));
+    assert_eq!(-2, extend_sign_u16(0xfffe, 16));
+    assert_eq!(-1, extend_sign_u16(0x7fff, 15));
+}
+
+// TODO: Extract this into a separate module.
+/// Given a signed two's complement integer in the `bits` least significant
+/// bits of `val`, extends the sign bit to a valid 32-bit signed integer.
+pub fn extend_sign_u32(val: u32, bits: u8) -> i32 {
+    // I would expect that shifting an i32 by 32 bits results in 0, but in fact
+    // it does not, and behaviour is different in release and debug mode, so we
+    // ensure first to shift no more than 31 bits.
+    if bits >= 32 {
+        val as i32
+    } else if val < (1 << (bits - 1)) {
+        val as i32
+    } else {
+        (val as i32).wrapping_sub((1 << bits) as i32)
+    }
+}
+
+#[test]
+fn verify_extend_sign_u32() {
+    assert_eq!(5, extend_sign_u32(5, 4));
+    assert_eq!(0x3ffffffe, extend_sign_u32(0x3ffffffe, 31));
+    assert_eq!(-5, extend_sign_u32(16 - 5, 4));
+    assert_eq!(-3, extend_sign_u32(512 - 3, 9));
+    assert_eq!(-2, extend_sign_u32(0xfffe, 16));
+    assert_eq!(-1, extend_sign_u32(0xffffffff_u32, 32));
+    assert_eq!(-2, extend_sign_u32(0xfffffffe_u32, 32));
+    assert_eq!(-1, extend_sign_u32(0x7fffffff, 31));
+
+    // The data below are samples from a real FLAC stream.
+    assert_eq!(-6392, extend_sign_u32(124680, 17));
+    assert_eq!(-6605, extend_sign_u32(124467, 17));
+    assert_eq!(-6850, extend_sign_u32(124222, 17));
+    assert_eq!(-7061, extend_sign_u32(124011, 17));
 }
 
 /// Decodes a signed number from Rice coding to the two's complement.
@@ -163,9 +197,8 @@ fn verify_rice_to_signed() {
 }
 
 // TODO: Remove this function.
-fn show_sample<Sample: Int>(x: Sample) -> Option<i16> {
-    let x_u16: Option<u16> = num::cast(x);
-    x_u16.map(|x| x as i16)
+fn show_sample<Sample: Int>(x: Sample) -> Option<i64> {
+    num::cast(x)
 }
 
 fn assert_wide_enough<Sample>(bps: u8) {
@@ -372,7 +405,7 @@ fn decode_verbatim<Sample: Int>
         // The unwrap is safe, because it has been verified before that
         // the `Sample` type is wide enough for the bits per sample.
         let sample_u32 = try!(input.read_leq_u32(bps));
-        *s = num::cast(sample_u32).unwrap();
+        *s = num::cast(extend_sign_u32(sample_u32, bps)).unwrap();
     }
 
     Ok(())
@@ -390,7 +423,7 @@ fn decode_fixed<Sample: Int>
 
     println!("the warm-up samples are {:?}", buffer[0 .. order as usize].iter()
              .map(|x| show_sample(*x))
-             .collect::<Vec<Option<i16>>>()); // TODO: Remove this.
+             .collect::<Vec<Option<i64>>>()); // TODO: Remove this.
 
     // Next up is the residual. We decode into the buffer directly, the
     // predictor contributions will be added in a second pass. The first
@@ -441,10 +474,10 @@ fn predict_lpc<Sample: Int>
         let prediction: FlacResult<Sample> = num::cast(prediction).ok_or(Error::InvalidLpcSample);
 
         // TODO: Remove this.
-        println!("  > result: {:?}", show_sample(try!(prediction) + window[coefficients.len()]));
+        println!("  > result: {:?}", show_sample(try!(prediction).wrapping_add(window[coefficients.len()])));
 
         // The delta is stored, so the sample is the prediction + delta.
-        let sample = window[coefficients.len()] + try!(prediction);
+        let sample = window[coefficients.len()].wrapping_add(try!(prediction));
         window[coefficients.len()] = sample;
     }
 
@@ -463,7 +496,7 @@ fn decode_lpc<Sample: Int>
 
     println!("the warm-up samples are {:?}", buffer[0 .. order as usize].iter()
              .map(|x| show_sample(*x))
-             .collect::<Vec<Option<i16>>>()); // TODO: Remove this.
+             .collect::<Vec<_>>()); // TODO: Remove this.
 
     // Next are four bits quantised linear predictor coefficient precision - 1.
     let qlp_precision = try!(input.read_leq_u8(4)) + 1;
@@ -476,7 +509,7 @@ fn decode_lpc<Sample: Int>
     // Next are five bits quantized linear predictor coefficient shift,
     // in signed two's complement. Read 5 bits and then extend the sign bit.
     let qlp_shift_unsig = try!(input.read_leq_u16(5));
-    let qlp_shift = extend_sign(qlp_shift_unsig, 5);
+    let qlp_shift = extend_sign_u16(qlp_shift_unsig, 5);
 
     println!("  lpc: qlp_precision: {}, qlp_shift: {}, order: {}",
              qlp_precision, qlp_shift, order); // TODO: Remove this.
@@ -487,7 +520,7 @@ fn decode_lpc<Sample: Int>
     for _ in 0 .. order {
         // We can safely read into an u16, qlp_precision is at most 15.
         let coef_unsig = try!(input.read_leq_u16(qlp_precision));
-        let coef = extend_sign(coef_unsig, qlp_precision);
+        let coef = extend_sign_u16(coef_unsig, qlp_precision);
         coefficients.push(coef);
         println!("  > coef: {}", coef); // TODO: Remove this.
     }

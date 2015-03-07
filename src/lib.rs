@@ -22,7 +22,7 @@
 #![allow(dead_code)] // TODO: Remove for v0.1
 #![feature(core, old_io)]
 
-use std::num::UnsignedInt;
+use std::num::SignedInt;
 use error::{Error, FlacResult};
 use frame::{FrameReader};
 use metadata::{MetadataBlock, MetadataBlockReader, StreamInfo};
@@ -102,7 +102,7 @@ impl<'r> FlacStream<'r> {
 
     /// Returns an iterator that decodes a single frame on every iteration.
     pub fn blocks<Sample>(&'r mut self) -> FrameReader<'r, Sample>
-        where Sample: UnsignedInt {
+        where Sample: SignedInt {
         FrameReader::new(&mut self.input)
     }
 }

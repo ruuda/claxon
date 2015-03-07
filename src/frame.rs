@@ -18,7 +18,7 @@
 
 use std::iter::repeat;
 use std::num;
-use std::num::{Int, UnsignedInt};
+use std::num::{Int, SignedInt};
 use bitstream::Bitstream;
 use crc::Crc8Reader;
 use error::{Error, FlacResult};
@@ -426,39 +426,6 @@ fn verify_decode_mid_side() {
     decode_mid_side(&mut buffer, &side).err().unwrap();
 }
 
-/// Given a signed two's complement integer in the `bits` least significant
-/// bits of `val`, extends the sign bit to a valid 32-bit signed integer.
-fn extend_sign(val: i32, bits: u8) -> i32 {
-    // I would expect that shifting an i32 by 32 bits results in 0, but in fact
-    // it does not, and behaviour is different in release and debug mode, so we
-    // ensure first to shift no more than 31 bits.
-    if bits >= 32 {
-        val
-    } else if (val as u32) < (1 << (bits - 1)) {
-        val
-    } else {
-        val.wrapping_sub((1 << bits) as i32)
-    }
-}
-
-#[test]
-fn verify_extend_sign() {
-    assert_eq!(5, extend_sign(5, 4));
-    assert_eq!(0x3ffffffe, extend_sign(0x3ffffffe, 31));
-    assert_eq!(-5, extend_sign(16 - 5, 4));
-    assert_eq!(-3, extend_sign(512 - 3, 9));
-    assert_eq!(-2, extend_sign(0xfffe, 16));
-    assert_eq!(-1, extend_sign(0xffffffff_u32 as i32, 32));
-    assert_eq!(-2, extend_sign(0xfffffffe_u32 as i32, 32));
-    assert_eq!(-1, extend_sign(0x7fffffff, 31));
-
-    // The data below are samples from a real FLAC stream.
-    assert_eq!(-6392, extend_sign(124680, 17));
-    assert_eq!(-6605, extend_sign(124467, 17));
-    assert_eq!(-6850, extend_sign(124222, 17));
-    assert_eq!(-7061, extend_sign(124011, 17));
-}
-
 /// A block of raw audio samples.
 pub struct Block<'b, Sample> where Sample: 'b {
     /// The sample number of the first sample in the this block.
@@ -471,7 +438,7 @@ pub struct Block<'b, Sample> where Sample: 'b {
     samples: &'b [Sample]
 }
 
-impl <'b, Sample> Block<'b, Sample> where Sample: UnsignedInt {
+impl <'b, Sample> Block<'b, Sample> where Sample: SignedInt {
     fn new(time: u64, bs: u16, buffer: &'b [Sample]) -> Block<'b, Sample> {
         Block {
             first_sample_number: time,
@@ -520,7 +487,7 @@ pub struct FrameReader<'r, Sample> {
 /// Either a `Block` or an `Error`.
 pub type FrameResult<'b, Sample> = FlacResult<Block<'b, Sample>>;
 
-impl<'r, Sample> FrameReader<'r, Sample> where Sample: UnsignedInt {
+impl<'r, Sample> FrameReader<'r, Sample> where Sample: SignedInt {
 
     /// Creates a new frame reader that will yield at least one element.
     pub fn new(input: &'r mut Reader) -> FrameReader<'r, Sample> {
@@ -625,7 +592,7 @@ impl<'r, Sample> FrameReader<'r, Sample> where Sample: UnsignedInt {
 
                         // Widen the side channel to a 32-bit signed integer.
                         for x in &mut self.side_buffer[.. bs] {
-                            *x = extend_sign(*x, bps + 1);
+                            *x = subframe::extend_sign_u32(*x as u32, bps + 1);
                         }
 
                         // Then decode the side channel into the right channel.
@@ -642,7 +609,7 @@ impl<'r, Sample> FrameReader<'r, Sample> where Sample: UnsignedInt {
 
                         // Widen the side channel to a 32-bit signed integer.
                         for x in &mut self.side_buffer[.. bs] {
-                            *x = extend_sign(*x, bps + 1);
+                            *x = subframe::extend_sign_u32(*x as u32, bps + 1);
                         }
 
                         // Then decode the side channel into the left channel.
@@ -660,7 +627,7 @@ impl<'r, Sample> FrameReader<'r, Sample> where Sample: UnsignedInt {
 
                         // Widen the side channel to a 32-bit signed integer.
                         for x in &mut self.side_buffer[.. bs] {
-                            *x = extend_sign(*x, bps + 1);
+                            *x = subframe::extend_sign_u32(*x as u32, bps + 1);
                         }
 
                         // Then decode mid-side channel into left-right.
