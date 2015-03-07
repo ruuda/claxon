@@ -429,7 +429,7 @@ fn predict_lpc<Sample: Int>
         // samples, the last element of the window is the delta. Therefore,
         // predict based on the first #coefficients samples.
         let prediction = coefficients.iter().zip(window.iter())
-                                     .map(|(&c, &s)| c as u64 * num::cast(s).unwrap())
+                                     .map(|(&c, &s)| c as i64 * num::cast(s).unwrap())
                                      .sum() >> qlp_shift;
 
         // TODO: Remove this.
@@ -439,6 +439,9 @@ fn predict_lpc<Sample: Int>
         // Cast the i64 back to the `Sample` type, which _should_ be safe after
         // the shift.
         let prediction: FlacResult<Sample> = num::cast(prediction).ok_or(Error::InvalidLpcSample);
+
+        // TODO: Remove this.
+        println!("  > result: {:?}", show_sample(try!(prediction) + window[coefficients.len()]));
 
         // The delta is stored, so the sample is the prediction + delta.
         let sample = window[coefficients.len()] + try!(prediction);
