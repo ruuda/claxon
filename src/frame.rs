@@ -437,7 +437,7 @@ fn extend_sign(val: i32, bits: u8) -> i32 {
     } else if (val as u32) < (1 << (bits - 1)) {
         val
     } else {
-        val - (1 << bits) as i32
+        val.wrapping_sub((1 << bits) as i32)
     }
 }
 

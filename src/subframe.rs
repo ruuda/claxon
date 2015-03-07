@@ -107,7 +107,7 @@ fn extend_sign(val: u16, bits: u8) -> i16 {
     } else if val < (1 << (bits - 1)) {
         val as i16
     } else {
-        val as i16 - (1 << bits)
+        (val as i16).wrapping_sub(1 << bits)
     }
 }
 
@@ -141,7 +141,7 @@ fn rice_to_signed<Sample: Int>(val: Sample) -> Sample {
     // I believe this is the most concise way to express the decoding.
     if val & Int::one() == Int::one() {
         let zero: Sample = Int::zero();
-        zero - Int::one() - (val >> 1)
+        zero.wrapping_sub(Int::one()) - (val >> 1)
     } else {
         val >> 1
     }
