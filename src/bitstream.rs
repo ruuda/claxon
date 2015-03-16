@@ -15,7 +15,6 @@
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 use std::io;
-use std::old_io::IoResult;
 
 /// Wraps a `Reader` to facilitate reading that is not byte-aligned.
 pub struct Bitstream<'r> {
@@ -45,20 +44,22 @@ impl<'r> Bitstream<'r> {
     }
 
     // TODO: Remove this method.
-    pub fn dump_some(&mut self, bytes: u8) -> IoResult<()> {
+    pub fn dump_some(&mut self, bytes: u8) -> io::Result<()> {
         println!(">=== begin bitstream dump ===>");
         println!("     data = {:x}, {} bits left", self.data, self.bits_left);
         print!("     more: [");
-        for _ in 0 .. bytes - 1 {
-            print!("{:x}, ", try!(self.reader.read_byte()));
+        let mut buf = [0u8, ..bytes];
+        assert_eq!(try!(self.reader.read(&mut buf)), bytes - 1);
+        for i in 0 .. bytes - 1 {
+            print!("{:x}, ", buf[i]);
         }
-        println!("{:x}]", try!(self.reader.read_byte()));
+        println!("{:x}]", buf[bytes - 1]);
         println!("<=== end bitstream dump <===");
         Ok(())
     }
 
     /// Reads at most eight bits.
-    pub fn read_leq_u8(&mut self, bits: u8) -> IoResult<u8> {
+    pub fn read_leq_u8(&mut self, bits: u8) -> io::Result<u8> {
         // Of course we can read no more than 8 bits, but we do not want the
         // performance overhead of the assertion, so only do it in debug mode.
         debug_assert!(bits <= 8);
@@ -68,10 +69,16 @@ impl<'r> Bitstream<'r> {
             // Most significant bits are shifted to the right position already.
             let msb = self.data;
 
+            // Read a single byte.
+            let mut buf = [0u8, ..1];
+            if try!(self.rader.read(&mut buf)) != 1 {
+                return io::Error::new(io::ErrorKind::Other, "Failed to read byte.");
+            }
+
             // From the next byte, we take the additional bits that we need.
             // Those start at the most significant bit, so we need to shift so
             // that it does not overlap with what we have already.
-            self.data = try!(self.reader.read_byte());
+            self.data = buf[0];
             let lsb = (self.data & Bitstream::mask_u8(bits - self.bits_left))
                     >> self.bits_left as usize;
 
@@ -102,7 +109,7 @@ impl<'r> Bitstream<'r> {
     }
 
     /// Reads at most 16 bits.
-    pub fn read_leq_u16(&mut self, bits: u8) -> IoResult<u16> {
+    pub fn read_leq_u16(&mut self, bits: u8) -> io::Result<u16> {
         // As with read_leq_u8, this only makes sense if we read <= 16 bits.
         debug_assert!(bits <= 16);
 
@@ -121,7 +128,7 @@ impl<'r> Bitstream<'r> {
     }
 
     /// Reads at most 32 bits.
-    pub fn read_leq_u32(&mut self, bits: u8) -> IoResult<u32> {
+    pub fn read_leq_u32(&mut self, bits: u8) -> io::Result<u32> {
         // As with read_leq_u8, this only makes sense if we read <= 32 bits.
         debug_assert!(bits <= 32);
 
