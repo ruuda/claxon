@@ -14,7 +14,7 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-use std::old_io::IoResult;
+use std::io;
 
 // These tables were taken from the tables in crc.c in libflac.
 
@@ -92,7 +92,7 @@ const CRC16_TABLE: [u16; 256] = [
 ///
 /// The polynomial used is x^8 + x^2 + x^1 + x^0, and the initial value is 0.
 pub struct Crc8Reader<'r> {
-    reader: &'r mut (Reader + 'r),
+    reader: &'r mut (io::Read + 'r),
     state: u8
 }
 
@@ -100,13 +100,13 @@ pub struct Crc8Reader<'r> {
 ///
 /// The polynomial used is x^16 + x^15 + x^2 + x^0, and the initial value is 0.
 pub struct Crc16Reader<'r> {
-    reader: &'r mut (Reader + 'r),
+    reader: &'r mut (io::Read + 'r),
     state: u16
 }
 
 impl<'r> Crc8Reader<'r> {
     /// Wraps the reader with a CRC-8 computing reader with initial value 0.
-    pub fn new(reader: &'r mut Reader) -> Crc8Reader<'r> {
+    pub fn new(reader: &'r mut io::Read) -> Crc8Reader<'r> {
         Crc8Reader { reader: reader, state: 0 }
     }
 
@@ -118,7 +118,7 @@ impl<'r> Crc8Reader<'r> {
 
 impl<'r> Crc16Reader<'r> {
     /// Wraps the reader with a CRC-16 computing reader with initial value 0.
-    pub fn new(reader: &'r mut Reader) -> Crc16Reader<'r> {
+    pub fn new(reader: &'r mut io::Read) -> Crc16Reader<'r> {
         Crc16Reader { reader: reader, state: 0 }
     }
 
@@ -128,13 +128,14 @@ impl<'r> Crc16Reader<'r> {
     }
 }
 
-impl<'r> Reader for Crc8Reader<'r> {
-    fn read(&mut self, buf: &mut [u8]) -> IoResult<usize> {
+impl<'r> io::Read for Crc8Reader<'r> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         // Pass through to the regular reader.
         let n = try!(self.reader.read(buf));
 
         // And also update the CRC with the bytes just read.
-        for x in buf[0 ..n].iter() {
+        // TODO: Is the .iter() required here? Would coercions help?
+        for x in buf[0 .. n].iter() {
             self.state = CRC8_TABLE[(self.state ^ *x) as usize];
         }
 
@@ -142,13 +143,13 @@ impl<'r> Reader for Crc8Reader<'r> {
     }
 }
 
-impl<'r> Reader for Crc16Reader<'r> {
-    fn read(&mut self, buf: &mut [u8]) -> IoResult<usize> {
+impl<'r> io::Read for Crc16Reader<'r> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         // Pass through to the regular reader.
         let n = try!(self.reader.read(buf));
 
         // And also update the CRC with the bytes just read.
-        for x in buf[0 ..n].iter() {
+        for x in buf[0 .. n].iter() {
             self.state = (self.state << 8)
                        ^ CRC16_TABLE[((self.state >> 8) as u8 ^ *x) as usize];
         }
@@ -159,9 +160,7 @@ impl<'r> Reader for Crc16Reader<'r> {
 
 #[cfg(test)]
 fn verify_crc8(test_vector: Vec<u8>, result: u8) {
-    use std::old_io::MemReader;
-
-    let mut data = MemReader::new(test_vector);
+    let mut data = io::Cursor::new(test_vector);
     let mut reader = Crc8Reader::new(&mut data);
     reader.read_to_end().unwrap();
     assert_eq!(reader.crc(), result);
@@ -169,9 +168,7 @@ fn verify_crc8(test_vector: Vec<u8>, result: u8) {
 
 #[cfg(test)]
 fn verify_crc16(test_vector: Vec<u8>, result: u16) {
-    use std::old_io::MemReader;
-
-    let mut data = MemReader::new(test_vector);
+    let mut data = io::Cursor::new(test_vector);
     let mut reader = Crc16Reader::new(&mut data);
     reader.read_to_end().unwrap();
     assert_eq!(reader.crc(), result);

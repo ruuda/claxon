@@ -18,6 +18,7 @@
 
 use std::io;
 use error::{Error, FlacResult};
+use input::ReadExt;
 
 #[derive(Copy)]
 struct MetadataBlockHeader {
@@ -181,7 +182,7 @@ fn read_streaminfo_block(input: &mut io::Read) -> FlacResult<StreamInfo> {
 
     // Next up are 20 bits that determine the sample rate.
     let sample_rate_msb = try!(input.read_be_u16());
-    let sample_rate_lsb = try!(input.read_byte());
+    let sample_rate_lsb = try!(input.read_u8());
 
     // Stitch together the value from the first 16 bits,
     // and then the 4 most significant bits of the next byte.
@@ -194,7 +195,7 @@ fn read_streaminfo_block(input: &mut io::Read) -> FlacResult<StreamInfo> {
     // The final bit is the most significant of bits per sample - 1. Bits per
     // sample - 1 is 5 bits in total.
     let bps_msb = n_channels_bps & 1;
-    let bps_lsb_n_samples = try!(input.read_byte());
+    let bps_lsb_n_samples = try!(input.read_u8());
 
     // Stitch together these values, add 1 because # - 1 is stored.
     let bits_per_sample = (bps_msb << 4 | (bps_lsb_n_samples >> 4)) + 1;
@@ -250,7 +251,7 @@ fn read_padding_block(input: &mut io::Read, length: u32) -> FlacResult<()> {
 
 fn skip_block(input: &mut io::Read, length: u32) -> FlacResult<()> {
     for _ in 0 .. length {
-        try!(input.read_byte());
+        try!(input.read_u8());
     }
 
     Ok(())

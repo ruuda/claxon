@@ -26,6 +26,7 @@ use std::io;
 use std::num::SignedInt;
 use error::{Error, FlacResult};
 use frame::{FrameReader};
+use input::ReadExt;
 use metadata::{MetadataBlock, MetadataBlockReader, StreamInfo};
 
 mod crc;

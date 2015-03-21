@@ -16,12 +16,13 @@
 
 //! The `frame` module deals with the frames that make up a FLAC stream.
 
+use std::io;
 use std::iter::repeat;
 use std::num;
 use std::num::{Int, SignedInt};
 use crc::Crc8Reader;
 use error::{Error, FlacResult};
-use input::Bitstream;
+use input::{Bitstream, ReadExt};
 use subframe;
 
 #[derive(Copy)]
@@ -71,11 +72,11 @@ impl FrameHeader {
 /// Reads a variable-length integer encoded as what is called "UTF-8" coding
 /// in the specification. (It is not real UTF-8.) This function can read
 /// integers encoded in this way up to 36-bit integers.
-fn read_var_length_int(input: &mut Reader) -> FlacResult<u64> {
+fn read_var_length_int(input: &mut io::Read) -> FlacResult<u64> {
     use std::iter::range_step_inclusive;
     // The number of consecutive 1s followed by a 0 is the number of additional
     // bytes to read.
-    let first = try!(input.read_byte());
+    let first = try!(input.read_u8());
     let mut read_additional = 0u8;
     let mut mask_data = 0b0111_1111u8;
     let mut mask_mark = 0b1000_0000u8;
@@ -102,7 +103,7 @@ fn read_var_length_int(input: &mut Reader) -> FlacResult<u64> {
     // significant bits into the correct position.
     let mut result = ((first & mask_data) as u64) << (6 * read_additional);
     for i in range_step_inclusive(read_additional as i16 - 1, 0, -1) {
-        let byte = try!(input.read_byte());
+        let byte = try!(input.read_u8());
 
         // The two most significant bits _must_ be 10.
         if byte & 0b1100_0000 != 0b1000_0000 {
@@ -117,11 +118,10 @@ fn read_var_length_int(input: &mut Reader) -> FlacResult<u64> {
 
 #[test]
 fn verify_read_var_length_int() {
-    use std::old_io::MemReader;
 
-    let mut reader = MemReader::new(vec!(0x24, 0xc2, 0xa2, 0xe2, 0x82, 0xac,
-                                         0xf0, 0x90, 0x8d, 0x88, 0xc2, 0x00,
-                                         0x80));
+    let mut reader = io::Cursor::new(vec!(0x24, 0xc2, 0xa2, 0xe2, 0x82, 0xac,
+                                          0xf0, 0x90, 0x8d, 0x88, 0xc2, 0x00,
+                                          0x80));
     assert_eq!(read_var_length_int(&mut reader).unwrap(), 0x24);
     assert_eq!(read_var_length_int(&mut reader).unwrap(), 0xa2);
     assert_eq!(read_var_length_int(&mut reader).unwrap(), 0x20ac);
@@ -134,7 +134,7 @@ fn verify_read_var_length_int() {
                Error::InvalidVarLengthInt);
 }
 
-fn read_frame_header(input: &mut Reader) -> FlacResult<FrameHeader> {
+fn read_frame_header(input: &mut io::Read) -> FlacResult<FrameHeader> {
     // The frame header includes a CRC-8 at the end. It can be computed
     // automatically while reading, by wrapping the input reader in a reader
     // that computes the CRC.
@@ -164,7 +164,7 @@ fn read_frame_header(input: &mut Reader) -> FlacResult<FrameHeader> {
     };
 
     // Next are 4 bits block size and 4 bits sample rate.
-    let bs_sr = try!(crc_input.read_byte());
+    let bs_sr = try!(crc_input.read_u8());
     let mut block_size = 0u16;
     let mut read_8bit_bs = false;
     let mut read_16bit_bs = false;
@@ -210,7 +210,7 @@ fn read_frame_header(input: &mut Reader) -> FlacResult<FrameHeader> {
     }
 
     // Next are 4 bits channel assignment, 3 bits sample size, and 1 reserved bit.
-    let chan_bps_res = try!(crc_input.read_byte());
+    let chan_bps_res = try!(crc_input.read_u8());
 
     // The most significant 4 bits determine channel assignment.
     let channel_assignment = match chan_bps_res >> 4 {
@@ -259,7 +259,7 @@ fn read_frame_header(input: &mut Reader) -> FlacResult<FrameHeader> {
 
     if read_8bit_bs {
         // 8 bit block size - 1 is stored.
-        let bs = try!(crc_input.read_byte());
+        let bs = try!(crc_input.read_u8());
         block_size = bs as u16 + 1;
     }
     if read_16bit_bs {
@@ -273,7 +273,7 @@ fn read_frame_header(input: &mut Reader) -> FlacResult<FrameHeader> {
     }
 
     if read_8bit_sr {
-        let sr = try!(crc_input.read_byte());
+        let sr = try!(crc_input.read_u8());
         sample_rate = Some(sr as u32);
     }
     if read_16bit_sr {
@@ -287,7 +287,7 @@ fn read_frame_header(input: &mut Reader) -> FlacResult<FrameHeader> {
 
     // Next is an 8-bit CRC that is computed over the entire header so far.
     let computed_crc = crc_input.crc();
-    let presumed_crc = try!(crc_input.read_byte());
+    let presumed_crc = try!(crc_input.read_u8());
 
     if computed_crc != presumed_crc {
         return Err(Error::FrameHeaderCrcMismatch);
@@ -479,7 +479,7 @@ impl <'b, Sample> Block<'b, Sample> where Sample: SignedInt {
 /// TODO: for now, it is assumes that the reader starts at a frame header;
 /// no searching for a sync code is performed at the moment.
 pub struct FrameReader<'r, Sample> {
-    input: &'r mut (Reader + 'r),
+    input: &'r mut (io::Read + 'r),
     buffer: Vec<Sample>,
     side_buffer: Vec<i32>
 }
@@ -490,7 +490,7 @@ pub type FrameResult<'b, Sample> = FlacResult<Block<'b, Sample>>;
 impl<'r, Sample> FrameReader<'r, Sample> where Sample: SignedInt {
 
     /// Creates a new frame reader that will yield at least one element.
-    pub fn new(input: &'r mut Reader) -> FrameReader<'r, Sample> {
+    pub fn new(input: &'r mut io::Read) -> FrameReader<'r, Sample> {
         // TODO: a hit for the vector size can be provided.
         FrameReader {
             input: input,

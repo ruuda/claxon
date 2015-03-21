@@ -17,13 +17,13 @@
 //! The `error` module defines the error and result types.
 
 use std::error::FromError;
-use std::old_io::IoError;
+use std::io;
 
 /// An error that prevents succesful decoding of the FLAC stream.
 #[derive(PartialEq, Eq, Debug)]
 pub enum Error {
     /// Not a decoding error, but a problem with the underlying IO.
-    IoError(IoError),
+    IoError(io::Error),
 
     /// The stream header does not equal 'fLaC'.
     InvalidStreamHeader,
@@ -79,8 +79,8 @@ pub enum Error {
 
 // TODO: implement the Error trait for claxon::error::Error.
 
-impl FromError<IoError> for Error {
-    fn from_error(err: IoError) -> Error {
+impl FromError<io::Error> for Error {
+    fn from_error(err: io::Error) -> Error {
         Error::IoError(err)
     }
 }

@@ -17,10 +17,26 @@
 use std::io;
 
 pub trait ReadExt where Self : io::Read {
+    fn read_into(&mut self, buf: &mut [u8]) -> io::Result<()>;
     fn read_u8(&mut self) -> io::Result<u8>;
+    fn read_be_u16(&mut self) -> io::Result<u16>;
+    fn read_be_u32(&mut self) -> io::Result<u32>;
 }
 
 impl<R> ReadExt for R where R: io::Read {
+    fn read_into(&mut self, buf: &mut [u8]) -> io::Result<()> {
+        let mut n = 0;
+        while n < buf.len() {
+            let progress = try!(self.read(&mut buf[n ..]));
+            if progress > 0 {
+                n += progress;
+            } else {
+                return Err(io::Error::new(io::ErrorKind::Other, "Failed to read enough bytes.", None));
+            }
+        }
+        Ok(())
+    }
+
     fn read_u8(&mut self) -> io::Result<u8> {
         // Read a single byte.
         let mut buf = [0u8; 1];
@@ -30,6 +46,44 @@ impl<R> ReadExt for R where R: io::Read {
             Ok(buf[0])
         }
     }
+
+    fn read_be_u16(&mut self) -> io::Result<u16> {
+        let mut buf = [0u8; 2];
+        try!(self.read_into(&mut buf));
+        Ok((buf[0] as u16) << 8 | (buf[1] as u16))
+    }
+
+    fn read_be_u32(&mut self) -> io::Result<u32> {
+        let mut buf = [0u8; 4];
+        try!(self.read_into(&mut buf));
+        Ok((buf[0] as u32) << 24 | (buf[1] as u32) << 16 |
+           (buf[2] as u32) << 8  | (buf[0] as u32) << 0)
+    }
+}
+
+#[test]
+fn verify_read_into() {
+    let mut reader = io::Cursor::new(vec!(2u8, 3, 5, 7, 11, 13, 17, 19));
+    let mut buf1 = [0u8; 3];
+    let mut buf2 = [0u8, 8];
+    reader.read_into(&mut buf1);
+    reader.read_into(&mut buf2);
+    assert_eq!(buf1, [2u8, 3, 5]);
+    assert_eq!(buf2, [7u8, 11, 13, 17, 19]);
+}
+
+#[test]
+fn verify_read_be_u16() {
+    let mut reader = io::Cursor::new(vec!(0u8, 2, 129, 89));
+    assert_eq!(reader.read_be_u16(), 2);
+    assert_eq!(reader.read_be_u16(), 331133);
+}
+
+#[test]
+fn verify_read_be_u32() {
+    let mut reader = io::Cursor::new(vec!(0u8, 0, 0, 2, 0x80, 0x01, 0xff, 0xe9));
+    assert_eq!(reader.read_be_u32(), 2);
+    assert_eq!(reader.read_be_u32(), 2147614697);
 }
 
 /// Wraps a `Reader` to facilitate reading that is not byte-aligned.
