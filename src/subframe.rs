@@ -19,8 +19,8 @@
 use std::iter::AdditiveIterator;
 use std::num;
 use std::num::Int;
-use bitstream::Bitstream;
 use error::{Error, FlacResult};
+use input::Bitstream;
 
 #[derive(Copy, Debug)]
 enum SubframeType {

@@ -16,6 +16,22 @@
 
 use std::io;
 
+pub trait ReadExt where Self : io::Read {
+    fn read_u8(&mut self) -> io::Result<u8>;
+}
+
+impl<R> ReadExt for R where R: io::Read {
+    fn read_u8(&mut self) -> io::Result<u8> {
+        // Read a single byte.
+        let mut buf = [0u8; 1];
+        if try!(self.read(&mut buf)) != 1 {
+            Err(io::Error::new(io::ErrorKind::Other, "Failed to read byte.", None))
+        } else {
+            Ok(buf[0])
+        }
+    }
+}
+
 /// Wraps a `Reader` to facilitate reading that is not byte-aligned.
 pub struct Bitstream<'r> {
     /// The source where bits are read from.
@@ -45,15 +61,16 @@ impl<'r> Bitstream<'r> {
 
     // TODO: Remove this method.
     pub fn dump_some(&mut self, bytes: u8) -> io::Result<()> {
+        use std::iter::repeat;
         println!(">=== begin bitstream dump ===>");
         println!("     data = {:x}, {} bits left", self.data, self.bits_left);
         print!("     more: [");
-        let mut buf = [0u8, ..bytes];
-        assert_eq!(try!(self.reader.read(&mut buf)), bytes - 1);
-        for i in 0 .. bytes - 1 {
+        let mut buf: Vec<u8> = repeat(0).take(bytes as usize - 1).collect();
+        assert_eq!(try!(self.reader.read(&mut buf)), bytes as usize - 1);
+        for i in 0 .. bytes as usize - 1 {
             print!("{:x}, ", buf[i]);
         }
-        println!("{:x}]", buf[bytes - 1]);
+        println!("{:x}]", buf[bytes as usize - 1]);
         println!("<=== end bitstream dump <===");
         Ok(())
     }
@@ -70,15 +87,11 @@ impl<'r> Bitstream<'r> {
             let msb = self.data;
 
             // Read a single byte.
-            let mut buf = [0u8, ..1];
-            if try!(self.rader.read(&mut buf)) != 1 {
-                return io::Error::new(io::ErrorKind::Other, "Failed to read byte.");
-            }
+            self.data = try!(self.reader.read_u8());
 
             // From the next byte, we take the additional bits that we need.
             // Those start at the most significant bit, so we need to shift so
             // that it does not overlap with what we have already.
-            self.data = buf[0];
             let lsb = (self.data & Bitstream::mask_u8(bits - self.bits_left))
                     >> self.bits_left as usize;
 

@@ -28,8 +28,8 @@ use error::{Error, FlacResult};
 use frame::{FrameReader};
 use metadata::{MetadataBlock, MetadataBlockReader, StreamInfo};
 
-mod bitstream;
 mod crc;
+mod input;
 pub mod error;
 pub mod frame;
 pub mod subframe;

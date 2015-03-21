@@ -19,9 +19,9 @@
 use std::iter::repeat;
 use std::num;
 use std::num::{Int, SignedInt};
-use bitstream::Bitstream;
 use crc::Crc8Reader;
 use error::{Error, FlacResult};
+use input::Bitstream;
 use subframe;
 
 #[derive(Copy)]
