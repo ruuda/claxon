@@ -18,8 +18,13 @@
 
 extern crate claxon;
 
-fn run_metaflac(fname: &Path) -> String {
-    use std::old_io::Command;
+use std::fs;
+use std::io;
+use std::path;
+
+fn run_metaflac(fname: &path::Path) -> String {
+    use std::io::Read;
+    use std::process::Command;
 
     // Run metaflac on the specified file and print all streaminfo data.
     let mut child = Command::new("metaflac")
@@ -32,13 +37,14 @@ fn run_metaflac(fname: &Path) -> String {
                         .arg("--show-bps")
                         .arg("--show-total-samples")
                         .arg("--show-md5sum")
-                        .arg(fname.as_str().expect("unsupported filename"))
+                        .arg(fname.to_str().expect("unsupported filename"))
                         .spawn().ok().expect("failed to run metaflac");
 
     assert!(child.wait().unwrap().success());
 
-    let output = match child.stdout {
-        Some(ref mut stdout) => stdout.read_to_string().ok()
+    let mut output = String::new();
+    match child.stdout {
+        Some(ref mut stdout) => stdout.read_to_string(&mut output).ok()
                                       .expect("failed to read metaflac stdout"),
         None => panic!("failed to open metaflac stdout")
     };
@@ -51,14 +57,12 @@ fn print_hex(seq: &[u8]) -> String {
     vec.concat()
 }
 
-fn read_streaminfo(fname: &Path) -> String {
-    use std::old_io::fs::File;
-    use std::old_io::BufferedReader;
+fn read_streaminfo(fname: &path::Path) -> String {
     use claxon::FlacStream;
 
     // Use a buffered reader, this speeds up the test by 120%.
-    let file = File::open(fname).unwrap();
-    let mut reader = BufferedReader::new(file);
+    let file = fs::File::open(fname).unwrap();
+    let mut reader = io::BufReader::new(file);
     let stream = FlacStream::new(&mut reader).unwrap();
     let streaminfo = stream.streaminfo();
 
@@ -75,7 +79,7 @@ fn read_streaminfo(fname: &Path) -> String {
             print_hex(&streaminfo.md5sum)) // TODO implement LowerHex for &[u8] and submit a PR.
 }
 
-fn compare_metaflac(fname: &Path) {
+fn compare_metaflac(fname: &path::Path) {
     let metaflac = run_metaflac(fname);
     let streaminfo = read_streaminfo(fname);
     let mut mf_lines = metaflac.lines_any();
@@ -91,15 +95,17 @@ fn compare_metaflac(fname: &Path) {
 
 #[test]
 fn verify_streaminfo() {
-    use std::old_io::fs::{readdir, PathExtensions};
+    use std::ffi::OsStr;
+    use std::fs::PathExt;
 
     // Compare our streaminfo parsing with metaflac on all flac files in the
     // testsamples directory.
-    let dir = readdir(&Path::new("testsamples")).ok().expect("failed to enumerate flac files");
-    for path in dir.iter() {
-        if path.is_file() && path.extension_str() == Some("flac") {
-            print!("    comparing {} ...", path.as_str().expect("unsupported filename"));
-            compare_metaflac(path);
+    let dir = fs::read_dir("testsamples").ok().expect("failed to enumerate flac files");
+    for path in dir {
+        let path = path.ok().expect("failed to obtain path info").path();
+        if path.is_file() && path.extension() == Some(OsStr::from_str("flac")) {
+            print!("    comparing {} ...", path.to_str().expect("unsupported filename"));
+            compare_metaflac(&path);
             println!(" ok");
         }
     }

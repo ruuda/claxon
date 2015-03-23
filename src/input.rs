@@ -87,31 +87,31 @@ fn verify_read_into() {
     let mut buf2 = [0u8, 8];
     reader.read_into(&mut buf1);
     reader.read_into(&mut buf2);
-    assert_eq!(buf1, [2u8, 3, 5]);
-    assert_eq!(buf2, [7u8, 11, 13, 17, 19]);
+    assert_eq!(&buf1[..], &[2u8, 3, 5]);
+    assert_eq!(&buf2[..], &[7u8, 11, 13, 17, 19]);
 }
 
 #[test]
 fn verify_read_be_u16() {
     let mut reader = io::Cursor::new(vec!(0u8, 2, 129, 89, 122));
-    assert_eq!(reader.read_be_u16(), 2);
-    assert_eq!(reader.read_be_u16(), 331133);
+    assert_eq!(reader.read_be_u16(), Ok(2));
+    assert_eq!(reader.read_be_u16(), Ok(331133));
     assert!(reader.read_be_u16().is_err());
 }
 
 #[test]
 fn verify_read_be_u24() {
     let mut reader = io::Cursor::new(vec!(0u8, 0, 2, 0x8f, 0xff, 0xf3, 122));
-    assert_eq!(reader.read_be_u24(), 2);
-    assert_eq!(reader.read_be_u24(), 9_437_171);
+    assert_eq!(reader.read_be_u24(), Ok(2));
+    assert_eq!(reader.read_be_u24(), Ok(9_437_171));
     assert!(reader.read_be_u24().is_err());
 }
 
 #[test]
 fn verify_read_be_u32() {
     let mut reader = io::Cursor::new(vec!(0u8, 0, 0, 2, 0x80, 0x01, 0xff, 0xe9, 0));
-    assert_eq!(reader.read_be_u32(), 2);
-    assert_eq!(reader.read_be_u32(), 2_147_614_697);
+    assert_eq!(reader.read_be_u32(), Ok(2));
+    assert_eq!(reader.read_be_u32(), Ok(2_147_614_697));
     assert!(reader.read_be_u32().is_err());
 }
 
@@ -245,12 +245,10 @@ impl<'r> Bitstream<'r> {
 
 #[test]
 fn verify_read_leq_u8() {
-    use std::old_io::MemReader;
-
-    let mut data = MemReader::new(vec!(0b1010_0101, 0b1110_0001,
-                                       0b1101_0010, 0b0101_0101,
-                                       0b0111_0011, 0b0011_1111,
-                                       0b1010_1010, 0b0000_1100));
+    let mut data = io::Cursor::new(vec!(0b1010_0101, 0b1110_0001,
+                                        0b1101_0010, 0b0101_0101,
+                                        0b0111_0011, 0b0011_1111,
+                                        0b1010_1010, 0b0000_1100));
     let mut bits = Bitstream::new(&mut data);
 
     assert_eq!(bits.read_leq_u8(0).unwrap(), 0);
@@ -275,10 +273,8 @@ fn verify_read_leq_u8() {
 
 #[test]
 fn verify_read_leq_u16() {
-    use std::old_io::MemReader;
-
-    let mut data = MemReader::new(vec!(0b1010_0101, 0b1110_0001,
-                                       0b1101_0010, 0b0101_0101));
+    let mut data = io::Cursor::new(vec!(0b1010_0101, 0b1110_0001,
+                                        0b1101_0010, 0b0101_0101));
     let mut bits = Bitstream::new(&mut data);
 
     assert_eq!(bits.read_leq_u16(0).unwrap(), 0);
@@ -289,10 +285,8 @@ fn verify_read_leq_u16() {
 
 #[test]
 fn verify_read_leq_u32() {
-    use std::old_io::MemReader;
-
-    let mut data = MemReader::new(vec!(0b1010_0101, 0b1110_0001,
-                                       0b1101_0010, 0b0101_0101));
+    let mut data = io::Cursor::new(vec!(0b1010_0101, 0b1110_0001,
+                                        0b1101_0010, 0b0101_0101));
     let mut bits = Bitstream::new(&mut data);
 
     assert_eq!(bits.read_leq_u32(1).unwrap(), 1);
@@ -302,12 +296,10 @@ fn verify_read_leq_u32() {
 
 #[test]
 fn verify_read_mixed() {
-    use std::old_io::MemReader;
-
     // These test data are warm-up samples from an actual stream.
-    let mut data = MemReader::new(vec!(0x03, 0xc7, 0xbf, 0xe5, 0x9b, 0x74,
-                                       0x1e, 0x3a, 0xdd, 0x7d, 0xc5, 0x5e,
-                                       0xf6, 0xbf, 0x78, 0x1b, 0xbd));
+    let mut data = io::Cursor::new(vec!(0x03, 0xc7, 0xbf, 0xe5, 0x9b, 0x74,
+                                        0x1e, 0x3a, 0xdd, 0x7d, 0xc5, 0x5e,
+                                        0xf6, 0xbf, 0x78, 0x1b, 0xbd));
     let mut bits = Bitstream::new(&mut data);
 
     assert_eq!(bits.read_leq_u8(6).unwrap(), 0);
@@ -324,9 +316,7 @@ fn verify_read_mixed() {
 
 #[test]
 fn verify_align() {
-    use std::old_io::MemReader;
-
-    let mut data = MemReader::new(vec!(0x00, 0xff));
+    let mut data = io::Cursor::new(vec!(0x00, 0xff));
     let mut bits = Bitstream::new(&mut data);
 
     assert_eq!(bits.read_leq_u8(5).unwrap(), 0);
