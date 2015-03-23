@@ -27,29 +27,19 @@ fn run_metaflac(fname: &path::Path) -> String {
     use std::process::Command;
 
     // Run metaflac on the specified file and print all streaminfo data.
-    let mut child = Command::new("metaflac")
-                        .arg("--show-min-blocksize")
-                        .arg("--show-max-blocksize")
-                        .arg("--show-min-framesize")
-                        .arg("--show-max-framesize")
-                        .arg("--show-sample-rate")
-                        .arg("--show-channels")
-                        .arg("--show-bps")
-                        .arg("--show-total-samples")
-                        .arg("--show-md5sum")
-                        .arg(fname.to_str().expect("unsupported filename"))
-                        .spawn().ok().expect("failed to run metaflac");
-
-    assert!(child.wait().unwrap().success());
-
-    let mut output = String::new();
-    match child.stdout {
-        Some(ref mut stdout) => stdout.read_to_string(&mut output).ok()
-                                      .expect("failed to read metaflac stdout"),
-        None => panic!("failed to open metaflac stdout")
-    };
-
-    output
+    let mut output = Command::new("metaflac")
+                             .arg("--show-min-blocksize")
+                             .arg("--show-max-blocksize")
+                             .arg("--show-min-framesize")
+                             .arg("--show-max-framesize")
+                             .arg("--show-sample-rate")
+                             .arg("--show-channels")
+                             .arg("--show-bps")
+                             .arg("--show-total-samples")
+                             .arg("--show-md5sum")
+                             .arg(fname.to_str().expect("unsupported filename"))
+                             .output().ok().expect("failed to run metaflac");
+    String::from_utf8(output.stdout).ok().expect("metaflac wrote invalid UTF-8")
 }
 
 fn print_hex(seq: &[u8]) -> String {

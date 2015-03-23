@@ -76,7 +76,7 @@ impl<R> ReadExt for R where R: io::Read {
         let mut buf = [0u8; 4];
         try!(self.read_into(&mut buf));
         Ok((buf[0] as u32) << 24 | (buf[1] as u32) << 16 |
-           (buf[2] as u32) << 8  | (buf[0] as u32) << 0)
+           (buf[2] as u32) << 8  | (buf[3] as u32) << 0)
     }
 }
 
@@ -84,7 +84,7 @@ impl<R> ReadExt for R where R: io::Read {
 fn verify_read_into() {
     let mut reader = io::Cursor::new(vec!(2u8, 3, 5, 7, 11, 13, 17, 19));
     let mut buf1 = [0u8; 3];
-    let mut buf2 = [0u8, 8];
+    let mut buf2 = [0u8; 5];
     reader.read_into(&mut buf1);
     reader.read_into(&mut buf2);
     assert_eq!(&buf1[..], &[2u8, 3, 5]);
@@ -95,7 +95,7 @@ fn verify_read_into() {
 fn verify_read_be_u16() {
     let mut reader = io::Cursor::new(vec!(0u8, 2, 129, 89, 122));
     assert_eq!(reader.read_be_u16(), Ok(2));
-    assert_eq!(reader.read_be_u16(), Ok(331133));
+    assert_eq!(reader.read_be_u16(), Ok(33113));
     assert!(reader.read_be_u16().is_err());
 }
 
