@@ -17,9 +17,22 @@
 use std::io;
 
 pub trait ReadExt where Self : io::Read {
+    /// Reads as many bytes as `buf` is long.
+    ///
+    /// This may issue multiple `read` calls internally. An error is returned
+    /// if `read` read 0 bytes before the buffer is full.
     fn read_into(&mut self, buf: &mut [u8]) -> io::Result<()>;
+
+    /// Reads a single byte.
     fn read_u8(&mut self) -> io::Result<u8>;
+
+    /// Reads two bytes and interprets them as a big-endian 16-bit unsigned integer.
     fn read_be_u16(&mut self) -> io::Result<u16>;
+
+    /// Reads three bytes and interprets them as a big-endian 24-bit unsigned integer.
+    fn read_be_u24(&mut self) -> io::Result<u32>;
+
+    /// Reads four bytes and interprets them as a big-endian 32-bit unsigned integer.
     fn read_be_u32(&mut self) -> io::Result<u32>;
 }
 
@@ -53,6 +66,12 @@ impl<R> ReadExt for R where R: io::Read {
         Ok((buf[0] as u16) << 8 | (buf[1] as u16))
     }
 
+    fn read_be_u24(&mut self) -> io::Result<u32> {
+        let mut buf = [0u8; 3];
+        try!(self.read_into(&mut buf));
+        Ok((buf[0] as u32) << 16 | (buf[1] as u32) << 8 | (buf[2] as u32))
+    }
+
     fn read_be_u32(&mut self) -> io::Result<u32> {
         let mut buf = [0u8; 4];
         try!(self.read_into(&mut buf));
@@ -74,16 +93,26 @@ fn verify_read_into() {
 
 #[test]
 fn verify_read_be_u16() {
-    let mut reader = io::Cursor::new(vec!(0u8, 2, 129, 89));
+    let mut reader = io::Cursor::new(vec!(0u8, 2, 129, 89, 122));
     assert_eq!(reader.read_be_u16(), 2);
     assert_eq!(reader.read_be_u16(), 331133);
+    assert!(reader.read_be_u16().is_err());
+}
+
+#[test]
+fn verify_read_be_u24() {
+    let mut reader = io::Cursor::new(vec!(0u8, 0, 2, 0x8f, 0xff, 0xf3, 122));
+    assert_eq!(reader.read_be_u24(), 2);
+    assert_eq!(reader.read_be_u24(), 9_437_171);
+    assert!(reader.read_be_u24().is_err());
 }
 
 #[test]
 fn verify_read_be_u32() {
-    let mut reader = io::Cursor::new(vec!(0u8, 0, 0, 2, 0x80, 0x01, 0xff, 0xe9));
+    let mut reader = io::Cursor::new(vec!(0u8, 0, 0, 2, 0x80, 0x01, 0xff, 0xe9, 0));
     assert_eq!(reader.read_be_u32(), 2);
-    assert_eq!(reader.read_be_u32(), 2147614697);
+    assert_eq!(reader.read_be_u32(), 2_147_614_697);
+    assert!(reader.read_be_u32().is_err());
 }
 
 /// Wraps a `Reader` to facilitate reading that is not byte-aligned.

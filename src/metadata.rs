@@ -17,6 +17,7 @@
 //! The `metadata` module deals with metadata at the beginning of a FLAC stream.
 
 use std::io;
+use std::iter;
 use error::{Error, FlacResult};
 use input::ReadExt;
 
@@ -96,8 +97,8 @@ pub enum MetadataBlock {
     Reserved
 }
 
-fn read_metadata_block_header(input: &mut io::Read)
-                              -> FlacResult<MetadataBlockHeader> {
+fn read_metadata_block_header<R: io::Read>(input: &mut R)
+                                           -> FlacResult<MetadataBlockHeader> {
     let byte = try!(input.read_u8());
 
     // The first bit specifies whether this is the last block, the next 7 bits
@@ -106,7 +107,7 @@ fn read_metadata_block_header(input: &mut io::Read)
     let block_type = byte & 0b0111_1111;
 
     // The length field is 24 bits, or 3 bytes.
-    let length = try!(input.read_be_uint_n(3)) as u32;
+    let length = try!(input.read_be_u24());
     
     let header = MetadataBlockHeader {
         is_last: is_last,
@@ -116,8 +117,8 @@ fn read_metadata_block_header(input: &mut io::Read)
     Ok(header)
 }
 
-fn read_metadata_block(input: &mut io::Read, block_type: u8, length: u32)
-                       -> FlacResult<MetadataBlock> {
+fn read_metadata_block<R: io::Read>(input: &mut R, block_type: u8, length: u32)
+                                    -> FlacResult<MetadataBlock> {
     match block_type {
         0 => {
             // The streaminfo block has a fixed size of 34 bytes.
@@ -172,13 +173,13 @@ fn read_metadata_block(input: &mut io::Read, block_type: u8, length: u32)
     }
 }
 
-fn read_streaminfo_block(input: &mut io::Read) -> FlacResult<StreamInfo> {
+fn read_streaminfo_block<R: io::Read>(input: &mut R) -> FlacResult<StreamInfo> {
     let min_block_size = try!(input.read_be_u16());
     let max_block_size = try!(input.read_be_u16());
 
     // The frame size fields are 24 bits, or 3 bytes.
-    let min_frame_size = try!(input.read_be_uint_n(3)) as u32;
-    let max_frame_size = try!(input.read_be_uint_n(3)) as u32;
+    let min_frame_size = try!(input.read_be_u24());
+    let max_frame_size = try!(input.read_be_u24());
 
     // Next up are 20 bits that determine the sample rate.
     let sample_rate_msb = try!(input.read_be_u16());
@@ -205,8 +206,9 @@ fn read_streaminfo_block(input: &mut io::Read) -> FlacResult<StreamInfo> {
     let n_samples_lsb = try!(input.read_be_u32());
     let n_samples = (n_samples_msb as u64) << 32 | n_samples_lsb as u64;
 
+    // Next are 128 bits (16 bytes) of MD5 signature.
     let mut md5sum = [0u8; 16];
-    try!(input.read_at_least(16, &mut md5sum));
+    try!(input.read_into(&mut md5sum));
 
     // Lower bounds can never be larger than upper bounds. Note that 0 indicates
     // unknown for the frame size. Also, the block size must be at least 16.
@@ -240,7 +242,7 @@ fn read_streaminfo_block(input: &mut io::Read) -> FlacResult<StreamInfo> {
     Ok(stream_info)
 }
 
-fn read_padding_block(input: &mut io::Read, length: u32) -> FlacResult<()> {
+fn read_padding_block<R: io::Read>(input: &mut R, length: u32) -> FlacResult<()> {
     // The specification dictates that all bits of the padding block must be 0.
     // However, the reference implementation does not issue an error when this
     // is not the case, and frankly, when you are going to skip over these
@@ -249,7 +251,7 @@ fn read_padding_block(input: &mut io::Read, length: u32) -> FlacResult<()> {
     skip_block(input, length)
 }
 
-fn skip_block(input: &mut io::Read, length: u32) -> FlacResult<()> {
+fn skip_block<R: io::Read>(input: &mut R, length: u32) -> FlacResult<()> {
     for _ in 0 .. length {
         try!(input.read_u8());
     }
@@ -257,12 +259,13 @@ fn skip_block(input: &mut io::Read, length: u32) -> FlacResult<()> {
     Ok(())
 }
 
-fn read_application_block(input: &mut io::Read, length: u32)
-                          -> FlacResult<(u32, Vec<u8>)> {
+fn read_application_block<R: io::Read>(input: &mut R, length: u32)
+                                       -> FlacResult<(u32, Vec<u8>)> {
     let id = try!(input.read_be_u32());
 
     // Four bytes of the block have been used for the ID, the rest is payload.
-    let data = try!(input.read_exact((length - 4) as usize));
+    let mut data: Vec<u8> = iter::repeat(0).take(length as usize - 4).collect();
+    try!(input.read_into(&mut data));
 
     Ok((id, data))
 }

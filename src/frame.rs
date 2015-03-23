@@ -72,7 +72,7 @@ impl FrameHeader {
 /// Reads a variable-length integer encoded as what is called "UTF-8" coding
 /// in the specification. (It is not real UTF-8.) This function can read
 /// integers encoded in this way up to 36-bit integers.
-fn read_var_length_int(input: &mut io::Read) -> FlacResult<u64> {
+fn read_var_length_int<R: io::Read>(input: &mut R) -> FlacResult<u64> {
     use std::iter::range_step_inclusive;
     // The number of consecutive 1s followed by a 0 is the number of additional
     // bytes to read.

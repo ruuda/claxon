@@ -46,7 +46,7 @@ pub struct FlacStream<'r> {
     input: &'r mut (io::Read + 'r)
 }
 
-fn read_stream_header(input: &mut io::Read) -> FlacResult<()> {
+fn read_stream_header<R: io::Read>(input: &mut R) -> FlacResult<()> {
     // A FLAC stream starts with a 32-bit header 'fLaC' (big endian).
     const HEADER: u32 = 0x66_4c_61_43;
     let header = try!(input.read_be_u32());
