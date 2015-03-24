@@ -14,8 +14,6 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-#![feature(old_io, os, old_path)]
-
 extern crate claxon;
 
 fn main() {
@@ -24,10 +22,6 @@ fn main() {
     use std::io;
     use std::path;
     use claxon::FlacStream;
-    // NOTE: args() is deprecated and should be replaced with std::env::args().nth(1).
-    // However, then you get an OsString, which does not work well with old_path.
-    // So we should upgrade to the new path. But the new path does not work well
-    // with old File, so just wait until std::io is stable ...
     let input = fs::File::open(path::Path::new(&env::args().nth(1).unwrap())).unwrap();
     let mut reader = io::BufReader::new(input);
     let mut stream = FlacStream::new(&mut reader).unwrap();
@@ -40,8 +34,8 @@ fn main() {
         let left = block.channel(0);
         let right = block.channel(1);
         println!("block {} decoded\nleft: {:?} .. {:?}\nright: {:?} .. {:?}",
-                 i, left.slice_to(12), left.slice_from(block.len() as usize - 12),
-                 right.slice_to(12), right.slice_from(block.len() as usize - 12));
+                 i, &left[..12], &left[block.len() as usize - 12 ..],
+                 &right[..12], &right[block.len() as usize - 12 ..]);
         sample = sample + block.len() as u64;
         i = i + 1;
     }
