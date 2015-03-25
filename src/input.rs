@@ -16,6 +16,7 @@
 
 use std::io;
 
+/// Provides convenience methods to make input less cumbersome.
 pub trait ReadExt where Self : io::Read {
     /// Reads as many bytes as `buf` is long.
     ///

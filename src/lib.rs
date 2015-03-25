@@ -20,7 +20,7 @@
 
 #![warn(missing_docs)]
 #![allow(dead_code)] // TODO: Remove for v0.1
-#![feature(core, old_io)]
+#![feature(core, io)]
 
 use std::io;
 use std::num::SignedInt;
