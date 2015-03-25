@@ -14,7 +14,7 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-#![feature(io, path)]
+#![feature(path_ext)]
 
 extern crate claxon;
 
@@ -23,22 +23,21 @@ use std::io;
 use std::path;
 
 fn run_metaflac(fname: &path::Path) -> String {
-    use std::io::Read;
     use std::process::Command;
 
     // Run metaflac on the specified file and print all streaminfo data.
-    let mut output = Command::new("metaflac")
-                             .arg("--show-min-blocksize")
-                             .arg("--show-max-blocksize")
-                             .arg("--show-min-framesize")
-                             .arg("--show-max-framesize")
-                             .arg("--show-sample-rate")
-                             .arg("--show-channels")
-                             .arg("--show-bps")
-                             .arg("--show-total-samples")
-                             .arg("--show-md5sum")
-                             .arg(fname.to_str().expect("unsupported filename"))
-                             .output().ok().expect("failed to run metaflac");
+    let output = Command::new("metaflac")
+                         .arg("--show-min-blocksize")
+                         .arg("--show-max-blocksize")
+                         .arg("--show-min-framesize")
+                         .arg("--show-max-framesize")
+                         .arg("--show-sample-rate")
+                         .arg("--show-channels")
+                         .arg("--show-bps")
+                         .arg("--show-total-samples")
+                         .arg("--show-md5sum")
+                         .arg(fname.to_str().expect("unsupported filename"))
+                         .output().ok().expect("failed to run metaflac");
     String::from_utf8(output.stdout).ok().expect("metaflac wrote invalid UTF-8")
 }
 

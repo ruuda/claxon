@@ -83,11 +83,13 @@ impl<R> ReadExt for R where R: io::Read {
 
 #[test]
 fn verify_read_into() {
-    let mut reader = io::Cursor::new(vec!(2u8, 3, 5, 7, 11, 13, 17, 19));
+    let mut reader = io::Cursor::new(vec!(2u8, 3, 5, 7, 11, 13, 17, 19, 23));
     let mut buf1 = [0u8; 3];
     let mut buf2 = [0u8; 5];
-    reader.read_into(&mut buf1);
-    reader.read_into(&mut buf2);
+    let mut buf3 = [0u8; 2];
+    reader.read_into(&mut buf1).ok().unwrap();
+    reader.read_into(&mut buf2).ok().unwrap();
+    assert!(reader.read_into(&mut buf3).is_err());
     assert_eq!(&buf1[..], &[2u8, 3, 5]);
     assert_eq!(&buf2[..], &[7u8, 11, 13, 17, 19]);
 }
