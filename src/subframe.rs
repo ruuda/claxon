@@ -134,7 +134,7 @@ pub fn extend_sign_u32(val: u32, bits: u8) -> i32 {
     } else if val < (1 << (bits - 1)) {
         val as i32
     } else {
-        (val as i32).wrapping_sub((1 << bits) as i32)
+        (val as i32).wrapping_sub(1 << bits)
     }
 }
 
