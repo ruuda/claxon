@@ -118,6 +118,32 @@ fn verify_read_be_u32() {
     assert!(reader.read_be_u32().is_err());
 }
 
+/// Left shift that does not panic when shifting by the integer width.
+fn shift_left(x: u8, shift: usize) -> u8 {
+    debug_assert!(shift <= 8);
+
+    // Rust panics when shifting by the integer width, so we have to treat
+    // that case separately.
+    if shift >= 8 {
+        0
+    } else {
+        x << shift
+    }
+}
+
+/// Right shift that does not panic when shifting by the integer width.
+fn shift_right(x: u8, shift: usize) -> u8 {
+    debug_assert!(shift <= 8);
+
+    // Rust panics when shifting by the integer width, so we have to treat
+    // that case separately.
+    if shift >= 8 {
+        0
+    } else {
+        x >> shift
+    }
+}
+
 /// Wraps a `Reader` to facilitate reading that is not byte-aligned.
 pub struct Bitstream<'r> {
     /// The source where bits are read from.
@@ -137,7 +163,8 @@ impl<'r> Bitstream<'r> {
     /// Generates a bitmask with 1s in the `bits` most significant bits.
     fn mask_u8(bits: u8) -> u8 {
         debug_assert!(bits <= 8);
-        0xffu8 << (8 - bits) as usize
+
+        shift_left(0xff, 8 - bits as usize)
     }
 
     /// Skips bits such that the next read will be byte-aligned.
@@ -182,7 +209,7 @@ impl<'r> Bitstream<'r> {
                     >> self.bits_left as usize;
 
             // Shift out the bits that we have consumed.
-            self.data = self.data << (bits - self.bits_left) as usize;
+            self.data = shift_left(self.data, (bits - self.bits_left) as usize);
             self.bits_left = 8 - (bits - self.bits_left);
 
             msb | lsb
@@ -204,7 +231,7 @@ impl<'r> Bitstream<'r> {
 
         // The resulting data is padded with zeroes in the least significant
         // bits, but we want to pad in the most significant bits, so shift.
-        Ok(result >> (8 - bits) as usize)
+        Ok(shift_right(result, 8 - bits as usize))
     }
 
     /// Reads at most 16 bits.
