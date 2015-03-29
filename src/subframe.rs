@@ -474,7 +474,9 @@ fn predict_lpc<Sample: Int>
         let prediction: FlacResult<Sample> = num::cast(prediction).ok_or(Error::InvalidLpcSample);
 
         // TODO: Remove this.
-        println!("  > result: {:?}", show_sample(try!(prediction).wrapping_add(window[coefficients.len()])));
+        println!("  > {} result: {:?}",
+                 i + coefficients.len(),
+                 show_sample(try!(prediction).wrapping_add(window[coefficients.len()])));
 
         // The delta is stored, so the sample is the prediction + delta.
         let sample = window[coefficients.len()].wrapping_add(try!(prediction));
@@ -524,6 +526,9 @@ fn decode_lpc<Sample: Int>
         coefficients.push(coef);
         println!("  > coef: {}", coef); // TODO: Remove this.
     }
+
+    // Coefficients are used in reverse order for prediction.
+    coefficients.reverse();
 
     // Next up is the residual. We decode it into the buffer directly, the
     // predictor contributions will be added in a second pass. The first
