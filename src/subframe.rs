@@ -464,19 +464,9 @@ fn predict_lpc<Sample: Int>
                                      .map(|(&c, &s)| c as i64 * num::cast(s).unwrap())
                                      .sum() >> qlp_shift;
 
-        // TODO: Remove this.
-        println!("  > previous: {}, prediction: {}, delta: {:?}",
-                 show_sample(window[coefficients.len() - 1]).unwrap(), prediction,
-                 show_sample(window[coefficients.len()]));
-
         // Cast the i64 back to the `Sample` type, which _should_ be safe after
         // the shift.
         let prediction: FlacResult<Sample> = num::cast(prediction).ok_or(Error::InvalidLpcSample);
-
-        // TODO: Remove this.
-        println!("  > {} result: {:?}",
-                 i + coefficients.len(),
-                 show_sample(try!(prediction).wrapping_add(window[coefficients.len()])));
 
         // The delta is stored, so the sample is the prediction + delta.
         let sample = window[coefficients.len()].wrapping_add(try!(prediction));
@@ -540,7 +530,6 @@ fn decode_lpc<Sample: Int>
              show_sample(buffer[order as usize]),
              show_sample(buffer[buffer.len() - 1])); // TODO: Remove this.
 
-    // TODO: do prediction.
     try!(predict_lpc(&coefficients, qlp_shift, buffer));
 
     Ok(())
