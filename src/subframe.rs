@@ -126,9 +126,8 @@ fn verify_extend_sign_u16() {
 /// Given a signed two's complement integer in the `bits` least significant
 /// bits of `val`, extends the sign bit to a valid 32-bit signed integer.
 pub fn extend_sign_u32(val: u32, bits: u8) -> i32 {
-    // I would expect that shifting an i32 by 32 bits results in 0, but in fact
-    // it does not, and behaviour is different in release and debug mode, so we
-    // ensure first to shift no more than 31 bits.
+    // Shifting a 32-bit integer by more than 31 bits will panic, so we must
+    // treat that case separately.
     if bits >= 32 {
         val as i32
     } else if val < (1 << (bits - 1)) {
@@ -466,8 +465,9 @@ fn predict_lpc<Sample: Int>
                                      .sum() >> qlp_shift;
 
         // TODO: Remove this.
-        println!("  > previous: {}, prediction: {}",
-                 show_sample(window[coefficients.len() - 1]).unwrap(), prediction);
+        println!("  > previous: {}, prediction: {}, delta: {:?}",
+                 show_sample(window[coefficients.len() - 1]).unwrap(), prediction,
+                 show_sample(window[coefficients.len()]));
 
         // Cast the i64 back to the `Sample` type, which _should_ be safe after
         // the shift.

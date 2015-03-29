@@ -388,6 +388,14 @@ fn decode_mid_side<Sample: Int>(buffer: &mut [Sample], side: &[i32]) -> FlacResu
     for i in 0 .. block_size {
         let mid: i32 = num::cast(buffer[i]).unwrap();
 
+        // TODO: Remove these assertions or add runtime validation; do not panic.
+        let max_s: Sample = Int::max_value();
+        let min_s: Sample = Int::min_value();
+        let max_side: i64 = num::cast::<Sample, i64>(max_s).unwrap() - num::cast(min_s).unwrap();
+        let min_side: i64 = num::cast::<Sample, i64>(min_s).unwrap() - num::cast(max_s).unwrap();
+        assert!((side[i] as i64) <= max_side);
+        assert!((side[i] as i64) >= min_side);
+
         // The code below uses shifts insead of multiplication/division by two,
         // because Rust does not infer a literal `2` to be of type `Sample`.
 
@@ -590,11 +598,6 @@ impl<'r, Sample> FrameReader<'r, Sample> where Sample: SignedInt {
                         try!(subframe::decode(&mut bitstream, bps + 1,
                                               &mut self.side_buffer[.. bs]));
 
-                        // Widen the side channel to a 32-bit signed integer.
-                        for x in &mut self.side_buffer[.. bs] {
-                            *x = subframe::extend_sign_u32(*x as u32, bps + 1);
-                        }
-
                         // Then decode the side channel into the right channel.
                         try!(decode_left_side(&mut self.buffer[.. bs * 2],
                                               &self.side_buffer[.. bs]));
@@ -606,11 +609,6 @@ impl<'r, Sample> FrameReader<'r, Sample> where Sample: SignedInt {
                                               &mut self.side_buffer[.. bs]));
                         try!(subframe::decode(&mut bitstream, bps,
                                               &mut self.buffer[bs .. bs * 2]));
-
-                        // Widen the side channel to a 32-bit signed integer.
-                        for x in &mut self.side_buffer[.. bs] {
-                            *x = subframe::extend_sign_u32(*x as u32, bps + 1);
-                        }
 
                         // Then decode the side channel into the left channel.
                         try!(decode_right_side(&mut self.buffer[.. bs * 2],
@@ -624,11 +622,6 @@ impl<'r, Sample> FrameReader<'r, Sample> where Sample: SignedInt {
                                               &mut self.buffer[.. bs]));
                         try!(subframe::decode(&mut bitstream, bps + 1,
                                               &mut self.side_buffer[.. bs]));
-
-                        // Widen the side channel to a 32-bit signed integer.
-                        for x in &mut self.side_buffer[.. bs] {
-                            *x = subframe::extend_sign_u32(*x as u32, bps + 1);
-                        }
 
                         // Then decode mid-side channel into left-right.
                         try!(decode_mid_side(&mut self.buffer[.. bs * 2],
