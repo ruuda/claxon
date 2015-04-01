@@ -309,7 +309,9 @@ fn assert_not_too_wide<Sample>(max_bps: u8) {
 }
 
 /// Converts a buffer with left samples and a side channel in-place to left ++ right.
-fn decode_left_side<Sample: Int>(buffer: &mut [Sample], side: &[i32]) -> FlacResult<()> {
+fn decode_left_side<Sample>(buffer: &mut [Sample], side: &[i32])
+                            -> FlacResult<()>
+                            where Sample: super::Sample {
     // Computations are done on i32 in this function, so the Sample should not
     // be too wide.
     assert_not_too_wide::<Sample>(31); // TODO: Fail instead of panic.
@@ -320,7 +322,7 @@ fn decode_left_side<Sample: Int>(buffer: &mut [Sample], side: &[i32]) -> FlacRes
 
         // Left is correct already, only the right channel needs to be decoded.
         // side = left - right => right = left - side.
-        let right = num::cast(num::cast::<Sample, i32>(left).unwrap() - side[i]);
+        let right = Sample::from_i32(left.to_i32().unwrap() - side[i]);
         buffer[block_size + i] = try!(right.ok_or(Error::InvalidSideSample));
     }
 
@@ -495,7 +497,7 @@ pub struct FrameReader<'r, Sample> {
 /// Either a `Block` or an `Error`.
 pub type FrameResult<'b, Sample> = FlacResult<Block<'b, Sample>>;
 
-impl<'r, Sample> FrameReader<'r, Sample> where Sample: SignedInt {
+impl<'r, Sample> FrameReader<'r, Sample> where Sample: super::Sample {
 
     /// Creates a new frame reader that will yield at least one element.
     pub fn new(input: &'r mut io::Read) -> FrameReader<'r, Sample> {
@@ -515,7 +517,7 @@ impl<'r, Sample> FrameReader<'r, Sample> where Sample: SignedInt {
                 self.buffer = Vec::with_capacity(new_len);
             }
             let len = self.buffer.len();
-            self.buffer.extend(repeat(Int::zero()).take(new_len - len));
+            self.buffer.extend(repeat(Sample::zero()).take(new_len - len));
         }
     }
 

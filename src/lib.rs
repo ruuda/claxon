@@ -23,8 +23,8 @@
 #![feature(core, io)]
 
 use std::io;
-use std::ops::Add;
-use std::num;
+use std::ops::{Add, Div, Not, Rem, Sub};
+use std::num::{Zero, FromPrimitive, ToPrimitive};
 use error::{Error, FlacResult};
 use frame::{FrameReader};
 use input::ReadExt;
@@ -38,7 +38,10 @@ pub mod subframe;
 pub mod metadata;
 
 /// An trait that allows for interegers to be generic in width.
-pub trait Sample: Add<Output = Self> { }
+pub trait Sample: Zero +
+    Add<Output = Self> +
+    Copy + Clone +
+    FromPrimitive + ToPrimitive { }
 
 impl Sample for i8 { }
 impl Sample for i16 { }
@@ -111,8 +114,7 @@ impl<'r> FlacStream<'r> {
     }
 
     /// Returns an iterator that decodes a single frame on every iteration.
-    pub fn blocks<Sample>(&'r mut self) -> FrameReader<'r, Sample>
-        where Sample: num::SignedInt {
+    pub fn blocks<S: Sample>(&'r mut self) -> FrameReader<'r, S> {
         FrameReader::new(&mut self.input)
     }
 }
