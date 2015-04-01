@@ -391,8 +391,8 @@ fn decode_mid_side<Sample: Int>(buffer: &mut [Sample], side: &[i32]) -> FlacResu
         // TODO: Remove these assertions or add runtime validation; do not panic.
         let max_s: Sample = Int::max_value();
         let min_s: Sample = Int::min_value();
-        let max_side: i64 = num::cast::<Sample, i64>(max_s).unwrap() - num::cast(min_s).unwrap();
-        let min_side: i64 = num::cast::<Sample, i64>(min_s).unwrap() - num::cast(max_s).unwrap();
+        let max_side = max_s.to_i64().unwrap() - min_s.to_i64().unwrap();
+        let min_side = min_s.to_i64().unwrap() - max_s.to_i64().unwrap();
         assert!((side[i] as i64) <= max_side);
         assert!((side[i] as i64) >= min_side);
 
@@ -401,7 +401,7 @@ fn decode_mid_side<Sample: Int>(buffer: &mut [Sample], side: &[i32]) -> FlacResu
 
         // Double mid first, and then correct for truncated rounding that
         // will have occured if side is odd.
-        let mid = (mid << 1) | (side[i] & Int::one());
+        let mid = (mid << 1) | (side[i] & 1);
         let left = num::cast((mid + side[i]) >> 1);
         let right = num::cast((mid - side[i]) >> 1);
 

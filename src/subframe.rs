@@ -453,7 +453,6 @@ fn predict_lpc<Sample: Int>
     println!("  predicting using LPC predictor"); // TODO: Remove this.
 
     for i in 0 .. buffer.len() - window_size {
-
         // Manually do the windowing, because .windows() returns immutable slices.
         let window = &mut buffer[i .. i + window_size];
 
@@ -461,7 +460,7 @@ fn predict_lpc<Sample: Int>
         // samples, the last element of the window is the delta. Therefore,
         // predict based on the first #coefficients samples.
         let prediction = coefficients.iter().zip(window.iter())
-                                     .map(|(&c, &s)| c as i64 * num::cast(s).unwrap())
+                                     .map(|(&c, &s)| c as i64 * s.to_i64().unwrap())
                                      .sum() >> qlp_shift;
 
         // Cast the i64 back to the `Sample` type, which _should_ be safe after
