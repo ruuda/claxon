@@ -23,7 +23,8 @@
 #![feature(core, io)]
 
 use std::io;
-use std::num::SignedInt;
+use std::ops::Add;
+use std::num;
 use error::{Error, FlacResult};
 use frame::{FrameReader};
 use input::ReadExt;
@@ -35,6 +36,13 @@ pub mod error;
 pub mod frame;
 pub mod subframe;
 pub mod metadata;
+
+/// An trait that allows for interegers to be generic in width.
+pub trait Sample: Add<Output = Self> { }
+
+impl Sample for i8 { }
+impl Sample for i16 { }
+impl Sample for i32 { }
 
 /// A FLAC decoder that can decode the stream from the underlying reader.
 ///
@@ -104,7 +112,7 @@ impl<'r> FlacStream<'r> {
 
     /// Returns an iterator that decodes a single frame on every iteration.
     pub fn blocks<Sample>(&'r mut self) -> FrameReader<'r, Sample>
-        where Sample: SignedInt {
+        where Sample: num::SignedInt {
         FrameReader::new(&mut self.input)
     }
 }
