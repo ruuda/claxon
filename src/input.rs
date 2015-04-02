@@ -45,7 +45,7 @@ impl<R> ReadExt for R where R: io::Read {
             if progress > 0 {
                 n += progress;
             } else {
-                return Err(io::Error::new(io::ErrorKind::Other, "Failed to read enough bytes.", None));
+                return Err(io::Error::new(io::ErrorKind::Other, "Failed to read enough bytes."));
             }
         }
         Ok(())
@@ -55,7 +55,7 @@ impl<R> ReadExt for R where R: io::Read {
         // Read a single byte.
         let mut buf = [0u8; 1];
         if try!(self.read(&mut buf)) != 1 {
-            Err(io::Error::new(io::ErrorKind::Other, "Failed to read byte.", None))
+            Err(io::Error::new(io::ErrorKind::Other, "Failed to read byte."))
         } else {
             Ok(buf[0])
         }
@@ -97,24 +97,24 @@ fn verify_read_into() {
 #[test]
 fn verify_read_be_u16() {
     let mut reader = io::Cursor::new(vec!(0u8, 2, 129, 89, 122));
-    assert_eq!(reader.read_be_u16(), Ok(2));
-    assert_eq!(reader.read_be_u16(), Ok(33113));
+    assert_eq!(reader.read_be_u16().ok(), Some(2));
+    assert_eq!(reader.read_be_u16().ok(), Some(33113));
     assert!(reader.read_be_u16().is_err());
 }
 
 #[test]
 fn verify_read_be_u24() {
     let mut reader = io::Cursor::new(vec!(0u8, 0, 2, 0x8f, 0xff, 0xf3, 122));
-    assert_eq!(reader.read_be_u24(), Ok(2));
-    assert_eq!(reader.read_be_u24(), Ok(9_437_171));
+    assert_eq!(reader.read_be_u24().ok(), Some(2u16));
+    assert_eq!(reader.read_be_u24().ok(), Some(9_437_171));
     assert!(reader.read_be_u24().is_err());
 }
 
 #[test]
 fn verify_read_be_u32() {
     let mut reader = io::Cursor::new(vec!(0u8, 0, 0, 2, 0x80, 0x01, 0xff, 0xe9, 0));
-    assert_eq!(reader.read_be_u32(), Ok(2));
-    assert_eq!(reader.read_be_u32(), Ok(2_147_614_697));
+    assert_eq!(reader.read_be_u32().ok(), Some(2));
+    assert_eq!(reader.read_be_u32().ok(), Some(2_147_614_697));
     assert!(reader.read_be_u32().is_err());
 }
 
