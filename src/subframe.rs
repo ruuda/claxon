@@ -18,7 +18,6 @@
 
 use std::iter::AdditiveIterator;
 use std::num;
-use std::num::Int;
 use error::{Error, FlacResult};
 use input::Bitstream;
 
@@ -169,12 +168,12 @@ fn verify_extend_sign_u32() {
 ///
 /// This function takes the unsigned value and converts it into a signed
 /// number.
-fn rice_to_signed<Sample: Int>(val: Sample) -> Sample {
+fn rice_to_signed<Sample: super::Sample>(val: Sample) -> Sample {
     // This uses bitwise arithmetic, because a literal cannot have type `Sample`,
     // I believe this is the most concise way to express the decoding.
-    if val & Int::one() == Int::one() {
-        let zero: Sample = Int::zero();
-        zero.wrapping_sub(Int::one()) - (val >> 1)
+    if val & Sample::one() == Sample::one() {
+        let zero = Sample::zero();
+        zero.wrapping_sub(Sample::one()) - (val >> 1)
     } else {
         val >> 1
     }
@@ -196,7 +195,7 @@ fn verify_rice_to_signed() {
 }
 
 // TODO: Remove this function.
-fn show_sample<Sample: Int>(x: Sample) -> Option<i64> {
+fn show_sample<Sample: super::Sample>(x: Sample) -> Option<i64> {
     num::cast(x)
 }
 
@@ -215,7 +214,7 @@ fn assert_narrow_enough<Sample>(max_bps: u8) {
 /// Decodes a subframe into the provided block-size buffer.
 ///
 /// It is assumed that the length of the buffer is the block size.
-pub fn decode<Sample: Int>
+pub fn decode<Sample: super::Sample>
              (input: &mut Bitstream,
               bps: u8,
               buffer: &mut [Sample])
@@ -251,7 +250,7 @@ pub fn decode<Sample: Int>
     Ok(())
 }
 
-fn decode_residual<Sample: Int>
+fn decode_residual<Sample: super::Sample>
                   (input: &mut Bitstream,
                    bps: u8,
                    block_size: u16,
@@ -267,7 +266,7 @@ fn decode_residual<Sample: Int>
     }
 }
 
-fn decode_partitioned_rice<Sample: Int>
+fn decode_partitioned_rice<Sample: super::Sample>
                           (input: &mut Bitstream,
                            bps: u8,
                            block_size: u16,
@@ -311,7 +310,7 @@ fn decode_partitioned_rice<Sample: Int>
     Ok(())
 }
 
-fn decode_rice_partition<Sample: Int>
+fn decode_rice_partition<Sample: super::Sample>
                         (input: &mut Bitstream,
                          bps: u8,
                          buffer: &mut [Sample])
@@ -333,7 +332,7 @@ fn decode_rice_partition<Sample: Int>
 
         panic!("unencoded binary is not yet implemented"); // TODO
     } else {
-        let max_sample: Sample = Int::max_value();
+        let max_sample = Sample::max();
         let max_q = max_sample >> rice_param as usize;
 
         // TODO: It is possible for the rice_param to be larger than the
@@ -343,10 +342,10 @@ fn decode_rice_partition<Sample: Int>
             // First part of the sample is the quotient, unary encoded.
             // This means that there are q zeroes, and then a one. There
             // should not be more than max_q consecutive zeroes.
-            let mut q: Sample = Int::zero();
+            let mut q = Sample::zero();
             while try!(input.read_leq_u8(1)) == 0 {
                 if q == max_q { return Err(Error::InvalidRiceCode); }
-                q = q + Int::one();
+                q = q + Sample::one();
             }
 
             // What follows is the remainder in `rice_param` bits. Because
@@ -362,7 +361,7 @@ fn decode_rice_partition<Sample: Int>
     Ok(())
 }
 
-fn decode_partitioned_rice2<Sample: Int>
+fn decode_partitioned_rice2<Sample: super::Sample>
                            (input: &mut Bitstream,
                             bps: u8,
                             block_size: u16,
@@ -373,7 +372,7 @@ fn decode_partitioned_rice2<Sample: Int>
     panic!("partitioned_rice2 is not yet implemented"); // TODO
 }
 
-fn decode_constant<Sample: Int>
+fn decode_constant<Sample: super::Sample>
                   (input: &mut Bitstream,
                    bps: u8,
                    buffer: &mut [Sample])
@@ -391,7 +390,7 @@ fn decode_constant<Sample: Int>
     Ok(())
 }
 
-fn decode_verbatim<Sample: Int>
+fn decode_verbatim<Sample: super::Sample>
                   (input: &mut Bitstream,
                    bps: u8,
                    buffer: &mut [Sample])
@@ -410,7 +409,7 @@ fn decode_verbatim<Sample: Int>
     Ok(())
 }
 
-fn decode_fixed<Sample: Int>
+fn decode_fixed<Sample: super::Sample>
                (input: &mut Bitstream,
                 bps: u8,
                 order: u8,
@@ -435,7 +434,7 @@ fn decode_fixed<Sample: Int>
     Ok(())
 }
 
-fn predict_lpc<Sample: Int>
+fn predict_lpc<Sample: super::Sample>
               (coefficients: &[i16],
                qlp_shift: i16,
                buffer: &mut [Sample])
@@ -475,7 +474,7 @@ fn predict_lpc<Sample: Int>
     Ok(())
 }
 
-fn decode_lpc<Sample: Int>
+fn decode_lpc<Sample: super::Sample>
              (input: &mut Bitstream,
               bps: u8,
               order: u8,

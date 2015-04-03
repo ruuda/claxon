@@ -381,7 +381,9 @@ fn verify_decode_right_side() {
 }
 
 /// Converts a buffer with mid samples and a side channel in-place to left ++ right.
-fn decode_mid_side<Sample: Int>(buffer: &mut [Sample], side: &[i32]) -> FlacResult<()> {
+fn decode_mid_side<Sample>(buffer: &mut [Sample], side: &[i32])
+                           -> FlacResult<()>
+                           where Sample: super::Sample {
     // Computations are done on i32 in this function, so the Sample should not
     // be too wide.
     assert_not_too_wide::<Sample>(31); // TODO: Fail instead of panic.
@@ -448,7 +450,7 @@ pub struct Block<'b, Sample> where Sample: 'b {
     samples: &'b [Sample]
 }
 
-impl <'b, Sample> Block<'b, Sample> where Sample: SignedInt {
+impl <'b, Sample> Block<'b, Sample> where Sample: super::Sample {
     fn new(time: u64, bs: u16, buffer: &'b [Sample]) -> Block<'b, Sample> {
         Block {
             first_sample_number: time,
@@ -529,7 +531,7 @@ impl<'r, Sample> FrameReader<'r, Sample> where Sample: super::Sample {
                 self.side_buffer = Vec::with_capacity(new_len);
             }
             let len = self.side_buffer.len();
-            self.side_buffer.extend(repeat(Int::zero()).take(new_len - len));
+            self.side_buffer.extend(repeat(0).take(new_len - len));
         }
     }
 
@@ -587,7 +589,7 @@ impl<'r, Sample> FrameReader<'r, Sample> where Sample: super::Sample {
                 // Is there a better way?
                 let side_len = self.side_buffer.len();
                 if side_len < bs {
-                    self.side_buffer.extend(repeat(Int::zero()).take(bs - side_len));
+                    self.side_buffer.extend(repeat(0).take(bs - side_len));
                 }
 
                 match header.channel_assignment {

@@ -24,7 +24,7 @@
 
 use std::io;
 use std::ops::{Add, Div, Not, Rem, Sub};
-use std::num::{Zero, FromPrimitive, ToPrimitive};
+use std::num::{FromPrimitive, One, ToPrimitive, Zero};
 use error::{Error, FlacResult};
 use frame::{FrameReader};
 use input::ReadExt;
@@ -38,14 +38,18 @@ pub mod subframe;
 pub mod metadata;
 
 /// An trait that allows for interegers to be generic in width.
-pub trait Sample: Zero +
+pub trait Sample: Zero + One +
     Add<Output = Self> +
     Copy + Clone +
-    FromPrimitive + ToPrimitive { }
+    FromPrimitive + ToPrimitive {
 
-impl Sample for i8 { }
-impl Sample for i16 { }
-impl Sample for i32 { }
+    /// Returns the maximal value that the type can contain.
+    fn max() -> Self;
+}
+
+impl Sample for i8 { fn max() -> i8 { use std::i8; i8::MAX } }
+impl Sample for i16 { fn max() -> i16 { use std::i16; i16::MAX } }
+impl Sample for i32 { fn max() -> i32 { use std::i32; i32::MAX } }
 
 /// A FLAC decoder that can decode the stream from the underlying reader.
 ///
