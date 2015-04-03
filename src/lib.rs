@@ -45,11 +45,43 @@ pub trait Sample: Zero + One +
 
     /// Returns the maximal value that the type can contain.
     fn max() -> Self;
+
+    /// Adds with wraparound on overflow.
+    fn wrapping_add(self, other: Self) -> Self;
 }
 
-impl Sample for i8 { fn max() -> i8 { use std::i8; i8::MAX } }
-impl Sample for i16 { fn max() -> i16 { use std::i16; i16::MAX } }
-impl Sample for i32 { fn max() -> i32 { use std::i32; i32::MAX } }
+impl Sample for i8 {
+    fn max() -> i8 {
+        use std::i8;
+        i8::MAX
+    }
+
+    fn wrapping_add(self, other: i8) -> i8 {
+        self.wrapping_add(other)
+    }
+}
+
+impl Sample for i16 {
+    fn max() -> i16 {
+        use std::i16;
+        i16::MAX
+    }
+
+    fn wrapping_add(self, other: i16) -> i16 {
+        self.wrapping_add(other)
+    }
+}
+
+impl Sample for i32 {
+    fn max() -> i32 {
+        use std::i32;
+        i32::MAX
+    }
+
+    fn wrapping_add(self, other: i32) -> i32 {
+        self.wrapping_add(other)
+    }
+}
 
 /// A FLAC decoder that can decode the stream from the underlying reader.
 ///
