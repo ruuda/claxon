@@ -23,7 +23,8 @@
 #![feature(core, io)]
 
 use std::io;
-use std::ops::{Add, Div, Not, Rem, Sub};
+use std::cmp::Eq;
+use std::ops::{Add, BitOr, Div, Not, Rem, Shl, Sub};
 use std::num::{FromPrimitive, One, ToPrimitive, Zero};
 use error::{Error, FlacResult};
 use frame::{FrameReader};
@@ -40,7 +41,9 @@ pub mod metadata;
 /// An trait that allows for interegers to be generic in width.
 pub trait Sample: Zero + One +
     Add<Output = Self> +
-    Copy + Clone +
+    Shl<usize, Output = Self> +
+    BitOr<Self, Output = Self> +
+    Copy + Clone + Eq +
     FromPrimitive + ToPrimitive {
 
     /// Returns the maximal value that the type can contain.

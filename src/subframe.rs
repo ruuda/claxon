@@ -352,7 +352,7 @@ fn decode_rice_partition<Sample: super::Sample>
             // rice_param is at most 14, this fits in an u16. TODO: for
             // the RICE2 partition it will not fit.
             let r_u16 = try!(input.read_leq_u16(rice_param));
-            let r: Sample = num::cast(r_u16).unwrap();
+            let r = Sample::from_u16(r_u16).unwrap();
 
             *sample = rice_to_signed((q << rice_param as usize) | r);
         }
@@ -381,7 +381,7 @@ fn decode_constant<Sample: super::Sample>
     // samples. The unwrap is safe, because it has been verified before
     // that the `Sample` type is wide enough for the bits per sample.
     let sample_u32 = try!(input.read_leq_u32(bps));
-    let sample = num::cast(sample_u32).unwrap();
+    let sample = Sample::from_u32(sample_u32).unwrap();
 
     for s in buffer.iter_mut() {
         *s = sample;
@@ -403,7 +403,7 @@ fn decode_verbatim<Sample: super::Sample>
         // The unwrap is safe, because it has been verified before that
         // the `Sample` type is wide enough for the bits per sample.
         let sample_u32 = try!(input.read_leq_u32(bps));
-        *s = num::cast(extend_sign_u32(sample_u32, bps)).unwrap();
+        *s = Sample::from_i32(extend_sign_u32(sample_u32, bps)).unwrap();
     }
 
     Ok(())
@@ -464,7 +464,7 @@ fn predict_lpc<Sample: super::Sample>
 
         // Cast the i64 back to the `Sample` type, which _should_ be safe after
         // the shift.
-        let prediction: FlacResult<Sample> = num::cast(prediction).ok_or(Error::InvalidLpcSample);
+        let prediction = Sample::from_i64(prediction).ok_or(Error::InvalidLpcSample);
 
         // The delta is stored, so the sample is the prediction + delta.
         let sample = window[coefficients.len()].wrapping_add(try!(prediction));
