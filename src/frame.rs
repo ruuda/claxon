@@ -365,17 +365,17 @@ fn decode_right_side<Sample>(buffer: &mut [Sample], side: &[i32])
 
 #[test]
 fn verify_decode_right_side() {
-    let mut buffer = vec!(0i8,    0,    0,    0,   0,    0,   0,   0,
-                           -5,  -33,  -59, -125, 127,   89,   7,  3);
-    let side =      vec!(7i32,   38,  142,  238,   0, -152, -52, -18);
-    let result =     vec!(2i8,    5,   83,  113, 127,  -63, -45, -15,
-                           -5,  -33,  -59, -125, 127,   89,   7,   3);
+    let mut buffer = vec!(0i8,  0,   0,    0,   0,    0,   0,   0,
+                           -5, -33, -59, -125, 127,   89,   7,  3);
+    let side =         vec!(7,  38, 142,  238,   0, -152, -52, -18);
+    let result =     vec!(2i8,   5,  83,  113, 127,  -63, -45, -15,
+                           -5, -33, -59, -125, 127,   89,   7,   3);
     decode_right_side(&mut buffer, &side).ok().expect("decoding is wrong");
     assert_eq!(buffer, result);
 
     // Overflow should fail.
     let mut buffer = vec!(0i8, 127);
-    let side = vec!(1i32);
+    let side = vec!(1);
     decode_right_side(&mut buffer, &side).err().expect("error detection is wrong");
 }
 
@@ -423,17 +423,17 @@ fn decode_mid_side<Sample>(buffer: &mut [Sample], side: &[i32])
 
 #[test]
 fn verify_decode_mid_side() {
-    let mut buffer = vec!(-2i8,  -14,  12,   -6, 127,   13, -19,  -6,
-                             0,    1,   2,    3,   4,    5,   6,   7);
-    let side =       vec!(7i32,   38, 142,  238,   0, -152, -52, -18);
-    let result =      vec!(2i8,    5,  83,  113, 127,  -63, -45, -15,
-                            -5,  -33, -59, -125, 127,   89,   7,   3);
+    let mut buffer = vec!(-2i8, -14,  12,   -6, 127,   13, -19,  -6,
+                             0,   1,   2,    3,   4,    5,   6,   7);
+    let side =          vec!(7,  38, 142,  238,   0, -152, -52, -18);
+    let result =      vec!(2i8,   5,  83,  113, 127,  -63, -45, -15,
+                            -5, -33, -59, -125, 127,   89,   7,   3);
     decode_mid_side(&mut buffer, &side).ok().expect("decoding is wrong");
     assert_eq!(buffer, result);
 
     // Overflow should fail.
     let mut buffer = vec!(127i8, 0);
-    let side = vec!(-1i32);
+    let side = vec!(-1);
     decode_mid_side(&mut buffer, &side).err().expect("error detection is wrong");
 }
 
