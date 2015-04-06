@@ -2,9 +2,8 @@
 // Copyright (C) 2014-2015 Ruud van Asseldonk
 //
 // This program is free software: you can redistribute it and/or modify
-// it under the terms of the GNU General Public License as published by
-// the Free Software Foundation, either version 3 of the License, or
-// (at your option) any later version.
+// it under the terms of the GNU General Public License, version 3,
+// as published by the Free Software Foundation.
 //
 // This program is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -25,19 +24,19 @@ use error::{Error, FlacResult};
 use input::{Bitstream, ReadExt};
 use subframe;
 
-#[derive(Copy)]
+#[derive(Clone, Copy)]
 enum BlockingStrategy {
     Fixed,
     Variable
 }
 
-#[derive(Copy)]
+#[derive(Clone, Copy)]
 enum BlockTime {
     FrameNumber(u32),
     SampleNumber(u64)
 }
 
-#[derive(Copy, Debug)]
+#[derive(Clone, Copy, Debug)]
 enum ChannelAssignment {
     /// The `n: u8` channels are coded as-is.
     Independent(u8),
@@ -49,7 +48,7 @@ enum ChannelAssignment {
     MidSideStereo
 }
 
-#[derive(Copy)]
+#[derive(Clone, Copy)]
 struct FrameHeader {
     pub block_time: BlockTime,
     pub block_size: u16,
