@@ -19,10 +19,12 @@
 
 #![warn(missing_docs)]
 #![allow(dead_code)] // TODO: Remove for v0.1
-#![feature(core, io)]
+#![feature(core)]
 
 use std::io;
-use std::num::SignedInt;
+use std::cmp::Eq;
+use std::ops::{Add, BitAnd, BitOr, Shl, Shr, Sub};
+use std::num::{FromPrimitive, ToPrimitive};
 use error::{Error, FlacResult};
 use frame::{FrameReader};
 use input::ReadExt;
@@ -34,6 +36,103 @@ pub mod error;
 pub mod frame;
 pub mod subframe;
 pub mod metadata;
+
+/// An trait that allows for interegers to be generic in width.
+pub trait Sample: Copy + Clone + Eq +
+    Add<Output = Self> +
+    Sub<Output = Self> +
+    Shl<usize, Output = Self> +
+    Shr<usize, Output = Self> +
+    BitOr<Self, Output = Self> +
+    BitAnd<Self, Output = Self> +
+    FromPrimitive + ToPrimitive {
+
+    /// Returns the maximal value that the type can contain.
+    // TODO: is this actually required, can we do without in non-debug versions?
+    fn max() -> Self;
+
+    /// Returns the minimal value that the type can contain.
+    // TODO: is this actually required, can we do without in non-debug versions?
+    fn min() -> Self;
+
+    /// Returns 0.
+    // TODO: could be an associated constant once those land.
+    fn zero() -> Self {
+        Self::from_i8(0).unwrap()
+    }
+
+    /// Returns 1;
+    // TODO: could be an associated constant once those land.
+    fn one() -> Self {
+        Self::from_i8(1).unwrap()
+    }
+
+    /// Adds with wraparound on overflow.
+    fn wrapping_add(self, other: Self) -> Self;
+
+    /// Subtracts with wraparound on overflow.
+    fn wrapping_sub(self, other: Self) -> Self;
+}
+
+impl Sample for i8 {
+    fn max() -> i8 {
+        use std::i8;
+        i8::MAX
+    }
+
+    fn min() -> i8 {
+        use std::i8;
+        i8::MIN
+    }
+
+    fn wrapping_add(self, other: i8) -> i8 {
+        self.wrapping_add(other)
+    }
+
+    fn wrapping_sub(self, other: i8) -> i8 {
+        self.wrapping_sub(other)
+    }
+}
+
+impl Sample for i16 {
+    fn max() -> i16 {
+        use std::i16;
+        i16::MAX
+    }
+
+    fn min() -> i16 {
+        use std::i16;
+        i16::MIN
+    }
+
+    fn wrapping_add(self, other: i16) -> i16 {
+        self.wrapping_add(other)
+    }
+
+    fn wrapping_sub(self, other: i16) -> i16 {
+        self.wrapping_sub(other)
+    }
+}
+
+impl Sample for i32 {
+    fn max() -> i32 {
+        use std::i32;
+        i32::MAX
+    }
+
+    fn min() -> i32 {
+        use std::i32;
+        i32::MIN
+    }
+
+    fn wrapping_add(self, other: i32) -> i32 {
+        self.wrapping_add(other)
+    }
+
+    fn wrapping_sub(self, other: i32) -> i32 {
+        self.wrapping_sub(other)
+    }
+}
 
 /// A FLAC decoder that can decode the stream from the underlying reader.
 ///
@@ -102,8 +201,7 @@ impl<'r> FlacStream<'r> {
     }
 
     /// Returns an iterator that decodes a single frame on every iteration.
-    pub fn blocks<Sample>(&'r mut self) -> FrameReader<'r, Sample>
-        where Sample: SignedInt {
+    pub fn blocks<S: Sample>(&'r mut self) -> FrameReader<'r, S> {
         FrameReader::new(&mut self.input)
     }
 }

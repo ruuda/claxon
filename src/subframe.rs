@@ -16,8 +16,6 @@
 //! The `subframe` module deals with subframes that make up a frame of the FLAC stream.
 
 use std::iter::AdditiveIterator;
-use std::num;
-use std::num::Int;
 use error::{Error, FlacResult};
 use input::Bitstream;
 
@@ -168,12 +166,12 @@ fn verify_extend_sign_u32() {
 ///
 /// This function takes the unsigned value and converts it into a signed
 /// number.
-fn rice_to_signed<Sample: Int>(val: Sample) -> Sample {
+fn rice_to_signed<Sample: super::Sample>(val: Sample) -> Sample {
     // This uses bitwise arithmetic, because a literal cannot have type `Sample`,
     // I believe this is the most concise way to express the decoding.
-    if val & Int::one() == Int::one() {
-        let zero: Sample = Int::zero();
-        zero.wrapping_sub(Int::one()) - (val >> 1)
+    if val & Sample::one() == Sample::one() {
+        let zero = Sample::zero();
+        zero.wrapping_sub(Sample::one()) - (val >> 1)
     } else {
         val >> 1
     }
@@ -181,22 +179,22 @@ fn rice_to_signed<Sample: Int>(val: Sample) -> Sample {
 
 #[test]
 fn verify_rice_to_signed() {
-    assert_eq!(rice_to_signed(0u8), 0u8);
-    assert_eq!(rice_to_signed(1u8), 0xffu8 - 0);
-    assert_eq!(rice_to_signed(2u8), 1u8);
-    assert_eq!(rice_to_signed(3u8), 0xffu8 - 1);
-    assert_eq!(rice_to_signed(4u8), 2u8);
+    assert_eq!(rice_to_signed(0_i8), 0_i8);
+    assert_eq!(rice_to_signed(1_i8), -1_i8);
+    assert_eq!(rice_to_signed(2_i8), 1_i8);
+    assert_eq!(rice_to_signed(3_i8), -2_i8);
+    assert_eq!(rice_to_signed(4_i8), 2_i8);
 
-    assert_eq!(rice_to_signed(3u16), 0xffffu16 - 1);
-    assert_eq!(rice_to_signed(4u16), 2u16);
+    assert_eq!(rice_to_signed(3_i16), -2_i16);
+    assert_eq!(rice_to_signed(4_i16), 2_i16);
 
-    assert_eq!(rice_to_signed(3u32), 0xffffffffu32 - 1);
-    assert_eq!(rice_to_signed(4u32), 2u32);
+    assert_eq!(rice_to_signed(3_i32), -2_i32);
+    assert_eq!(rice_to_signed(4_i32), 2_i32);
 }
 
 // TODO: Remove this function.
-fn show_sample<Sample: Int>(x: Sample) -> Option<i64> {
-    num::cast(x)
+fn show_sample<Sample: super::Sample>(x: Sample) -> Option<i64> {
+    x.to_i64()
 }
 
 fn assert_wide_enough<Sample>(bps: u8) {
@@ -214,7 +212,7 @@ fn assert_narrow_enough<Sample>(max_bps: u8) {
 /// Decodes a subframe into the provided block-size buffer.
 ///
 /// It is assumed that the length of the buffer is the block size.
-pub fn decode<Sample: Int>
+pub fn decode<Sample: super::Sample>
              (input: &mut Bitstream,
               bps: u8,
               buffer: &mut [Sample])
@@ -250,7 +248,7 @@ pub fn decode<Sample: Int>
     Ok(())
 }
 
-fn decode_residual<Sample: Int>
+fn decode_residual<Sample: super::Sample>
                   (input: &mut Bitstream,
                    bps: u8,
                    block_size: u16,
@@ -266,7 +264,7 @@ fn decode_residual<Sample: Int>
     }
 }
 
-fn decode_partitioned_rice<Sample: Int>
+fn decode_partitioned_rice<Sample: super::Sample>
                           (input: &mut Bitstream,
                            bps: u8,
                            block_size: u16,
@@ -310,7 +308,7 @@ fn decode_partitioned_rice<Sample: Int>
     Ok(())
 }
 
-fn decode_rice_partition<Sample: Int>
+fn decode_rice_partition<Sample: super::Sample>
                         (input: &mut Bitstream,
                          bps: u8,
                          buffer: &mut [Sample])
@@ -332,7 +330,7 @@ fn decode_rice_partition<Sample: Int>
 
         panic!("unencoded binary is not yet implemented"); // TODO
     } else {
-        let max_sample: Sample = Int::max_value();
+        let max_sample = Sample::max();
         let max_q = max_sample >> rice_param as usize;
 
         // TODO: It is possible for the rice_param to be larger than the
@@ -342,17 +340,17 @@ fn decode_rice_partition<Sample: Int>
             // First part of the sample is the quotient, unary encoded.
             // This means that there are q zeroes, and then a one. There
             // should not be more than max_q consecutive zeroes.
-            let mut q: Sample = Int::zero();
+            let mut q = Sample::zero();
             while try!(input.read_leq_u8(1)) == 0 {
                 if q == max_q { return Err(Error::InvalidRiceCode); }
-                q = q + Int::one();
+                q = q + Sample::one();
             }
 
             // What follows is the remainder in `rice_param` bits. Because
             // rice_param is at most 14, this fits in an u16. TODO: for
             // the RICE2 partition it will not fit.
             let r_u16 = try!(input.read_leq_u16(rice_param));
-            let r: Sample = num::cast(r_u16).unwrap();
+            let r = Sample::from_u16(r_u16).unwrap();
 
             *sample = rice_to_signed((q << rice_param as usize) | r);
         }
@@ -361,7 +359,7 @@ fn decode_rice_partition<Sample: Int>
     Ok(())
 }
 
-fn decode_partitioned_rice2<Sample: Int>
+fn decode_partitioned_rice2<Sample: super::Sample>
                            (input: &mut Bitstream,
                             bps: u8,
                             block_size: u16,
@@ -372,7 +370,7 @@ fn decode_partitioned_rice2<Sample: Int>
     panic!("partitioned_rice2 is not yet implemented"); // TODO
 }
 
-fn decode_constant<Sample: Int>
+fn decode_constant<Sample: super::Sample>
                   (input: &mut Bitstream,
                    bps: u8,
                    buffer: &mut [Sample])
@@ -381,7 +379,7 @@ fn decode_constant<Sample: Int>
     // samples. The unwrap is safe, because it has been verified before
     // that the `Sample` type is wide enough for the bits per sample.
     let sample_u32 = try!(input.read_leq_u32(bps));
-    let sample = num::cast(sample_u32).unwrap();
+    let sample = Sample::from_u32(sample_u32).unwrap();
 
     for s in buffer.iter_mut() {
         *s = sample;
@@ -390,7 +388,7 @@ fn decode_constant<Sample: Int>
     Ok(())
 }
 
-fn decode_verbatim<Sample: Int>
+fn decode_verbatim<Sample: super::Sample>
                   (input: &mut Bitstream,
                    bps: u8,
                    buffer: &mut [Sample])
@@ -403,13 +401,13 @@ fn decode_verbatim<Sample: Int>
         // The unwrap is safe, because it has been verified before that
         // the `Sample` type is wide enough for the bits per sample.
         let sample_u32 = try!(input.read_leq_u32(bps));
-        *s = num::cast(extend_sign_u32(sample_u32, bps)).unwrap();
+        *s = Sample::from_i32(extend_sign_u32(sample_u32, bps)).unwrap();
     }
 
     Ok(())
 }
 
-fn decode_fixed<Sample: Int>
+fn decode_fixed<Sample: super::Sample>
                (input: &mut Bitstream,
                 bps: u8,
                 order: u8,
@@ -434,7 +432,7 @@ fn decode_fixed<Sample: Int>
     Ok(())
 }
 
-fn predict_lpc<Sample: Int>
+fn predict_lpc<Sample: super::Sample>
               (coefficients: &[i16],
                qlp_shift: i16,
                buffer: &mut [Sample])
@@ -452,7 +450,6 @@ fn predict_lpc<Sample: Int>
     println!("  predicting using LPC predictor"); // TODO: Remove this.
 
     for i in 0 .. buffer.len() - window_size {
-
         // Manually do the windowing, because .windows() returns immutable slices.
         let window = &mut buffer[i .. i + window_size];
 
@@ -460,12 +457,12 @@ fn predict_lpc<Sample: Int>
         // samples, the last element of the window is the delta. Therefore,
         // predict based on the first #coefficients samples.
         let prediction = coefficients.iter().zip(window.iter())
-                                     .map(|(&c, &s)| c as i64 * num::cast(s).unwrap())
+                                     .map(|(&c, &s)| c as i64 * s.to_i64().unwrap())
                                      .sum() >> qlp_shift;
 
         // Cast the i64 back to the `Sample` type, which _should_ be safe after
         // the shift.
-        let prediction: FlacResult<Sample> = num::cast(prediction).ok_or(Error::InvalidLpcSample);
+        let prediction = Sample::from_i64(prediction).ok_or(Error::InvalidLpcSample);
 
         // The delta is stored, so the sample is the prediction + delta.
         let sample = window[coefficients.len()].wrapping_add(try!(prediction));
@@ -475,7 +472,7 @@ fn predict_lpc<Sample: Int>
     Ok(())
 }
 
-fn decode_lpc<Sample: Int>
+fn decode_lpc<Sample: super::Sample>
              (input: &mut Bitstream,
               bps: u8,
               order: u8,

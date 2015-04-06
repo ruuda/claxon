@@ -83,5 +83,28 @@ impl From<io::Error> for Error {
     }
 }
 
+impl PartialEq for Error {
+    fn eq(&self, other: &Error) -> bool {
+        use error::Error::{InvalidStreamHeader,
+            InvalidMetadataBlockType,
+            InvalidMetadataBlockLength,
+            // ...
+            InvalidVarLengthInt
+        };
+        match (self, other) {
+            (&InvalidStreamHeader, &InvalidStreamHeader) => true,
+            (&InvalidMetadataBlockType, &InvalidMetadataBlockType) => true,
+            (&InvalidMetadataBlockLength, &InvalidMetadataBlockLength) => true,
+            (&InvalidVarLengthInt, &InvalidVarLengthInt) => true,
+            // TODO: this is not complete, yet.
+            // TODO: this is both cumbersome and error-prone. The _ case is
+            // required for all non-equal combinations, but it will prevent the
+            // compiler from emitting a warning once a new enum variant is
+            // added. There must be a better way, right?
+            _ => false
+        }
+    }
+}
+
 /// Either `T` on success, or an `Error` on failure.
 pub type FlacResult<T> = Result<T, Error>;

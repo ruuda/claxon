@@ -17,8 +17,6 @@
 
 use std::io;
 use std::iter::repeat;
-use std::num;
-use std::num::{Int, SignedInt};
 use crc::Crc8Reader;
 use error::{Error, FlacResult};
 use input::{Bitstream, ReadExt};
@@ -308,7 +306,9 @@ fn assert_not_too_wide<Sample>(max_bps: u8) {
 }
 
 /// Converts a buffer with left samples and a side channel in-place to left ++ right.
-fn decode_left_side<Sample: Int>(buffer: &mut [Sample], side: &[i32]) -> FlacResult<()> {
+fn decode_left_side<Sample>(buffer: &mut [Sample], side: &[i32])
+                            -> FlacResult<()>
+                            where Sample: super::Sample {
     // Computations are done on i32 in this function, so the Sample should not
     // be too wide.
     assert_not_too_wide::<Sample>(31); // TODO: Fail instead of panic.
@@ -319,7 +319,7 @@ fn decode_left_side<Sample: Int>(buffer: &mut [Sample], side: &[i32]) -> FlacRes
 
         // Left is correct already, only the right channel needs to be decoded.
         // side = left - right => right = left - side.
-        let right = num::cast(num::cast::<Sample, i32>(left).unwrap() - side[i]);
+        let right = Sample::from_i32(left.to_i32().unwrap() - side[i]);
         buffer[block_size + i] = try!(right.ok_or(Error::InvalidSideSample));
     }
 
@@ -328,22 +328,24 @@ fn decode_left_side<Sample: Int>(buffer: &mut [Sample], side: &[i32]) -> FlacRes
 
 #[test]
 fn verify_decode_left_side() {
-    let mut buffer =   vec!(2u8,    5,   83, 113, 127, 193, 211, 241,
-                              0,    0,    0,   0,   0,   0,   0,   0);
-    let side =     vec!(-249i32, -218, -114, -18,   0, 104, 204, 238);
-    let result =       vec!(2u8,    5,   83, 113, 127, 193, 211, 241,
-                            251,  223,  197, 131, 127,  89,   7,   3);
+    let mut buffer = vec!(2i8,    5,   83, 113, 127, -63, -45, -15,
+                            0,    0,    0,    0,   0,   0,   0,   0);
+    let side =         vec!(7,  38, 142,  238,   0, -152, -52, -18);
+    let result =     vec!(2i8,   5,  83,  113, 127,  -63, -45, -15,
+                           -5, -33, -59, -125, 127,   89,   7,   3);
     decode_left_side(&mut buffer, &side).ok().unwrap();
     assert_eq!(buffer, result);
 
     // Overflow should fail.
-    let mut buffer = vec!(255u8, 0);
-    let side = vec!(-1i32);
+    let mut buffer = vec!(127i8, 0);
+    let side = vec!(-1);
     decode_left_side(&mut buffer, &side).err().unwrap();
 }
 
 /// Converts a buffer with right samples and a side channel in-place to left ++ right.
-fn decode_right_side<Sample: Int>(buffer: &mut [Sample], side: &[i32]) -> FlacResult<()> {
+fn decode_right_side<Sample>(buffer: &mut [Sample], side: &[i32])
+                             -> FlacResult<()>
+                             where Sample: super::Sample {
     // Computations are done on i32 in this function, so the Sample should not
     // be too wide.
     assert_not_too_wide::<Sample>(31); // TODO: Fail instead of panic.
@@ -354,7 +356,7 @@ fn decode_right_side<Sample: Int>(buffer: &mut [Sample], side: &[i32]) -> FlacRe
 
         // Right is correct already, only the left channel needs to be decoded.
         // side = left - right => left = side + right.
-        let left = num::cast(side[i] + num::cast::<Sample, i32>(right).unwrap());
+        let left = Sample::from_i32(side[i] + right.to_i32().unwrap());
         buffer[i] = try!(left.ok_or(Error::InvalidSideSample));
     }
 
@@ -363,35 +365,37 @@ fn decode_right_side<Sample: Int>(buffer: &mut [Sample], side: &[i32]) -> FlacRe
 
 #[test]
 fn verify_decode_right_side() {
-    let mut buffer =   vec!(0u8,    0,    0,   0,   0,   0,   0,   0,
-                            251,  223,  197, 131, 127,  89,   7,   3);
-    let side =     vec!(-249i32, -218, -114, -18,   0, 104, 204, 238);
-    let result =       vec!(2u8,    5,   83, 113, 127, 193, 211, 241,
-                            251,  223,  197, 131, 127,  89,   7,   3);
-    decode_right_side(&mut buffer, &side).ok().unwrap();
+    let mut buffer = vec!(0i8,  0,   0,    0,   0,    0,   0,   0,
+                           -5, -33, -59, -125, 127,   89,   7,  3);
+    let side =         vec!(7,  38, 142,  238,   0, -152, -52, -18);
+    let result =     vec!(2i8,   5,  83,  113, 127,  -63, -45, -15,
+                           -5, -33, -59, -125, 127,   89,   7,   3);
+    decode_right_side(&mut buffer, &side).ok().expect("decoding is wrong");
     assert_eq!(buffer, result);
 
     // Overflow should fail.
-    let mut buffer = vec!(0u8, 0);
-    let side = vec!(-1i32);
-    decode_right_side(&mut buffer, &side).err().unwrap();
+    let mut buffer = vec!(0i8, 127);
+    let side = vec!(1);
+    decode_right_side(&mut buffer, &side).err().expect("error detection is wrong");
 }
 
 /// Converts a buffer with mid samples and a side channel in-place to left ++ right.
-fn decode_mid_side<Sample: Int>(buffer: &mut [Sample], side: &[i32]) -> FlacResult<()> {
+fn decode_mid_side<Sample>(buffer: &mut [Sample], side: &[i32])
+                           -> FlacResult<()>
+                           where Sample: super::Sample {
     // Computations are done on i32 in this function, so the Sample should not
     // be too wide.
     assert_not_too_wide::<Sample>(31); // TODO: Fail instead of panic.
 
     let block_size = buffer.len() / 2;
     for i in 0 .. block_size {
-        let mid: i32 = num::cast(buffer[i]).unwrap();
+        let mid: i32 = buffer[i].to_i32().unwrap();
 
         // TODO: Remove these assertions or add runtime validation; do not panic.
-        let max_s: Sample = Int::max_value();
-        let min_s: Sample = Int::min_value();
-        let max_side: i64 = num::cast::<Sample, i64>(max_s).unwrap() - num::cast(min_s).unwrap();
-        let min_side: i64 = num::cast::<Sample, i64>(min_s).unwrap() - num::cast(max_s).unwrap();
+        let max_s = Sample::max();
+        let min_s = Sample::min();
+        let max_side = max_s.to_i64().unwrap() - min_s.to_i64().unwrap();
+        let min_side = min_s.to_i64().unwrap() - max_s.to_i64().unwrap();
         assert!((side[i] as i64) <= max_side);
         assert!((side[i] as i64) >= min_side);
 
@@ -400,9 +404,9 @@ fn decode_mid_side<Sample: Int>(buffer: &mut [Sample], side: &[i32]) -> FlacResu
 
         // Double mid first, and then correct for truncated rounding that
         // will have occured if side is odd.
-        let mid = (mid << 1) | (side[i] & Int::one());
-        let left = num::cast((mid + side[i]) >> 1);
-        let right = num::cast((mid - side[i]) >> 1);
+        let mid = (mid << 1) | (side[i] & 1);
+        let left = Sample::from_i32((mid + side[i]) >> 1);
+        let right = Sample::from_i32((mid - side[i]) >> 1);
 
         // TODO: Remove this debug print.
         if left.is_none() || right.is_none() {
@@ -419,18 +423,18 @@ fn decode_mid_side<Sample: Int>(buffer: &mut [Sample], side: &[i32]) -> FlacResu
 
 #[test]
 fn verify_decode_mid_side() {
-    let mut buffer = vec!(126u8,  114,  140, 122, 127, 141, 109, 122,
-                              0,    1,    2,   3,   4,   5,   6,   7);
-    let side =     vec!(-249i32, -218, -114, -18,   0, 104, 204, 238);
-    let result =       vec!(2u8,    5,   83, 113, 127, 193, 211, 241,
-                            251,  223,  197, 131, 127,  89,   7,   3);
-    decode_mid_side(&mut buffer, &side).ok().unwrap();
+    let mut buffer = vec!(-2i8, -14,  12,   -6, 127,   13, -19,  -6,
+                             0,   1,   2,    3,   4,    5,   6,   7);
+    let side =          vec!(7,  38, 142,  238,   0, -152, -52, -18);
+    let result =      vec!(2i8,   5,  83,  113, 127,  -63, -45, -15,
+                            -5, -33, -59, -125, 127,   89,   7,   3);
+    decode_mid_side(&mut buffer, &side).ok().expect("decoding is wrong");
     assert_eq!(buffer, result);
 
     // Overflow should fail.
-    let mut buffer = vec!(255u8, 0);
-    let side = vec!(-1i32);
-    decode_mid_side(&mut buffer, &side).err().unwrap();
+    let mut buffer = vec!(127i8, 0);
+    let side = vec!(-1);
+    decode_mid_side(&mut buffer, &side).err().expect("error detection is wrong");
 }
 
 /// A block of raw audio samples.
@@ -445,7 +449,7 @@ pub struct Block<'b, Sample> where Sample: 'b {
     samples: &'b [Sample]
 }
 
-impl <'b, Sample> Block<'b, Sample> where Sample: SignedInt {
+impl <'b, Sample> Block<'b, Sample> where Sample: super::Sample {
     fn new(time: u64, bs: u16, buffer: &'b [Sample]) -> Block<'b, Sample> {
         Block {
             first_sample_number: time,
@@ -494,7 +498,7 @@ pub struct FrameReader<'r, Sample> {
 /// Either a `Block` or an `Error`.
 pub type FrameResult<'b, Sample> = FlacResult<Block<'b, Sample>>;
 
-impl<'r, Sample> FrameReader<'r, Sample> where Sample: SignedInt {
+impl<'r, Sample> FrameReader<'r, Sample> where Sample: super::Sample {
 
     /// Creates a new frame reader that will yield at least one element.
     pub fn new(input: &'r mut io::Read) -> FrameReader<'r, Sample> {
@@ -514,7 +518,7 @@ impl<'r, Sample> FrameReader<'r, Sample> where Sample: SignedInt {
                 self.buffer = Vec::with_capacity(new_len);
             }
             let len = self.buffer.len();
-            self.buffer.extend(repeat(Int::zero()).take(new_len - len));
+            self.buffer.extend(repeat(Sample::zero()).take(new_len - len));
         }
     }
 
@@ -526,7 +530,7 @@ impl<'r, Sample> FrameReader<'r, Sample> where Sample: SignedInt {
                 self.side_buffer = Vec::with_capacity(new_len);
             }
             let len = self.side_buffer.len();
-            self.side_buffer.extend(repeat(Int::zero()).take(new_len - len));
+            self.side_buffer.extend(repeat(0).take(new_len - len));
         }
     }
 
@@ -584,7 +588,7 @@ impl<'r, Sample> FrameReader<'r, Sample> where Sample: SignedInt {
                 // Is there a better way?
                 let side_len = self.side_buffer.len();
                 if side_len < bs {
-                    self.side_buffer.extend(repeat(Int::zero()).take(bs - side_len));
+                    self.side_buffer.extend(repeat(0).take(bs - side_len));
                 }
 
                 match header.channel_assignment {
@@ -658,15 +662,5 @@ impl<'r, Sample> FrameReader<'r, Sample> where Sample: SignedInt {
     }
 }
 
-// impl<'r, 'b, Sample> Iterator<FrameResult<'b, Sample>>
-//     for FrameReader<'r, Sample>
-//     where Sample: UnsignedInt {
-//     fn next(&mut self) -> Option<FrameResult<'b, Sample>> {
-//         // TODO: there needs to be a way to determine whether stream has ended.
-//         // In that case, we need to know the stream lengh, so we need to know
-//         // the streaminfo (which we might need anyway) ...
-//         Some(self.read_next())
-//     }
-//
-//     // TODO: it would be possible to give quite an accurate size hint.
-// }
+// TODO: implement Iterator<Item = FrameResult> for FrameReader, with an
+// accurate size hint.
