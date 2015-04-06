@@ -22,7 +22,7 @@ use std::num::Int;
 use error::{Error, FlacResult};
 use input::Bitstream;
 
-#[derive(Copy, Debug)]
+#[derive(Clone, Copy, Debug)]
 enum SubframeType {
     Constant,
     Verbatim,
@@ -30,7 +30,7 @@ enum SubframeType {
     Lpc(u8)
 }
 
-#[derive(Copy)]
+#[derive(Clone, Copy)]
 struct SubframeHeader {
     sf_type: SubframeType,
     wasted_bits_per_sample: u8

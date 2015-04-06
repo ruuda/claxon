@@ -25,19 +25,19 @@ use error::{Error, FlacResult};
 use input::{Bitstream, ReadExt};
 use subframe;
 
-#[derive(Copy)]
+#[derive(Clone, Copy)]
 enum BlockingStrategy {
     Fixed,
     Variable
 }
 
-#[derive(Copy)]
+#[derive(Clone, Copy)]
 enum BlockTime {
     FrameNumber(u32),
     SampleNumber(u64)
 }
 
-#[derive(Copy, Debug)]
+#[derive(Clone, Copy, Debug)]
 enum ChannelAssignment {
     /// The `n: u8` channels are coded as-is.
     Independent(u8),
@@ -49,7 +49,7 @@ enum ChannelAssignment {
     MidSideStereo
 }
 
-#[derive(Copy)]
+#[derive(Clone, Copy)]
 struct FrameHeader {
     pub block_time: BlockTime,
     pub block_size: u16,

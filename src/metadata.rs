@@ -21,7 +21,7 @@ use std::iter;
 use error::{Error, FlacResult};
 use input::ReadExt;
 
-#[derive(Copy)]
+#[derive(Clone, Copy)]
 struct MetadataBlockHeader {
     is_last: bool,
     block_type: u8,
@@ -29,7 +29,7 @@ struct MetadataBlockHeader {
 }
 
 /// The streaminfo metadata block, with important information about the stream.
-#[derive(Copy)]
+#[derive(Clone, Copy)]
 pub struct StreamInfo {
     /// The minimum block size (in samples) used in the stream.
     pub min_block_size: u16,
@@ -52,7 +52,7 @@ pub struct StreamInfo {
 }
 
 /// A seek point in the seek table.
-#[derive(Copy)]
+#[derive(Clone, Copy)]
 pub struct SeekPoint {
     /// Sample number of the first sample in the target frame, or 2^64 - 1 for a placeholder.
     pub sample: u64,
