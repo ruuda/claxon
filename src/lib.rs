@@ -23,7 +23,7 @@
 
 use std::io;
 use std::cmp::Eq;
-use std::ops::{Add, BitOr, Div, Not, Rem, Shl, Shr, Sub};
+use std::ops::{Add, BitAnd, BitOr, Div, Not, Rem, Shl, Shr, Sub};
 use std::num::{FromPrimitive, One, ToPrimitive, Zero};
 use error::{Error, FlacResult};
 use frame::{FrameReader};
@@ -40,14 +40,21 @@ pub mod metadata;
 /// An trait that allows for interegers to be generic in width.
 pub trait Sample: Zero + One +
     Add<Output = Self> +
+    Sub<Output = Self> +
     Shl<usize, Output = Self> +
     Shr<usize, Output = Self> +
     BitOr<Self, Output = Self> +
+    BitAnd<Self, Output = Self> +
     Copy + Clone + Eq +
     FromPrimitive + ToPrimitive {
 
     /// Returns the maximal value that the type can contain.
+    // TODO: is this actually required, can we do without in non-debug versions?
     fn max() -> Self;
+
+    /// Returns the minimal value that the type can contain.
+    // TODO: is this actually required, can we do without in non-debug versions?
+    fn min() -> Self;
 
     /// Adds with wraparound on overflow.
     fn wrapping_add(self, other: Self) -> Self;
@@ -60,6 +67,11 @@ impl Sample for i8 {
     fn max() -> i8 {
         use std::i8;
         i8::MAX
+    }
+
+    fn min() -> i8 {
+        use std::i8;
+        i8::MIN
     }
 
     fn wrapping_add(self, other: i8) -> i8 {
@@ -77,6 +89,11 @@ impl Sample for i16 {
         i16::MAX
     }
 
+    fn min() -> i16 {
+        use std::i16;
+        i16::MIN
+    }
+
     fn wrapping_add(self, other: i16) -> i16 {
         self.wrapping_add(other)
     }
@@ -90,6 +107,11 @@ impl Sample for i32 {
     fn max() -> i32 {
         use std::i32;
         i32::MAX
+    }
+
+    fn min() -> i32 {
+        use std::i32;
+        i32::MIN
     }
 
     fn wrapping_add(self, other: i32) -> i32 {

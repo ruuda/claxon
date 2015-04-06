@@ -345,7 +345,9 @@ fn verify_decode_left_side() {
 }
 
 /// Converts a buffer with right samples and a side channel in-place to left ++ right.
-fn decode_right_side<Sample: Int>(buffer: &mut [Sample], side: &[i32]) -> FlacResult<()> {
+fn decode_right_side<Sample>(buffer: &mut [Sample], side: &[i32])
+                             -> FlacResult<()>
+                             where Sample: super::Sample {
     // Computations are done on i32 in this function, so the Sample should not
     // be too wide.
     assert_not_too_wide::<Sample>(31); // TODO: Fail instead of panic.
@@ -356,7 +358,7 @@ fn decode_right_side<Sample: Int>(buffer: &mut [Sample], side: &[i32]) -> FlacRe
 
         // Right is correct already, only the left channel needs to be decoded.
         // side = left - right => left = side + right.
-        let left = num::cast(side[i] + num::cast::<Sample, i32>(right).unwrap());
+        let left = Sample::from_i32(side[i] + right.to_i32().unwrap());
         buffer[i] = try!(left.ok_or(Error::InvalidSideSample));
     }
 
@@ -389,11 +391,11 @@ fn decode_mid_side<Sample>(buffer: &mut [Sample], side: &[i32])
 
     let block_size = buffer.len() / 2;
     for i in 0 .. block_size {
-        let mid: i32 = num::cast(buffer[i]).unwrap();
+        let mid: i32 = buffer[i].to_i32().unwrap();
 
         // TODO: Remove these assertions or add runtime validation; do not panic.
-        let max_s: Sample = Int::max_value();
-        let min_s: Sample = Int::min_value();
+        let max_s = Sample::max();
+        let min_s = Sample::min();
         let max_side = max_s.to_i64().unwrap() - min_s.to_i64().unwrap();
         let min_side = min_s.to_i64().unwrap() - max_s.to_i64().unwrap();
         assert!((side[i] as i64) <= max_side);
@@ -405,8 +407,8 @@ fn decode_mid_side<Sample>(buffer: &mut [Sample], side: &[i32])
         // Double mid first, and then correct for truncated rounding that
         // will have occured if side is odd.
         let mid = (mid << 1) | (side[i] & 1);
-        let left = num::cast((mid + side[i]) >> 1);
-        let right = num::cast((mid - side[i]) >> 1);
+        let left = Sample::from_i32((mid + side[i]) >> 1);
+        let right = Sample::from_i32((mid - side[i]) >> 1);
 
         // TODO: Remove this debug print.
         if left.is_none() || right.is_none() {
