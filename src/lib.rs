@@ -19,12 +19,12 @@
 
 #![warn(missing_docs)]
 #![allow(dead_code)] // TODO: Remove for v0.1
-#![feature(core, zero_one)]
+#![feature(core)]
 
 use std::io;
 use std::cmp::Eq;
 use std::ops::{Add, BitAnd, BitOr, Shl, Shr, Sub};
-use std::num::{FromPrimitive, One, ToPrimitive, Zero};
+use std::num::{FromPrimitive, ToPrimitive};
 use error::{Error, FlacResult};
 use frame::{FrameReader};
 use input::ReadExt;
@@ -38,14 +38,13 @@ pub mod subframe;
 pub mod metadata;
 
 /// An trait that allows for interegers to be generic in width.
-pub trait Sample: Zero + One +
+pub trait Sample: Copy + Clone + Eq +
     Add<Output = Self> +
     Sub<Output = Self> +
     Shl<usize, Output = Self> +
     Shr<usize, Output = Self> +
     BitOr<Self, Output = Self> +
     BitAnd<Self, Output = Self> +
-    Copy + Clone + Eq +
     FromPrimitive + ToPrimitive {
 
     /// Returns the maximal value that the type can contain.
@@ -55,6 +54,18 @@ pub trait Sample: Zero + One +
     /// Returns the minimal value that the type can contain.
     // TODO: is this actually required, can we do without in non-debug versions?
     fn min() -> Self;
+
+    /// Returns 0.
+    // TODO: could be an associated constant once those land.
+    fn zero() -> Self {
+        Self::from_i8(0).unwrap()
+    }
+
+    /// Returns 1;
+    // TODO: could be an associated constant once those land.
+    fn one() -> Self {
+        Self::from_i8(1).unwrap()
+    }
 
     /// Adds with wraparound on overflow.
     fn wrapping_add(self, other: Self) -> Self;
