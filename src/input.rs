@@ -104,7 +104,7 @@ fn verify_read_be_u16() {
 #[test]
 fn verify_read_be_u24() {
     let mut reader = io::Cursor::new(vec!(0u8, 0, 2, 0x8f, 0xff, 0xf3, 122));
-    assert_eq!(reader.read_be_u24().ok(), Some(2u16));
+    assert_eq!(reader.read_be_u24().ok(), Some(2));
     assert_eq!(reader.read_be_u24().ok(), Some(9_437_171));
     assert!(reader.read_be_u24().is_err());
 }
