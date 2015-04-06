@@ -23,7 +23,7 @@
 
 use std::io;
 use std::cmp::Eq;
-use std::ops::{Add, BitOr, Div, Not, Rem, Shl, Sub};
+use std::ops::{Add, BitOr, Div, Not, Rem, Shl, Shr, Sub};
 use std::num::{FromPrimitive, One, ToPrimitive, Zero};
 use error::{Error, FlacResult};
 use frame::{FrameReader};
@@ -41,6 +41,7 @@ pub mod metadata;
 pub trait Sample: Zero + One +
     Add<Output = Self> +
     Shl<usize, Output = Self> +
+    Shr<usize, Output = Self> +
     BitOr<Self, Output = Self> +
     Copy + Clone + Eq +
     FromPrimitive + ToPrimitive {
@@ -50,6 +51,9 @@ pub trait Sample: Zero + One +
 
     /// Adds with wraparound on overflow.
     fn wrapping_add(self, other: Self) -> Self;
+
+    /// Subtracts with wraparound on overflow.
+    fn wrapping_sub(self, other: Self) -> Self;
 }
 
 impl Sample for i8 {
@@ -60,6 +64,10 @@ impl Sample for i8 {
 
     fn wrapping_add(self, other: i8) -> i8 {
         self.wrapping_add(other)
+    }
+
+    fn wrapping_sub(self, other: i8) -> i8 {
+        self.wrapping_sub(other)
     }
 }
 
@@ -72,6 +80,10 @@ impl Sample for i16 {
     fn wrapping_add(self, other: i16) -> i16 {
         self.wrapping_add(other)
     }
+
+    fn wrapping_sub(self, other: i16) -> i16 {
+        self.wrapping_sub(other)
+    }
 }
 
 impl Sample for i32 {
@@ -82,6 +94,10 @@ impl Sample for i32 {
 
     fn wrapping_add(self, other: i32) -> i32 {
         self.wrapping_add(other)
+    }
+
+    fn wrapping_sub(self, other: i32) -> i32 {
+        self.wrapping_sub(other)
     }
 }
 

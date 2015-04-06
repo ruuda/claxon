@@ -195,7 +195,7 @@ fn verify_rice_to_signed() {
 
 // TODO: Remove this function.
 fn show_sample<Sample: super::Sample>(x: Sample) -> Option<i64> {
-    num::cast(x)
+    x.to_i64()
 }
 
 fn assert_wide_enough<Sample>(bps: u8) {
