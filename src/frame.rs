@@ -328,17 +328,17 @@ fn decode_left_side<Sample>(buffer: &mut [Sample], side: &[i32])
 
 #[test]
 fn verify_decode_left_side() {
-    let mut buffer =   vec!(2i8,    5,   83, 113, 127, -63, -45, -15,
-                              0,    0,    0,    0,   0,   0,   0,   0);
-    let side =     vec!(-249i32, -218, -114,  -18,   0, 104, 204, 238);
-    let result =       vec!(2i8,    5,   83,  113, 127, -63, -45, -15,
-                             -5,  -33,  -59, -125, 127,  89,   7,   3);
+    let mut buffer = vec!(2i8,    5,   83, 113, 127, -63, -45, -15,
+                            0,    0,    0,    0,   0,   0,   0,   0);
+    let side =         vec!(7,  38, 142,  238,   0, -152, -52, -18);
+    let result =     vec!(2i8,   5,  83,  113, 127,  -63, -45, -15,
+                           -5, -33, -59, -125, 127,   89,   7,   3);
     decode_left_side(&mut buffer, &side).ok().unwrap();
     assert_eq!(buffer, result);
 
     // Overflow should fail.
-    let mut buffer = vec!(255i8, 0);
-    let side = vec!(-1i32);
+    let mut buffer = vec!(127i8, 0);
+    let side = vec!(-1);
     decode_left_side(&mut buffer, &side).err().unwrap();
 }
 
