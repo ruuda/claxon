@@ -88,11 +88,14 @@ impl PartialEq for Error {
         use error::Error::{InvalidStreamHeader,
             InvalidMetadataBlockType,
             InvalidMetadataBlockLength,
+            // ...
+            InvalidVarLengthInt
         };
         match (self, other) {
             (&InvalidStreamHeader, &InvalidStreamHeader) => true,
             (&InvalidMetadataBlockType, &InvalidMetadataBlockType) => true,
             (&InvalidMetadataBlockLength, &InvalidMetadataBlockLength) => true,
+            (&InvalidVarLengthInt, &InvalidVarLengthInt) => true,
             // TODO: this is not complete, yet.
             // TODO: this is both cumbersome and error-prone. The _ case is
             // required for all non-equal combinations, but it will prevent the
