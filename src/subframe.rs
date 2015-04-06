@@ -16,7 +16,6 @@
 //! The `subframe` module deals with subframes that make up a frame of the FLAC stream.
 
 use std::iter::AdditiveIterator;
-use std::num;
 use error::{Error, FlacResult};
 use input::Bitstream;
 

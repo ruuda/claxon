@@ -17,8 +17,6 @@
 
 use std::io;
 use std::iter::repeat;
-use std::num;
-use std::num::{Int, SignedInt};
 use crc::Crc8Reader;
 use error::{Error, FlacResult};
 use input::{Bitstream, ReadExt};

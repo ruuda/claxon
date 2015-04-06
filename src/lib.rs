@@ -19,11 +19,11 @@
 
 #![warn(missing_docs)]
 #![allow(dead_code)] // TODO: Remove for v0.1
-#![feature(core, io)]
+#![feature(core, zero_one)]
 
 use std::io;
 use std::cmp::Eq;
-use std::ops::{Add, BitAnd, BitOr, Div, Not, Rem, Shl, Shr, Sub};
+use std::ops::{Add, BitAnd, BitOr, Shl, Shr, Sub};
 use std::num::{FromPrimitive, One, ToPrimitive, Zero};
 use error::{Error, FlacResult};
 use frame::{FrameReader};
