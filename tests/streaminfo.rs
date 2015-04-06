@@ -91,7 +91,7 @@ fn verify_streaminfo() {
     let dir = fs::read_dir("testsamples").ok().expect("failed to enumerate flac files");
     for path in dir {
         let path = path.ok().expect("failed to obtain path info").path();
-        if path.is_file() && path.extension() == Some(OsStr::from_str("flac")) {
+        if path.is_file() && path.extension() == Some(OsStr::new("flac")) {
             print!("    comparing {} ...", path.to_str().expect("unsupported filename"));
             compare_metaflac(&path);
             println!(" ok");
