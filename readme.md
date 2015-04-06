@@ -11,7 +11,7 @@ can be quite complex, and nowadays CPU decoding is not all that common any more.
 Therefore, I decided to first try and write a decoder for an audio codec that I
 love and use on a daily basis: FLAC.
 
-Claxon is licensed under the [GNU General Public License][gplv3].
+Claxon is licensed under the [GNU General Public License version 3][gplv3].
 
 [gplv3]: https://www.gnu.org/licenses/gpl.html
 
