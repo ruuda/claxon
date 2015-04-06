@@ -179,17 +179,17 @@ fn rice_to_signed<Sample: super::Sample>(val: Sample) -> Sample {
 
 #[test]
 fn verify_rice_to_signed() {
-    assert_eq!(rice_to_signed(0u8), 0u8);
-    assert_eq!(rice_to_signed(1u8), 0xffu8 - 0);
-    assert_eq!(rice_to_signed(2u8), 1u8);
-    assert_eq!(rice_to_signed(3u8), 0xffu8 - 1);
-    assert_eq!(rice_to_signed(4u8), 2u8);
+    assert_eq!(rice_to_signed(0_i8), 0_i8);
+    assert_eq!(rice_to_signed(1_i8), -1_i8);
+    assert_eq!(rice_to_signed(2_i8), 1_i8);
+    assert_eq!(rice_to_signed(3_i8), -2_i8);
+    assert_eq!(rice_to_signed(4_i8), 2_i8);
 
-    assert_eq!(rice_to_signed(3u16), 0xffffu16 - 1);
-    assert_eq!(rice_to_signed(4u16), 2u16);
+    assert_eq!(rice_to_signed(3_i16), -2_i16);
+    assert_eq!(rice_to_signed(4_i16), 2_i16);
 
-    assert_eq!(rice_to_signed(3u32), 0xffffffffu32 - 1);
-    assert_eq!(rice_to_signed(4u32), 2u32);
+    assert_eq!(rice_to_signed(3_i32), -2_i32);
+    assert_eq!(rice_to_signed(4_i32), 2_i32);
 }
 
 // TODO: Remove this function.
