@@ -9,3 +9,8 @@ license = "GPL-3.0"
 readme = "readme.md"
 homepage = "https://github.com/ruud-v-a/claxon"
 repository = "https://github.com/ruud-v-a/claxon"
+
+[dependencies]
+
+# TODO: turn into dev-dependency (and "debug" binary into example)
+hound = "0.1.0"
