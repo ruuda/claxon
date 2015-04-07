@@ -5,6 +5,7 @@
 # Test files
 /testsamples/*.flac
 /testsamples/*.ana
+/testsamples/*.wav
 
 # Editor files
 *.swp
