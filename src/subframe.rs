@@ -298,8 +298,6 @@ fn decode_partitioned_rice<Sample: super::Sample>
     let mut start = 0;
     for i in 0 .. n_partitions {
         let partition_size = n_samples - if i == 0 { n_warm_up } else { 0 };
-        println!("  > decoding partition {}, from {} to {}",
-                 i, start, start + partition_size as usize); // TODO: Remove this.
         try!(decode_rice_partition(input, bps, &mut buffer[start ..
                                    start + partition_size as usize]));
         start = start + partition_size as usize;
@@ -315,8 +313,6 @@ fn decode_rice_partition<Sample: super::Sample>
                          -> FlacResult<()> {
     // The Rice partition starts with 4 bits Rice parameter.
     let rice_param = try!(input.read_leq_u8(4));
-
-    println!("  >   rice param: {}", rice_param); // TODO: Remove this.
 
     // 1111 is an escape code that indicates unencoded binary.
     if rice_param == 0b1111 {
@@ -365,8 +361,6 @@ fn decode_partitioned_rice2<Sample: super::Sample>
                             block_size: u16,
                             buffer: &mut [Sample])
                             -> FlacResult<()> {
-    println!("  decoding partitioned Rice 2, bps = {}, bs = {}",
-            bps, block_size); // TODO: Remove this.
     panic!("partitioned_rice2 is not yet implemented"); // TODO
 }
 
@@ -407,6 +401,55 @@ fn decode_verbatim<Sample: super::Sample>
     Ok(())
 }
 
+fn predict_fixed<Sample: super::Sample>
+                (order: u8, buffer: &mut [Sample])
+                 -> FlacResult<()> {
+    // Coefficients for fitting an order n polynomial.
+    let o0 = [];
+    let o1 = [1];
+    let o2 = [-1, 2];
+    let o3 = [1, -3, 3];
+
+    let coefficients: &[i64] = match order {
+        0 => &o0,
+        1 => &o1,
+        2 => &o2,
+        3 => &o3,
+        // TODO: add fourth order
+        // TODO: either ensure that order is valid and use unreachable!(), or
+        // validate the predictor order.
+        _ => panic!("unexpected predictor order")
+    };
+
+    let window_size = order as usize + 1;
+
+    // TODO: abstract away this iterating over a window into a function?
+    for i in 0 .. buffer.len() - window_size {
+        // Manually do the windowing, because .windows() returns immutable slices.
+        let window = &mut buffer[i .. i + window_size];
+
+        // The #coefficcients elements of the window store already decoded
+        // samples, the last element of the window is the delta. Therefore,
+        // predict based on the first #coefficients samples.
+        let prediction = coefficients.iter().zip(window.iter())
+                                     .map(|(&c, &s)| c * s.to_i64().unwrap())
+                                     .sum();
+
+        // Cast the i64 back to the `Sample` type, which _should_ be safe ...
+        let prediction = Sample::from_i64(prediction).ok_or(Error::InvalidFixedSample);
+
+        // TODO: is is not clear to me what the correct semantics for
+        // prediction are. Never overflow? Use sample width and wrap? A
+        // combination of both (as it is now, which is probably wrong)?
+
+        // The delta is stored, so the sample is the prediction + delta.
+        let sample = window[coefficients.len()].wrapping_add(try!(prediction));
+        window[coefficients.len()] = sample;
+    }
+
+    Ok(())
+}
+
 fn decode_fixed<Sample: super::Sample>
                (input: &mut Bitstream,
                 bps: u8,
@@ -427,7 +470,7 @@ fn decode_fixed<Sample: super::Sample>
     try!(decode_residual(input, bps, buffer.len() as u16,
                          &mut buffer[order as usize ..]));
 
-    // TODO: do prediction.
+    try!(predict_fixed(order, buffer));
 
     Ok(())
 }

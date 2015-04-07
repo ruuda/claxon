@@ -67,6 +67,8 @@ pub enum Error {
     InvalidRiceCode,
     /// An overflow occurred when decoding the side channel.
     InvalidSideSample,
+    /// An overflow occurred when doing fixed prediction.
+    InvalidFixedSample,
     /// An overflow occurred when doing LPC prediction.
     InvalidLpcSample,
 
