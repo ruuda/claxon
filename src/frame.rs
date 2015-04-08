@@ -70,7 +70,6 @@ impl FrameHeader {
 /// in the specification. (It is not real UTF-8.) This function can read
 /// integers encoded in this way up to 36-bit integers.
 fn read_var_length_int<R: io::Read>(input: &mut R) -> FlacResult<u64> {
-    use std::iter::range_step_inclusive;
     // The number of consecutive 1s followed by a 0 is the number of additional
     // bytes to read.
     let first = try!(input.read_u8());
@@ -99,7 +98,7 @@ fn read_var_length_int<R: io::Read>(input: &mut R) -> FlacResult<u64> {
     // Each additional byte will yield 6 extra bits, so shift the most
     // significant bits into the correct position.
     let mut result = ((first & mask_data) as u64) << (6 * read_additional);
-    for i in range_step_inclusive(read_additional as i16 - 1, 0, -1) {
+    for i in (0 .. read_additional as i16).rev() {
         let byte = try!(input.read_u8());
 
         // The two most significant bits _must_ be 10.
