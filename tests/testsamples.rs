@@ -81,20 +81,26 @@ fn compare_metaflac(fname: &path::Path) {
     };
 }
 
-#[test]
-fn verify_streaminfo() {
+fn for_each_test_sample<F: Fn(&path::Path)>(f: F) {
     use std::ffi::OsStr;
     use std::fs::PathExt;
 
-    // Compare our streaminfo parsing with metaflac on all flac files in the
-    // testsamples directory.
-    let dir = fs::read_dir("testsamples").ok().expect("failed to enumerate flac files");
+    // Enumerate all the flac files in the testsamples directory, and execute
+    // the function `f` for it.
+    let dir = fs::read_dir("testsamples")
+                 .ok().expect("failed to enumerate flac files");
     for path in dir {
         let path = path.ok().expect("failed to obtain path info").path();
         if path.is_file() && path.extension() == Some(OsStr::new("flac")) {
-            print!("    comparing {} ...", path.to_str().expect("unsupported filename"));
-            compare_metaflac(&path);
+            print!("    comparing {} ...", path.to_str()
+                                               .expect("unsupported filename"));
+            f(&path);
             println!(" ok");
         }
     }
+}
+
+#[test]
+fn verify_streaminfo() {
+    for_each_test_sample(compare_metaflac);
 }
