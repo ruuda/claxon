@@ -492,7 +492,7 @@ fn predict_lpc<Sample: super::Sample>
 
     println!("  predicting using LPC predictor"); // TODO: Remove this.
 
-    for i in 0 .. buffer.len() - window_size {
+    for i in 0 .. buffer.len() - coefficients.len() {
         // Manually do the windowing, because .windows() returns immutable slices.
         let window = &mut buffer[i .. i + window_size];
 
@@ -513,6 +513,18 @@ fn predict_lpc<Sample: super::Sample>
     }
 
     Ok(())
+}
+
+#[test]
+fn verify_predict_lpc() {
+    // The following data is from an actual FLAC stream and has been verified
+    // against the reference decoder.
+    let coefficients = [-75_i16, 166,  121, -269, -75, -399, 1042];
+    let mut buffer = [-796_i16, -547, -285,  -32, 199,  443,  670, -2,
+                           -23,   14,    6,    3,  -4,   12,   -2, 10];
+    assert!(predict_lpc(&coefficients, 9, &mut buffer).is_ok());
+    assert_eq!(&buffer, &[-796_i16, -547, -285,  -32,  199,  443,  670,  875,
+                              1046, 1208, 1343, 1454, 1541, 1616, 1663, 1701]);
 }
 
 fn decode_lpc<Sample: super::Sample>
