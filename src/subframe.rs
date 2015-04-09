@@ -537,12 +537,18 @@ fn predict_lpc<Sample: super::Sample>
 fn verify_predict_lpc() {
     // The following data is from an actual FLAC stream and has been verified
     // against the reference decoder.
-    let coefficients = [-75_i16, 166,  121, -269, -75, -399, 1042];
-    let mut buffer = [-796_i16, -547, -285,  -32, 199,  443,  670, -2,
-                           -23,   14,    6,    3,  -4,   12,   -2, 10];
-    assert!(predict_lpc(&coefficients, 9, &mut buffer).is_ok());
-    assert_eq!(&buffer, &[-796_i16, -547, -285,  -32,  199,  443,  670,  875,
-                              1046, 1208, 1343, 1454, 1541, 1616, 1663, 1701]);
+    let coefficients = [-75, 166,  121, -269, -75, -399, 1042];
+    let mut buffer = [-796, -547, -285,  -32, 199,  443,  670, -2,
+                       -23,   14,    6,    3,  -4,   12,   -2, 10];
+    assert!(predict_lpc::<i16>(&coefficients, 9, &mut buffer).is_ok());
+    assert_eq!(&buffer, &[-796, -547, -285,  -32,  199,  443,  670,  875,
+                          1046, 1208, 1343, 1454, 1541, 1616, 1663, 1701]);
+
+    // The following data causes an overflow when not handled with care.
+    let coefficients = [119, -255, 555, -836, 879, -1199, 1757];
+    let mut buffer = [-21363, -21951, -22649, -24364, -27297, -26870, -30017, 3157];
+    assert!(predict_lpc::<i16>(&coefficients, 10, &mut buffer).is_ok());
+    assert_eq!(&buffer, &[-21363, -21951, -22649, -24364, -27297, -26870, -30017, -29718]);
 }
 
 fn decode_lpc<Sample: super::Sample>
