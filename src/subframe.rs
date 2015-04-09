@@ -166,30 +166,30 @@ fn verify_extend_sign_u32() {
 ///
 /// This function takes the unsigned value and converts it into a signed
 /// number.
-fn rice_to_signed<Sample: super::Sample>(val: Sample) -> Sample {
+fn rice_to_signed<S: super::Sample>(val: <S as super::Sample>::Unsigned) -> S {
     // This uses bitwise arithmetic, because a literal cannot have type `Sample`,
     // I believe this is the most concise way to express the decoding.
-    if val & Sample::one() == Sample::one() {
-        let zero = Sample::zero();
-        zero.wrapping_sub(Sample::one()) - (val >> 1)
+    let half = S::from_unsigned(val >> 1);
+    if val & S::one_unsigned() == S::one_unsigned() {
+        -half - S::one()
     } else {
-        val >> 1
+        half
     }
 }
 
 #[test]
 fn verify_rice_to_signed() {
-    assert_eq!(rice_to_signed(0_i8), 0_i8);
-    assert_eq!(rice_to_signed(1_i8), -1_i8);
-    assert_eq!(rice_to_signed(2_i8), 1_i8);
-    assert_eq!(rice_to_signed(3_i8), -2_i8);
-    assert_eq!(rice_to_signed(4_i8), 2_i8);
+    assert_eq!(rice_to_signed::<i8>(0), 0);
+    assert_eq!(rice_to_signed::<i8>(1), -1);
+    assert_eq!(rice_to_signed::<i8>(2), 1);
+    assert_eq!(rice_to_signed::<i8>(3), -2);
+    assert_eq!(rice_to_signed::<i8>(4), 2);
 
-    assert_eq!(rice_to_signed(3_i16), -2_i16);
-    assert_eq!(rice_to_signed(4_i16), 2_i16);
+    assert_eq!(rice_to_signed::<i16>(3), -2);
+    assert_eq!(rice_to_signed::<i16>(4), 2);
 
-    assert_eq!(rice_to_signed(3_i32), -2_i32);
-    assert_eq!(rice_to_signed(4_i32), 2_i32);
+    assert_eq!(rice_to_signed::<i32>(3), -2);
+    assert_eq!(rice_to_signed::<i32>(4), 2);
 }
 
 // TODO: Remove this function.
@@ -311,6 +311,8 @@ fn decode_rice_partition<Sample: super::Sample>
                          bps: u8,
                          buffer: &mut [Sample])
                          -> FlacResult<()> {
+    use std::num::FromPrimitive;
+
     // The Rice partition starts with 4 bits Rice parameter.
     let rice_param = try!(input.read_leq_u8(4));
 
@@ -326,7 +328,7 @@ fn decode_rice_partition<Sample: super::Sample>
 
         panic!("unencoded binary is not yet implemented"); // TODO
     } else {
-        let max_sample = Sample::max();
+        let max_sample = Sample::max_unsigned();
         let max_q = max_sample >> rice_param as usize;
 
         // TODO: It is possible for the rice_param to be larger than the
@@ -336,17 +338,19 @@ fn decode_rice_partition<Sample: super::Sample>
             // First part of the sample is the quotient, unary encoded.
             // This means that there are q zeroes, and then a one. There
             // should not be more than max_q consecutive zeroes.
-            let mut q = Sample::zero();
+            let mut q = Sample::zero_unsigned();
             while try!(input.read_leq_u8(1)) == 0 {
-                if q == max_q { return Err(Error::InvalidRiceCode); }
-                q = q + Sample::one();
+                if q == max_q {
+                    return Err(Error::InvalidRiceCode);
+                }
+                q = q + Sample::one_unsigned();
             }
 
             // What follows is the remainder in `rice_param` bits. Because
             // rice_param is at most 14, this fits in an u16. TODO: for
             // the RICE2 partition it will not fit.
             let r_u16 = try!(input.read_leq_u16(rice_param));
-            let r = Sample::from_u16(r_u16).unwrap();
+            let r = FromPrimitive::from_u16(r_u16).unwrap();
 
             *sample = rice_to_signed((q << rice_param as usize) | r);
         }
