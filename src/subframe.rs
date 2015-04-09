@@ -521,13 +521,13 @@ fn predict_lpc<Sample: super::Sample>
                                      .map(|(&c, &s)| c as i64 * s.to_i64().unwrap())
                                      .sum() >> qlp_shift;
 
+        // The delta is stored, so the sample is the prediction + delta.
+        let sample = window[coefficients.len()].to_i64().unwrap() + prediction;
+
         // Cast the i64 back to the `Sample` type, which _should_ be safe after
         // the shift.
-        let prediction = Sample::from_i64(prediction).ok_or(Error::InvalidLpcSample);
-
-        // The delta is stored, so the sample is the prediction + delta.
-        let sample = window[coefficients.len()].wrapping_add(try!(prediction));
-        window[coefficients.len()] = sample;
+        let sample = Sample::from_i64(sample).ok_or(Error::InvalidLpcSample);
+        window[coefficients.len()] = try!(sample);
     }
 
     Ok(())
