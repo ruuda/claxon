@@ -442,16 +442,13 @@ fn predict_fixed<Sample: super::Sample>
                                      .map(|(&c, &s)| c * s.to_i64().unwrap())
                                      .sum();
 
-        // Cast the i64 back to the `Sample` type, which _should_ be safe ...
-        let prediction = Sample::from_i64(prediction).ok_or(Error::InvalidFixedSample);
-
-        // TODO: is is not clear to me what the correct semantics for
-        // prediction are. Never overflow? Use sample width and wrap? A
-        // combination of both (as it is now, which is probably wrong)?
-
         // The delta is stored, so the sample is the prediction + delta.
-        let sample = window[coefficients.len()].wrapping_add(try!(prediction));
-        window[coefficients.len()] = sample;
+        let sample = window[coefficients.len()].to_i64().unwrap() + prediction;
+
+        // Cast the i64 back to the `Sample` type, which should be safe for a
+        // valid stream.
+        let sample = Sample::from_i64(sample).ok_or(Error::InvalidFixedSample);
+        window[coefficients.len()] = try!(sample);
     }
 
     Ok(())
@@ -463,9 +460,14 @@ fn verify_predict_fixed() {
     // against the reference decoder.
     let mut buffer = [-729, -722, -667, -19, -16,  17, -23, -7,
                         16,  -16,   -5,   3,  -8, -13, -15, -1];
-    assert!(predict_fixed(3, &mut buffer).is_ok());
+    assert!(predict_fixed::<i16>(3, &mut buffer).is_ok());
     assert_eq!(&buffer, &[-729, -722, -667, -583, -486, -359, -225, -91,
                             59,  209,  354,  497,  630,  740,  812, 845]);
+
+    // The following data causes overflow when not handled with care.
+    let mut buffer = [21877, 27482, -6513];
+    assert!(predict_fixed::<i16>(2, &mut buffer).is_ok());
+    assert_eq!(&buffer, &[21877, 27482, 26574]);
 }
 
 fn decode_fixed<Sample: super::Sample>
