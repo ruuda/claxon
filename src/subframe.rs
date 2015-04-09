@@ -424,7 +424,7 @@ fn predict_fixed<Sample: super::Sample>
     let window_size = order as usize + 1;
 
     // TODO: abstract away this iterating over a window into a function?
-    for i in 0 .. buffer.len() - window_size {
+    for i in 0 .. buffer.len() - order as usize {
         // Manually do the windowing, because .windows() returns immutable slices.
         let window = &mut buffer[i .. i + window_size];
 
@@ -448,6 +448,17 @@ fn predict_fixed<Sample: super::Sample>
     }
 
     Ok(())
+}
+
+#[test]
+fn verify_predict_fixed() {
+    // The following data is from an actual FLAC stream and has been verified
+    // against the reference decoder.
+    let mut buffer = [-729, -722, -667, -19, -16,  17, -23, -7,
+                        16,  -16,   -5,   3,  -8, -13, -15, -1];
+    assert!(predict_fixed(3, &mut buffer).is_ok());
+    assert_eq!(&buffer, &[-729, -722, -667, -583, -486, -359, -225, -91,
+                            59,  209,  354,  497,  630,  740,  812, 845]);
 }
 
 fn decode_fixed<Sample: super::Sample>
