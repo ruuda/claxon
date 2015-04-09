@@ -404,21 +404,28 @@ fn decode_verbatim<Sample: super::Sample>
 fn predict_fixed<Sample: super::Sample>
                 (order: u8, buffer: &mut [Sample])
                  -> FlacResult<()> {
-    // Coefficients for fitting an order n polynomial.
+    // When this is called during decoding, the order as read from the subframe
+    // header has already been verified, so it is safe to assume that
+    // 0 <= order <= 4. Still, it is good to state that assumption explicitly.
+    debug_assert!(order <= 4);
+
+    // Coefficients for fitting an order n polynomial. You get these
+    // coefficients by writing down n numbers, then their differences, then the
+    // differences of the differences, etc. What results is Pascal's triangle
+    // with alternating signs.
     let o0 = [];
     let o1 = [1];
     let o2 = [-1, 2];
     let o3 = [1, -3, 3];
+    let o4 = [-1, 4, -6, 4];
 
     let coefficients: &[i64] = match order {
         0 => &o0,
         1 => &o1,
         2 => &o2,
         3 => &o3,
-        // TODO: add fourth order
-        // TODO: either ensure that order is valid and use unreachable!(), or
-        // validate the predictor order.
-        _ => panic!("unexpected predictor order")
+        4 => &o4,
+        _ => unreachable!()
     };
 
     let window_size = order as usize + 1;
