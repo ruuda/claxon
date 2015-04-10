@@ -15,7 +15,6 @@
 
 //! The `subframe` module deals with subframes that make up a frame of the FLAC stream.
 
-use std::iter::AdditiveIterator;
 use error::{Error, FlacResult};
 use input::Bitstream;
 
@@ -444,7 +443,7 @@ fn predict_fixed<Sample: super::Sample>
         // predict based on the first #coefficients samples.
         let prediction = coefficients.iter().zip(window.iter())
                                      .map(|(&c, &s)| c * s.to_i64().unwrap())
-                                     .sum();
+                                     .sum::<i64>();
 
         // The delta is stored, so the sample is the prediction + delta.
         let sample = window[coefficients.len()].to_i64().unwrap() + prediction;
@@ -525,7 +524,7 @@ fn predict_lpc<Sample: super::Sample>
         // predict based on the first #coefficients samples.
         let prediction = coefficients.iter().zip(window.iter())
                                      .map(|(&c, &s)| c as i64 * s.to_i64().unwrap())
-                                     .sum() >> qlp_shift;
+                                     .sum::<i64>() >> qlp_shift;
 
         // The delta is stored, so the sample is the prediction + delta.
         let sample = window[coefficients.len()].to_i64().unwrap() + prediction;
