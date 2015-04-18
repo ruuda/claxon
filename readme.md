@@ -16,3 +16,4 @@ Claxon is licensed under the [GNU General Public License version 3][gplv3].
 [gplv3]: https://www.gnu.org/licenses/gpl.html
 
 [![Build Status](https://travis-ci.org/ruud-v-a/claxon.svg?branch=master)](https://travis-ci.org/ruud-v-a/claxon)
+[![Crates.io version](http://img.shields.io/crates/v/claxon.svg)](https://crates.io/crates/claxon)
