@@ -382,10 +382,10 @@ fn decode_constant<Sample: sample::Sample>
                    buffer: &mut [Sample])
                    -> FlacResult<()> {
     // A constant block has <bits per sample> bits: the value of all
-    // samples. The unwrap is safe, because it has been verified before
+    // samples. The nofail variant is safe, because it has been verified before
     // that the `Sample` type is wide enough for the bits per sample.
     let sample_u32 = try!(input.read_leq_u32(bps));
-    let sample = Sample::from_u32(sample_u32).unwrap();
+    let sample = Sample::from_i32_nofail(extend_sign_u32(sample_u32, bps));
 
     for s in buffer.iter_mut() {
         *s = sample;
