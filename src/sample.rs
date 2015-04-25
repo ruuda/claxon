@@ -140,19 +140,19 @@ macro_rules! impl_sample {
 
             fn from_i32(x: i32) -> Option<$signed> {
                 use std::$signed;
-                if x > $signed::MAX || x < $signed::MIN {
+                if x > $signed::MAX as i32 || x < $signed::MIN as i32 {
                     None
                 } else {
-                    x as $signed
+                    Some(x as $signed)
                 }
             }
 
             fn from_i64(x: i64) -> Option<$signed> {
                 use std::$signed;
-                if x > $signed::MAX || x < $signed::MIN {
+                if x > $signed::MAX as i64 || x < $signed::MIN as i64 {
                     None
                 } else {
-                    x as $signed
+                    Some(x as $signed)
                 }
             }
 
