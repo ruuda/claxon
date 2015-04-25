@@ -311,6 +311,7 @@ fn decode_rice_partition<Sample: super::Sample>
                          buffer: &mut [Sample])
                          -> FlacResult<()> {
     use std::num::FromPrimitive;
+    use std::mem;
 
     // The Rice partition starts with 4 bits Rice parameter.
     let rice_param = try!(input.read_leq_u8(4));
@@ -340,7 +341,18 @@ fn decode_rice_partition<Sample: super::Sample>
             let mut q = Sample::zero_unsigned();
             while try!(input.read_leq_u8(1)) == 0 {
                 if q == max_q {
-                    return Err(Error::InvalidRiceCode);
+                    println!("WARNING:
+                             max_sample = {:?},
+                             max_q = {:?},
+                             q = {:?},
+                             rice_param = {:?},
+                             sample width = {:?}",
+                             show_sample(Sample::from_unsigned(max_sample)),
+                             show_sample(Sample::from_unsigned(max_q)),
+                             show_sample(Sample::from_unsigned(max_q)),
+                             rice_param,
+                             mem::size_of::<Sample>());
+                    //return Err(Error::InvalidRiceCode);
                 }
                 q = q + Sample::one_unsigned();
             }
@@ -395,10 +407,10 @@ fn decode_verbatim<Sample: super::Sample>
 
     // A verbatim block stores samples without encoding whatsoever.
     for s in buffer.iter_mut() {
-        // The unwrap is safe, because it has been verified before that
+        // The nofail version is safe, because it has been verified before that
         // the `Sample` type is wide enough for the bits per sample.
         let sample_u32 = try!(input.read_leq_u32(bps));
-        *s = Sample::from_i32(extend_sign_u32(sample_u32, bps)).unwrap();
+        *s = Sample::from_i32_nofail(extend_sign_u32(sample_u32, bps));
     }
 
     Ok(())

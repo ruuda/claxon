@@ -95,6 +95,12 @@ pub trait Sample: Copy + Clone + Eq +
     /// Interprets the unsigned value as a signed number.
     fn from_unsigned(unsigned: <Self as Sample>::Unsigned) -> Self;
 
+    /// Converts an `i32` to the sample, assuming it will not overflow.
+    fn from_i32_nofail(x: i32) -> Self;
+
+    /// Converts an `i32` to the sample, returning `None` on overflow.
+    fn from_i32(x: i32) -> Option<Self>;
+
     /// Adds with wraparound on overflow.
     fn wrapping_add(self, other: Self) -> Self;
 
@@ -123,6 +129,19 @@ impl Sample for i8 {
 
     fn from_unsigned(unsigned: u8) -> i8 {
         unsigned as i8
+    }
+
+    fn from_i32_nofail(x: i32) -> i8 {
+        x as i8
+    }
+
+    fn from_i32(x: i32) -> Option<i8> {
+        use std::i8;
+        if x > i8::MAX || x < i8::MIN {
+            None
+        } else {
+            x as i8
+        }
     }
 
     fn wrapping_add(self, other: i8) -> i8 {
@@ -157,6 +176,19 @@ impl Sample for i16 {
         unsigned as i16
     }
 
+    fn from_i32_nofail(x: i32) -> i16 {
+        x as i16
+    }
+
+    fn from_i32(x: i32) -> Option<i16> {
+        use std::i16;
+        if x > i16::MAX || x < i16::MIN {
+            None
+        } else {
+            x as i16
+        }
+    }
+
     fn wrapping_add(self, other: i16) -> i16 {
         self.wrapping_add(other)
     }
@@ -187,6 +219,19 @@ impl Sample for i32 {
 
     fn from_unsigned(unsigned: u32) -> i32 {
         unsigned as i32
+    }
+
+    fn from_i32_nofail(x: i32) -> i32 {
+        x
+    }
+
+    fn from_i32(x: i32) -> Option<i32> {
+        use std::i32;
+        if x > i32::MAX || x < i32::MIN {
+            None
+        } else {
+            x as i32
+        }
     }
 
     fn wrapping_add(self, other: i32) -> i32 {
