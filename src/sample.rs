@@ -13,10 +13,25 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+//! The `sample` module provides the `Sample` trait and its implementations.
+//!
+//! The purpose of this module is similar to that of `num::traits` in the `num`
+//! crate, but the `Sample` type has been specialised more towards FLAC in
+//! particular. For instance, it is only implemented for types that can be
+//! encountered in a FLAC stream. (This excludes `i64` and unsigned integers.)
+
 use std::cmp::Eq;
 use std::ops::{Add, BitAnd, BitOr, Neg, Shl, Shr, Sub};
 
-/// An trait that allows for interegers to be generic in width.
+/// A trait that allows decoding into integers of various widths.
+///
+/// A few observations are important here:
+///
+/// - In the FLAC format, samples are always signed.
+/// - FLAC does not support more than 32 bits per sample.
+///   Therefore, converting a sample to `i32` or `i64` can never fail.
+///
+/// This trait should only be implemented for `i8`, `i16` and `i32`.
 pub trait Sample: Copy + Clone + Eq +
     Neg<Output = Self> +
     Add<Output = Self> +
@@ -26,6 +41,13 @@ pub trait Sample: Copy + Clone + Eq +
     BitOr<Self, Output = Self> +
     BitAnd<Self, Output = Self> {
 
+    /// The accompanying unsigned integer type of the same width.
+    ///
+    /// For example, for `i16` this would be `u16`. The reason that every
+    /// integer type should have an unsigned counterpart, is that FLAC uses
+    /// an unsigned integer internally in several places because it simplifies
+    /// compression. The unsigned integer is then mapped onto a signed integer
+    /// in a later stage via a bijection, so the types must have the same width.
     type Unsigned: BitAnd<<Self as Sample>::Unsigned,
                           Output = <Self as Sample>::Unsigned>
                  + BitOr<Output = <Self as Sample>::Unsigned>
