@@ -79,7 +79,14 @@ pub trait Sample: Copy + Clone + Eq +
 
     /// Converts the sample into an `i64`.
     ///
-    /// All sample types are narrow enough to ensure that this cannot overflow.
+    /// All sample types are narrow enough to ensure that this cannot overflow:
+    /// FLAC does not support more than 32 bits per sample.
+    fn to_i32(self) -> i32;
+
+    /// Converts the sample into an `i64`.
+    ///
+    /// All sample types are narrow enough to ensure that this cannot overflow:
+    /// FLAC does not support more than 32 bits per sample.
     fn to_i64(self) -> i64;
 
     /// Adds with wraparound on overflow.
@@ -154,6 +161,10 @@ macro_rules! impl_sample {
                 } else {
                     Some(x as $signed)
                 }
+            }
+
+            fn to_i32(self) -> i32 {
+                self as i32
             }
 
             fn to_i64(self) -> i64 {

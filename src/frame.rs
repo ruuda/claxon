@@ -319,7 +319,7 @@ fn decode_left_side<Sample>(buffer: &mut [Sample], side: &[i32])
 
         // Left is correct already, only the right channel needs to be decoded.
         // side = left - right => right = left - side.
-        let right = Sample::from_i32(left.to_i32().unwrap() - side[i]);
+        let right = Sample::from_i32(left.to_i32() - side[i]);
         buffer[block_size + i] = try!(right.ok_or(Error::InvalidSideSample));
     }
 
@@ -356,7 +356,7 @@ fn decode_right_side<Sample>(buffer: &mut [Sample], side: &[i32])
 
         // Right is correct already, only the left channel needs to be decoded.
         // side = left - right => left = side + right.
-        let left = Sample::from_i32(side[i] + right.to_i32().unwrap());
+        let left = Sample::from_i32(side[i] + right.to_i32());
         buffer[i] = try!(left.ok_or(Error::InvalidSideSample));
     }
 
@@ -389,7 +389,7 @@ fn decode_mid_side<Sample>(buffer: &mut [Sample], side: &[i32])
 
     let block_size = buffer.len() / 2;
     for i in 0 .. block_size {
-        let mid: i32 = buffer[i].to_i32().unwrap();
+        let mid: i32 = buffer[i].to_i32();
 
         // TODO: Remove these assertions or add runtime validation; do not panic.
         let max_s = Sample::max();
