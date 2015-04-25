@@ -360,8 +360,10 @@ fn decode_rice_partition<Sample: sample::Sample>
             // What follows is the remainder in `rice_param` bits. Because
             // rice_param is at most 14, this fits in an u16. TODO: for
             // the RICE2 partition it will not fit.
+            // TODO: what if the sample is an u8? Then it will can fail.
+            // Probably should use an option and report an error instead.
             let r_u16 = try!(input.read_leq_u16(rice_param));
-            let r = FromPrimitive::from_u16(r_u16).unwrap();
+            let r = Sample::from_u16_nofail(r_u16);
 
             *sample = rice_to_signed((q << rice_param as usize) | r);
         }

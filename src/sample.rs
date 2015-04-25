@@ -65,6 +65,9 @@ pub trait Sample: Copy + Clone + Eq +
     /// Interprets the unsigned value as a signed number.
     fn from_unsigned(unsigned: <Self as Sample>::Unsigned) -> Self;
 
+    /// Converts an `u16` to the unsigned sample, assuming it will not overflow.
+    fn from_u16_nofail(x: u16) -> <Self as Sample>::Unsigned;
+
     /// Converts an `i32` to the sample, assuming it will not overflow.
     fn from_i32_nofail(x: i32) -> Self;
 
@@ -117,6 +120,10 @@ macro_rules! impl_sample {
 
             fn from_unsigned(unsigned: $unsigned) -> $signed {
                 unsigned as $signed
+            }
+
+            fn from_u16_nofail(x: u16) -> $unsigned {
+                x as $unsigned
             }
 
             fn from_i32_nofail(x: i32) -> $signed {
