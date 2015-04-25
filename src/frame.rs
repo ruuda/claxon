@@ -20,6 +20,7 @@ use std::iter::repeat;
 use crc::Crc8Reader;
 use error::{Error, FlacResult};
 use input::{Bitstream, ReadExt};
+use sample;
 use subframe;
 
 #[derive(Clone, Copy)]
@@ -307,7 +308,7 @@ fn assert_not_too_wide<Sample>(max_bps: u8) {
 /// Converts a buffer with left samples and a side channel in-place to left ++ right.
 fn decode_left_side<Sample>(buffer: &mut [Sample], side: &[i32])
                             -> FlacResult<()>
-                            where Sample: super::Sample {
+                            where Sample: sample::Sample {
     // Computations are done on i32 in this function, so the Sample should not
     // be too wide.
     assert_not_too_wide::<Sample>(31); // TODO: Fail instead of panic.
@@ -344,7 +345,7 @@ fn verify_decode_left_side() {
 /// Converts a buffer with right samples and a side channel in-place to left ++ right.
 fn decode_right_side<Sample>(buffer: &mut [Sample], side: &[i32])
                              -> FlacResult<()>
-                             where Sample: super::Sample {
+                             where Sample: sample::Sample {
     // Computations are done on i32 in this function, so the Sample should not
     // be too wide.
     assert_not_too_wide::<Sample>(31); // TODO: Fail instead of panic.
@@ -381,7 +382,7 @@ fn verify_decode_right_side() {
 /// Converts a buffer with mid samples and a side channel in-place to left ++ right.
 fn decode_mid_side<Sample>(buffer: &mut [Sample], side: &[i32])
                            -> FlacResult<()>
-                           where Sample: super::Sample {
+                           where Sample: sample::Sample {
     // Computations are done on i32 in this function, so the Sample should not
     // be too wide.
     assert_not_too_wide::<Sample>(31); // TODO: Fail instead of panic.
@@ -448,7 +449,7 @@ pub struct Block<'b, Sample> where Sample: 'b {
     samples: &'b [Sample]
 }
 
-impl <'b, Sample> Block<'b, Sample> where Sample: super::Sample {
+impl <'b, Sample> Block<'b, Sample> where Sample: sample::Sample {
     fn new(time: u64, bs: u16, buffer: &'b [Sample]) -> Block<'b, Sample> {
         Block {
             first_sample_number: time,
@@ -497,7 +498,7 @@ pub struct FrameReader<'r, Sample> {
 /// Either a `Block` or an `Error`.
 pub type FrameResult<'b, Sample> = FlacResult<Block<'b, Sample>>;
 
-impl<'r, Sample> FrameReader<'r, Sample> where Sample: super::Sample {
+impl<'r, Sample> FrameReader<'r, Sample> where Sample: sample::Sample {
 
     /// Creates a new frame reader that will yield at least one element.
     pub fn new(input: &'r mut io::Read) -> FrameReader<'r, Sample> {

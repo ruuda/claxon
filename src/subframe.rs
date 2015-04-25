@@ -17,6 +17,7 @@
 
 use error::{Error, FlacResult};
 use input::Bitstream;
+use sample;
 
 #[derive(Clone, Copy, Debug)]
 enum SubframeType {
@@ -165,7 +166,7 @@ fn verify_extend_sign_u32() {
 ///
 /// This function takes the unsigned value and converts it into a signed
 /// number.
-fn rice_to_signed<S: super::Sample>(val: <S as super::Sample>::Unsigned) -> S {
+fn rice_to_signed<S: sample::Sample>(val: <S as sample::Sample>::Unsigned) -> S {
     // This uses bitwise arithmetic, because a literal cannot have type `Sample`,
     // I believe this is the most concise way to express the decoding.
     let half = S::from_unsigned(val >> 1);
@@ -192,7 +193,7 @@ fn verify_rice_to_signed() {
 }
 
 // TODO: Remove this function.
-fn show_sample<Sample: super::Sample>(x: Sample) -> Option<i64> {
+fn show_sample<Sample: sample::Sample>(x: Sample) -> Option<i64> {
     x.to_i64()
 }
 
@@ -211,7 +212,7 @@ fn assert_narrow_enough<Sample>(max_bps: u8) {
 /// Decodes a subframe into the provided block-size buffer.
 ///
 /// It is assumed that the length of the buffer is the block size.
-pub fn decode<Sample: super::Sample>
+pub fn decode<Sample: sample::Sample>
              (input: &mut Bitstream,
               bps: u8,
               buffer: &mut [Sample])
@@ -247,7 +248,7 @@ pub fn decode<Sample: super::Sample>
     Ok(())
 }
 
-fn decode_residual<Sample: super::Sample>
+fn decode_residual<Sample: sample::Sample>
                   (input: &mut Bitstream,
                    bps: u8,
                    block_size: u16,
@@ -263,7 +264,7 @@ fn decode_residual<Sample: super::Sample>
     }
 }
 
-fn decode_partitioned_rice<Sample: super::Sample>
+fn decode_partitioned_rice<Sample: sample::Sample>
                           (input: &mut Bitstream,
                            bps: u8,
                            block_size: u16,
@@ -305,12 +306,11 @@ fn decode_partitioned_rice<Sample: super::Sample>
     Ok(())
 }
 
-fn decode_rice_partition<Sample: super::Sample>
+fn decode_rice_partition<Sample: sample::Sample>
                         (input: &mut Bitstream,
                          bps: u8,
                          buffer: &mut [Sample])
                          -> FlacResult<()> {
-    use std::num::FromPrimitive;
     use std::mem;
 
     // The Rice partition starts with 4 bits Rice parameter.
@@ -370,7 +370,7 @@ fn decode_rice_partition<Sample: super::Sample>
     Ok(())
 }
 
-fn decode_partitioned_rice2<Sample: super::Sample>
+fn decode_partitioned_rice2<Sample: sample::Sample>
                            (input: &mut Bitstream,
                             bps: u8,
                             block_size: u16,
@@ -379,7 +379,7 @@ fn decode_partitioned_rice2<Sample: super::Sample>
     panic!("partitioned_rice2 is not yet implemented"); // TODO
 }
 
-fn decode_constant<Sample: super::Sample>
+fn decode_constant<Sample: sample::Sample>
                   (input: &mut Bitstream,
                    bps: u8,
                    buffer: &mut [Sample])
@@ -397,7 +397,7 @@ fn decode_constant<Sample: super::Sample>
     Ok(())
 }
 
-fn decode_verbatim<Sample: super::Sample>
+fn decode_verbatim<Sample: sample::Sample>
                   (input: &mut Bitstream,
                    bps: u8,
                    buffer: &mut [Sample])
@@ -416,7 +416,7 @@ fn decode_verbatim<Sample: super::Sample>
     Ok(())
 }
 
-fn predict_fixed<Sample: super::Sample>
+fn predict_fixed<Sample: sample::Sample>
                 (order: u8, buffer: &mut [Sample])
                  -> FlacResult<()> {
     // When this is called during decoding, the order as read from the subframe
@@ -485,7 +485,7 @@ fn verify_predict_fixed() {
     assert_eq!(&buffer, &[21877, 27482, 26574]);
 }
 
-fn decode_fixed<Sample: super::Sample>
+fn decode_fixed<Sample: sample::Sample>
                (input: &mut Bitstream,
                 bps: u8,
                 order: u8,
@@ -510,7 +510,7 @@ fn decode_fixed<Sample: super::Sample>
     Ok(())
 }
 
-fn predict_lpc<Sample: super::Sample>
+fn predict_lpc<Sample: sample::Sample>
               (coefficients: &[i16],
                qlp_shift: i16,
                buffer: &mut [Sample])
@@ -568,7 +568,7 @@ fn verify_predict_lpc() {
     assert_eq!(&buffer, &[-21363, -21951, -22649, -24364, -27297, -26870, -30017, -29718]);
 }
 
-fn decode_lpc<Sample: super::Sample>
+fn decode_lpc<Sample: sample::Sample>
              (input: &mut Bitstream,
               bps: u8,
               order: u8,
