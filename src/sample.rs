@@ -74,6 +74,9 @@ pub trait Sample: Copy + Clone + Eq +
     /// Converts an `i32` to the sample, returning `None` on overflow.
     fn from_i32(x: i32) -> Option<Self>;
 
+    /// Converts an `i64` to the sample, returning `None` on overflow.
+    fn from_i64(x: i64) -> Option<Self>;
+
     /// Adds with wraparound on overflow.
     fn wrapping_add(self, other: Self) -> Self;
 
@@ -131,6 +134,15 @@ macro_rules! impl_sample {
             }
 
             fn from_i32(x: i32) -> Option<$signed> {
+                use std::$signed;
+                if x > $signed::MAX || x < $signed::MIN {
+                    None
+                } else {
+                    x as $signed
+                }
+            }
+
+            fn from_i64(x: i64) -> Option<$signed> {
                 use std::$signed;
                 if x > $signed::MAX || x < $signed::MIN {
                     None
