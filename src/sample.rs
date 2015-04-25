@@ -77,6 +77,11 @@ pub trait Sample: Copy + Clone + Eq +
     /// Converts an `i64` to the sample, returning `None` on overflow.
     fn from_i64(x: i64) -> Option<Self>;
 
+    /// Converts the sample into an `i64`.
+    ///
+    /// All sample types are narrow enough to ensure that this cannot overflow.
+    fn to_i64(self) -> i64;
+
     /// Adds with wraparound on overflow.
     fn wrapping_add(self, other: Self) -> Self;
 
@@ -149,6 +154,10 @@ macro_rules! impl_sample {
                 } else {
                     x as $signed
                 }
+            }
+
+            fn to_i64(self) -> i64 {
+                self as i64
             }
 
             fn wrapping_add(self, other: $signed) -> $signed {

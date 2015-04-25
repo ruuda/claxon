@@ -394,8 +394,8 @@ fn decode_mid_side<Sample>(buffer: &mut [Sample], side: &[i32])
         // TODO: Remove these assertions or add runtime validation; do not panic.
         let max_s = Sample::max();
         let min_s = Sample::min();
-        let max_side = max_s.to_i64().unwrap() - min_s.to_i64().unwrap();
-        let min_side = min_s.to_i64().unwrap() - max_s.to_i64().unwrap();
+        let max_side = max_s.to_i64() - min_s.to_i64();
+        let min_side = min_s.to_i64() - max_s.to_i64();
         assert!((side[i] as i64) <= max_side);
         assert!((side[i] as i64) >= min_side);
 

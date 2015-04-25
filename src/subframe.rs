@@ -192,11 +192,6 @@ fn verify_rice_to_signed() {
     assert_eq!(rice_to_signed::<i32>(4), 2);
 }
 
-// TODO: Remove this function.
-fn show_sample<Sample: sample::Sample>(x: Sample) -> Option<i64> {
-    x.to_i64()
-}
-
 fn assert_wide_enough<Sample>(bps: u8) {
     use std::mem;
     // TODO: Should this be a full assert, instead of a debug assert?
@@ -347,9 +342,9 @@ fn decode_rice_partition<Sample: sample::Sample>
                              q = {:?},
                              rice_param = {:?},
                              sample width = {:?}",
-                             show_sample(Sample::from_unsigned(max_sample)),
-                             show_sample(Sample::from_unsigned(max_q)),
-                             show_sample(Sample::from_unsigned(max_q)),
+                             Sample::from_unsigned(max_sample).to_i64(),
+                             Sample::from_unsigned(max_q).to_i64(),
+                             Sample::from_unsigned(max_q).to_i64(),
                              rice_param,
                              mem::size_of::<Sample>());
                     //return Err(Error::InvalidRiceCode);
@@ -456,11 +451,11 @@ fn predict_fixed<Sample: sample::Sample>
         // samples, the last element of the window is the delta. Therefore,
         // predict based on the first #coefficients samples.
         let prediction = coefficients.iter().zip(window.iter())
-                                     .map(|(&c, &s)| c * s.to_i64().unwrap())
+                                     .map(|(&c, &s)| c * s.to_i64())
                                      .sum::<i64>();
 
         // The delta is stored, so the sample is the prediction + delta.
-        let sample = window[coefficients.len()].to_i64().unwrap() + prediction;
+        let sample = window[coefficients.len()].to_i64() + prediction;
 
         // Cast the i64 back to the `Sample` type, which should be safe for a
         // valid stream.
@@ -498,8 +493,8 @@ fn decode_fixed<Sample: sample::Sample>
     try!(decode_verbatim(input, bps, &mut buffer[.. order as usize]));
 
     println!("the warm-up samples are {:?}", buffer[0 .. order as usize].iter()
-             .map(|x| show_sample(*x))
-             .collect::<Vec<Option<i64>>>()); // TODO: Remove this.
+             .map(|x| x.to_i64())
+             .collect::<Vec<_>>()); // TODO: Remove this.
 
     // Next up is the residual. We decode into the buffer directly, the
     // predictor contributions will be added in a second pass. The first
@@ -537,11 +532,11 @@ fn predict_lpc<Sample: sample::Sample>
         // samples, the last element of the window is the delta. Therefore,
         // predict based on the first #coefficients samples.
         let prediction = coefficients.iter().zip(window.iter())
-                                     .map(|(&c, &s)| c as i64 * s.to_i64().unwrap())
+                                     .map(|(&c, &s)| c as i64 * s.to_i64())
                                      .sum::<i64>() >> qlp_shift;
 
         // The delta is stored, so the sample is the prediction + delta.
-        let sample = window[coefficients.len()].to_i64().unwrap() + prediction;
+        let sample = window[coefficients.len()].to_i64() + prediction;
 
         // Cast the i64 back to the `Sample` type, which _should_ be safe after
         // the shift.
@@ -581,7 +576,7 @@ fn decode_lpc<Sample: sample::Sample>
     try!(decode_verbatim(input, bps, &mut buffer[.. order as usize]));
 
     println!("the warm-up samples are {:?}", buffer[0 .. order as usize].iter()
-             .map(|x| show_sample(*x))
+             .map(|x| x.to_i64())
              .collect::<Vec<_>>()); // TODO: Remove this.
 
     // Next are four bits quantised linear predictor coefficient precision - 1.
@@ -621,8 +616,8 @@ fn decode_lpc<Sample: sample::Sample>
                          &mut buffer[order as usize ..]));
 
     println!("  > first residual: {:?}, last residual: {:?}",
-             show_sample(buffer[order as usize]),
-             show_sample(buffer[buffer.len() - 1])); // TODO: Remove this.
+             buffer[order as usize].to_i64(),
+             buffer[buffer.len() - 1].to_i64()); // TODO: Remove this.
 
     try!(predict_lpc(&coefficients, qlp_shift, buffer));
 
