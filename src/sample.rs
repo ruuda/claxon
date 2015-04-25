@@ -48,27 +48,19 @@ pub trait Sample: Copy + Clone + Eq +
 
     /// Returns 0.
     // TODO: could be an associated constant once those land.
-    fn zero() -> Self {
-        Self::from_i8(0).unwrap()
-    }
+    fn zero() -> Self;
 
     /// Returns 1.
     // TODO: could be an associated constant once those land.
-    fn one() -> Self {
-        Self::from_i8(1).unwrap()
-    }
+    fn one() -> Self;
 
     /// Returns 0 as the unsigned type.
     // TODO: could be an associated constant once those land.
-    fn zero_unsigned() -> <Self as Sample>::Unsigned {
-        <<Self as Sample>::Unsigned as FromPrimitive>::from_i8(0).unwrap()
-    }
+    fn zero_unsigned() -> <Self as Sample>::Unsigned;
 
     /// Returns 1 as the unsigned type.
     // TODO: could be an associated constant once those land.
-    fn one_unsigned() -> <Self as Sample>::Unsigned {
-        <<Self as Sample>::Unsigned as FromPrimitive>::from_i8(1).unwrap()
-    }
+    fn one_unsigned() -> <Self as Sample>::Unsigned;
 
     /// Interprets the unsigned value as a signed number.
     fn from_unsigned(unsigned: <Self as Sample>::Unsigned) -> Self;
@@ -86,137 +78,71 @@ pub trait Sample: Copy + Clone + Eq +
     fn wrapping_sub(self, other: Self) -> Self;
 }
 
-impl Sample for i8 {
+macro_rules! impl_sample {
+    ($signed: ident, $unsigned: ident) => {
+        impl Sample for $signed {
 
-    type Unsigned = u8;
+            type Unsigned = $unsigned;
 
-    fn max() -> i8 {
-        use std::i8;
-        i8::MAX
-    }
+            fn max() -> $signed {
+                use std::$signed;
+                $signed::MAX
+            }
 
-    fn min() -> i8 {
-        use std::i8;
-        i8::MIN
-    }
+            fn min() -> $signed {
+                use std::$signed;
+                $signed::MIN
+            }
 
-    fn max_unsigned() -> u8 {
-        use std::u8;
-        u8::MAX
-    }
+            fn max_unsigned() -> $unsigned {
+                use std::$unsigned;
+                $unsigned::MAX
+            }
 
-    fn from_unsigned(unsigned: u8) -> i8 {
-        unsigned as i8
-    }
+            fn zero() -> $signed {
+                0
+            }
 
-    fn from_i32_nofail(x: i32) -> i8 {
-        x as i8
-    }
+            fn one() -> $signed {
+                1
+            }
 
-    fn from_i32(x: i32) -> Option<i8> {
-        use std::i8;
-        if x > i8::MAX || x < i8::MIN {
-            None
-        } else {
-            x as i8
+            fn zero_unsigned() -> $unsigned {
+                0
+            }
+
+            fn one_unsigned() -> $unsigned {
+                1
+            }
+
+            fn from_unsigned(unsigned: $unsigned) -> $signed {
+                unsigned as $signed
+            }
+
+            fn from_i32_nofail(x: i32) -> $signed {
+                x as $signed
+            }
+
+            fn from_i32(x: i32) -> Option<$signed> {
+                use std::$signed;
+                if x > $signed::MAX || x < $signed::MIN {
+                    None
+                } else {
+                    x as $signed
+                }
+            }
+
+            fn wrapping_add(self, other: $signed) -> $signed {
+                self.wrapping_add(other)
+            }
+
+            fn wrapping_sub(self, other: $signed) -> $signed {
+                self.wrapping_sub(other)
+            }
         }
-    }
-
-    fn wrapping_add(self, other: i8) -> i8 {
-        self.wrapping_add(other)
-    }
-
-    fn wrapping_sub(self, other: i8) -> i8 {
-        self.wrapping_sub(other)
-    }
+    };
 }
 
-impl Sample for i16 {
-
-    type Unsigned = u16;
-
-    fn max() -> i16 {
-        use std::i16;
-        i16::MAX
-    }
-
-    fn min() -> i16 {
-        use std::i16;
-        i16::MIN
-    }
-
-    fn max_unsigned() -> u16 {
-        use std::u16;
-        u16::MAX
-    }
-
-    fn from_unsigned(unsigned: u16) -> i16 {
-        unsigned as i16
-    }
-
-    fn from_i32_nofail(x: i32) -> i16 {
-        x as i16
-    }
-
-    fn from_i32(x: i32) -> Option<i16> {
-        use std::i16;
-        if x > i16::MAX || x < i16::MIN {
-            None
-        } else {
-            x as i16
-        }
-    }
-
-    fn wrapping_add(self, other: i16) -> i16 {
-        self.wrapping_add(other)
-    }
-
-    fn wrapping_sub(self, other: i16) -> i16 {
-        self.wrapping_sub(other)
-    }
-}
-
-impl Sample for i32 {
-
-    type Unsigned = u32;
-
-    fn max() -> i32 {
-        use std::i32;
-        i32::MAX
-    }
-
-    fn min() -> i32 {
-        use std::i32;
-        i32::MIN
-    }
-
-    fn max_unsigned() -> u32 {
-        use std::u32;
-        u32::MAX
-    }
-
-    fn from_unsigned(unsigned: u32) -> i32 {
-        unsigned as i32
-    }
-
-    fn from_i32_nofail(x: i32) -> i32 {
-        x
-    }
-
-    fn from_i32(x: i32) -> Option<i32> {
-        use std::i32;
-        if x > i32::MAX || x < i32::MIN {
-            None
-        } else {
-            x as i32
-        }
-    }
-
-    fn wrapping_add(self, other: i32) -> i32 {
-        self.wrapping_add(other)
-    }
-
-    fn wrapping_sub(self, other: i32) -> i32 {
-        self.wrapping_sub(other)
-    }
-}
+impl_sample!(i8, u8);
+impl_sample!(i16, u16);
+impl_sample!(i32, u32);
