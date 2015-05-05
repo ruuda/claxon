@@ -37,10 +37,10 @@ fn main() {
         channels: stream.streaminfo().n_channels as u16,
         sample_rate: stream.streaminfo().sample_rate,
         // TODO: again, would u32 be better, even if the range is smaller?
-        bits_per_sample: stream.streaminfo().bits_per_sample as u32
+        bits_per_sample: stream.streaminfo().bits_per_sample as u16
     };
     let fname_wav = fname.with_extension("wav");
-    let mut output = WavWriter::<fs::File>::create(fname_wav, spec).unwrap();
+    let mut output = WavWriter::create(fname_wav, spec).unwrap();
 
     let mut blocks = stream.blocks::<i16>();
     let mut sample = 0u64;
