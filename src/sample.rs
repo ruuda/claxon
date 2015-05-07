@@ -21,6 +21,7 @@
 //! encountered in a FLAC stream. (This excludes `i64` and unsigned integers.)
 
 use std::cmp::Eq;
+use std::fmt;
 use std::ops::{Add, BitAnd, BitOr, Neg, Shl, Shr, Sub};
 
 /// A trait that allows decoding into integers of various widths.
@@ -32,7 +33,7 @@ use std::ops::{Add, BitAnd, BitOr, Neg, Shl, Shr, Sub};
 ///   Therefore, converting a sample to `i32` or `i64` can never fail.
 ///
 /// This trait should only be implemented for `i8`, `i16` and `i32`.
-pub trait Sample: Copy + Clone + Eq +
+pub trait Sample: Copy + Clone + Eq + fmt::Debug +
     Neg<Output = Self> +
     Add<Output = Self> +
     Sub<Output = Self> +
@@ -54,7 +55,7 @@ pub trait Sample: Copy + Clone + Eq +
                  + Shl<usize, Output = <Self as Sample>::Unsigned>
                  + Shr<usize, Output = <Self as Sample>::Unsigned>
                  + Add<Output = <Self as Sample>::Unsigned>
-                 + Eq + Copy + Clone;
+                 + Eq + Copy + Clone + fmt::Debug;
 
     /// Returns the maximal value that the type can contain.
     // TODO: is this actually required, can we do without in non-debug versions?

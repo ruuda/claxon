@@ -342,11 +342,11 @@ fn decode_rice_partition<Sample: sample::Sample>
                              q = {:?},
                              rice_param = {:?},
                              sample width = {:?}",
-                             Sample::from_unsigned(max_sample).to_i64(),
-                             Sample::from_unsigned(max_q).to_i64(),
-                             Sample::from_unsigned(max_q).to_i64(),
+                             max_sample,
+                             max_q,
+                             q,
                              rice_param,
-                             mem::size_of::<Sample>());
+                             mem::size_of::<Sample>() * 8);
                     //return Err(Error::InvalidRiceCode);
                 }
                 q = q + Sample::one_unsigned();
@@ -493,7 +493,6 @@ fn decode_fixed<Sample: sample::Sample>
     try!(decode_verbatim(input, bps, &mut buffer[.. order as usize]));
 
     println!("the warm-up samples are {:?}", buffer[0 .. order as usize].iter()
-             .map(|x| x.to_i64())
              .collect::<Vec<_>>()); // TODO: Remove this.
 
     // Next up is the residual. We decode into the buffer directly, the
@@ -576,7 +575,6 @@ fn decode_lpc<Sample: sample::Sample>
     try!(decode_verbatim(input, bps, &mut buffer[.. order as usize]));
 
     println!("the warm-up samples are {:?}", buffer[0 .. order as usize].iter()
-             .map(|x| x.to_i64())
              .collect::<Vec<_>>()); // TODO: Remove this.
 
     // Next are four bits quantised linear predictor coefficient precision - 1.
@@ -616,8 +614,8 @@ fn decode_lpc<Sample: sample::Sample>
                          &mut buffer[order as usize ..]));
 
     println!("  > first residual: {:?}, last residual: {:?}",
-             buffer[order as usize].to_i64(),
-             buffer[buffer.len() - 1].to_i64()); // TODO: Remove this.
+             buffer[order as usize],
+             buffer[buffer.len() - 1]); // TODO: Remove this.
 
     try!(predict_lpc(&coefficients, qlp_shift, buffer));
 
