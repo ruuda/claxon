@@ -348,6 +348,14 @@ fn decode_rice_partition<Sample: sample::Sample>
                              rice_param,
                              mem::size_of::<Sample>() * 8);
                     //return Err(Error::InvalidRiceCode);
+
+                    // TODO: The reason that this crashes here, might be that
+                    // the residual does not fit within the sample type, but
+                    // after prediction it does. This means that we must use a
+                    // wider type internally. That would be a nice idea anyway,
+                    // because we can get rid of the side buffer in FrameReader
+                    // and be fully generic, but still use i32 to decode i16,
+                    // so we don't have to use i64 everywhere.
                 }
                 q = q + Sample::one_unsigned();
             }
