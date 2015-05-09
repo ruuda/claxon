@@ -306,17 +306,22 @@ fn assert_not_too_wide<S>(max_bps: u8) {
 }
 
 /// Converts a buffer with left samples and a side channel in-place to left ++ right.
+// TODO: This could take iterators, and decode and narrow in-place. Better yet,
+// this should produce an iterator that decodes.
 fn decode_left_side<Sample: sample::Sample>
-                   (buffer: &mut [Sample], side: &[Sample::Wide])
+                   (buffer: &mut [Sample::Wide])
                     -> FlacResult<()> {
+    use sample::WideSample;
+
     let block_size = buffer.len() / 2;
     for i in 0 .. block_size {
         let left = buffer[i];
+        let side = buffer[i + block_size];
 
         // Left is correct already, only the right channel needs to be decoded.
         // side = left - right => right = left - side.
-        let right = (left.widen() - side[i]).narrow();
-        buffer[block_size + i] = try!(right.ok_or(Error::InvalidSideSample));
+        let right = left - side;
+        buffer[block_size + i] = right;
     }
 
     Ok(())
@@ -324,32 +329,29 @@ fn decode_left_side<Sample: sample::Sample>
 
 #[test]
 fn verify_decode_left_side() {
-    let mut buffer = vec!(2i8,    5,   83, 113, 127, -63, -45, -15,
-                            0,    0,    0,    0,   0,   0,   0,   0);
-    let side =         vec!(7,  38, 142,  238,   0, -152, -52, -18);
-    let result =     vec!(2i8,   5,  83,  113, 127,  -63, -45, -15,
-                           -5, -33, -59, -125, 127,   89,   7,   3);
-    decode_left_side(&mut buffer, &side).ok().unwrap();
+    let mut buffer = vec!(2i16,    5,   83, 113, 127, -63, -45, -15,
+                             7,  38, 142,  238,   0, -152, -52, -18);
+    let result =     vec!(2i16,   5,  83,  113, 127,  -63, -45, -15,
+                            -5, -33, -59, -125, 127,   89,   7,   3);
+    decode_left_side(&mut buffer).ok().unwrap();
     assert_eq!(buffer, result);
-
-    // Overflow should fail.
-    let mut buffer = vec!(127i8, 0);
-    let side = vec!(-1);
-    decode_left_side(&mut buffer, &side).err().unwrap();
 }
 
 /// Converts a buffer with right samples and a side channel in-place to left ++ right.
 fn decode_right_side<Sample: sample::Sample>
-                    (buffer: &mut [Sample], side: &[Sample::Wide])
+                    (buffer: &mut [Sample::Wide])
                      -> FlacResult<()> {
+    use sample::WideSample;
+
     let block_size = buffer.len() / 2;
     for i in 0 .. block_size {
+        let side = buffer[i];
         let right = buffer[block_size + i];
 
         // Right is correct already, only the left channel needs to be decoded.
         // side = left - right => left = side + right.
-        let left = (side[i] + right.widen()).narrow();
-        buffer[i] = try!(left.ok_or(Error::InvalidSideSample));
+        let left = side + right;
+        buffer[i] = side;
     }
 
     Ok(())
@@ -357,45 +359,37 @@ fn decode_right_side<Sample: sample::Sample>
 
 #[test]
 fn verify_decode_right_side() {
-    let mut buffer = vec!(0i8,  0,   0,    0,   0,    0,   0,   0,
-                           -5, -33, -59, -125, 127,   89,   7,  3);
-    let side =         vec!(7,  38, 142,  238,   0, -152, -52, -18);
-    let result =     vec!(2i8,   5,  83,  113, 127,  -63, -45, -15,
-                           -5, -33, -59, -125, 127,   89,   7,   3);
-    decode_right_side(&mut buffer, &side).ok().expect("decoding is wrong");
+    let side =         vec!();
+    let mut buffer = vec!(7i16,  38, 142,  238,   0, -152, -52, -18,
+                            -5, -33, -59, -125, 127,   89,   7,  3);
+    let result =     vec!(2i16,   5,  83,  113, 127,  -63, -45, -15,
+                            -5, -33, -59, -125, 127,   89,   7,   3);
+    decode_right_side(&mut buffer).ok().expect("decoding is wrong");
     assert_eq!(buffer, result);
-
-    // Overflow should fail.
-    let mut buffer = vec!(0i8, 127);
-    let side = vec!(1);
-    decode_right_side(&mut buffer, &side).err().expect("error detection is wrong");
 }
 
 /// Converts a buffer with mid samples and a side channel in-place to left ++ right.
 fn decode_mid_side<Sample: sample::Sample>
-                  (buffer: &mut [Sample], side: &[Sample::Wide])
+                  (buffer: &mut [Sample::Wide])
                    -> FlacResult<()> {
+    use sample::WideSample;
+
     let block_size = buffer.len() / 2;
     for i in 0 .. block_size {
-        let mid = buffer[i].widen();
+        let mid = buffer[i];
+        let side = buffer[i + block_size];
 
         // The code below uses shifts insead of multiplication/division by two,
         // because Rust does not infer a literal `2` to be of type `Sample`.
 
         // Double mid first, and then correct for truncated rounding that
         // will have occured if side is odd.
-        let mid = (mid << 1) | (side[i] & Sample::Wide::one());
-        let left = ((mid + side[i]) >> 1).narrow();
-        let right = ((mid - side[i]) >> 1).narrow();
+        let mid = (mid << 1) | (side & Sample::Wide::one());
+        let left = (mid + side) >> 1;
+        let right = (mid - side) >> 1;
 
-        // TODO: Remove this debug print.
-        if left.is_none() || right.is_none() {
-            println!("  overflow! mid: {}, side: {}, left: {}, right: {}",
-                     mid, side[i], (mid + side[i]) >> 1, (mid - side[i]) >> 1);
-        }
-
-        buffer[i] = try!(left.ok_or(Error::InvalidSideSample));
-        buffer[block_size + i] = try!(right.ok_or(Error::InvalidSideSample));
+        buffer[i] = left;
+        buffer[block_size + i] = right;
     }
 
     Ok(())
@@ -403,18 +397,12 @@ fn decode_mid_side<Sample: sample::Sample>
 
 #[test]
 fn verify_decode_mid_side() {
-    let mut buffer = vec!(-2i8, -14,  12,   -6, 127,   13, -19,  -6,
-                             0,   1,   2,    3,   4,    5,   6,   7);
-    let side =          vec!(7,  38, 142,  238,   0, -152, -52, -18);
-    let result =      vec!(2i8,   5,  83,  113, 127,  -63, -45, -15,
-                            -5, -33, -59, -125, 127,   89,   7,   3);
-    decode_mid_side(&mut buffer, &side).ok().expect("decoding is wrong");
+    let mut buffer = vec!(-2i16, -14,  12,   -6, 127,   13, -19,  -6,
+                              7,  38, 142,  238,   0, -152, -52, -18);
+    let result =      vec!(2i16,   5,  83,  113, 127,  -63, -45, -15,
+                             -5, -33, -59, -125, 127,   89,   7,   3);
+    decode_mid_side(&mut buffer).ok().expect("decoding is wrong");
     assert_eq!(buffer, result);
-
-    // Overflow should fail.
-    let mut buffer = vec!(127i8, 0);
-    let side = vec!(-1);
-    decode_mid_side(&mut buffer, &side).err().expect("error detection is wrong");
 }
 
 /// A block of raw audio samples.
@@ -503,6 +491,8 @@ impl<'r, Sample: sample::Sample> FrameReader<'r, Sample> {
     }
 
     fn ensure_wide_buffer_len(&mut self, new_len: usize) {
+        use sample::WideSample;
+
         if self.wide_buffer.len() < new_len {
             // Previous data will be overwritten, so instead of resizing the
             // vector if it is too small, we might as well allocate a new one.
@@ -519,6 +509,7 @@ impl<'r, Sample: sample::Sample> FrameReader<'r, Sample> {
     /// TODO: I should really be consistent with 'read' and 'decode'.
     pub fn read_next<'s>(&'s mut self) -> FrameResult<'s, Sample> {
         use std::mem::size_of;
+        use sample::WideSample;
 
         let header = try!(read_frame_header(self.input));
 
@@ -534,6 +525,7 @@ impl<'r, Sample: sample::Sample> FrameReader<'r, Sample> {
         // decoded.
         let total_samples = header.channels() as usize * header.block_size as usize;
         self.ensure_buffer_len(total_samples);
+        self.ensure_wide_buffer_len(total_samples);
 
         // TODO: if the bps is missing from the header, we must get it from
         // the streaminfo block.
@@ -549,64 +541,45 @@ impl<'r, Sample: sample::Sample> FrameReader<'r, Sample> {
             let mut bitstream = Bitstream::new(self.input);
             let bs = header.block_size as usize;
 
-            if let ChannelAssignment::Independent(n_ch) = header.channel_assignment {
-                for ch in 0 .. n_ch as usize {
-                    println!("decoding subframe {}", ch); // TODO: remove this.
-                    try!(subframe::decode(&mut bitstream, bps,
-                                          &mut self.buffer[ch * bs .. (ch + 1) * bs]));
-                }
-            } else {
-                // If the channel assignment is not independent, it involves
-                // a side channel, so we are going to need the wider buffer.
-
-                // We will decode the side channel into the wide buffer, so
-                // it must be sized appropriately.
-                // TODO: A method cannot be used here due to borrowing.
-                // Is there a better way?
-                let side_len = self.wide_buffer.len();
-                if side_len < bs {
-                    self.wide_buffer.extend(repeat(Sample::Wide::zero()).take(bs - side_len));
-                }
-
-                match header.channel_assignment {
-                    ChannelAssignment::Independent(_) => unreachable!(),
-                    ChannelAssignment::LeftSideStereo => {
-                        // Decode left regularly and side into the wide buffer.
-                        // The side channel has one extra bit per sample.
-                        try!(subframe::decode(&mut bitstream, bps,
-                                              &mut self.buffer[.. bs]));
-                        try!(subframe::decode(&mut bitstream, bps + 1,
-                                              &mut self.wide_buffer[.. bs]));
-
-                        // Then decode the side channel into the right channel.
-                        try!(decode_left_side(&mut self.buffer[.. bs * 2],
-                                              &self.wide_buffer[.. bs]));
-                    },
-                    ChannelAssignment::RightSideStereo => {
-                        // Decode right regularly and side into the wide buffer.
-                        // The side channel has one extra bit per sample.
-                        try!(subframe::decode(&mut bitstream, bps + 1,
-                                              &mut self.wide_buffer[.. bs]));
-                        try!(subframe::decode(&mut bitstream, bps,
-                                              &mut self.buffer[bs .. bs * 2]));
-
-                        // Then decode the side channel into the left channel.
-                        try!(decode_right_side(&mut self.buffer[.. bs * 2],
-                                               &self.wide_buffer[.. bs]));
-                    },
-                    ChannelAssignment::MidSideStereo => {
-                        // Decode mid as the first channel, and side into the
-                        // wide buffer. The side channel has one extra bit per
-                        // sample.
-                        try!(subframe::decode(&mut bitstream, bps,
-                                              &mut self.buffer[.. bs]));
-                        try!(subframe::decode(&mut bitstream, bps + 1,
-                                              &mut self.wide_buffer[.. bs]));
-
-                        // Then decode mid-side channel into left-right.
-                        try!(decode_mid_side(&mut self.buffer[.. bs * 2],
-                                             &self.wide_buffer[.. bs]));
+            match header.channel_assignment {
+                ChannelAssignment::Independent(n_ch) => {
+                    for ch in 0 .. n_ch as usize {
+                        println!("decoding subframe {}", ch); // TODO: remove this.
+                        try!(subframe::decode::<Sample>(
+                                &mut bitstream, bps,
+                                &mut self.wide_buffer[ch * bs .. (ch + 1) * bs]));
                     }
+                }
+                ChannelAssignment::LeftSideStereo => {
+                    // The side channel has one extra bit per sample.
+                    try!(subframe::decode::<Sample>(&mut bitstream, bps,
+                                                    &mut self.wide_buffer[.. bs]));
+                    try!(subframe::decode::<Sample>(&mut bitstream, bps + 1,
+                                                    &mut self.wide_buffer[bs .. bs * 2]));
+
+                    // Then decode the side channel into the right channel.
+                    try!(decode_left_side::<Sample>(&mut self.wide_buffer[.. bs * 2]));
+                },
+                ChannelAssignment::RightSideStereo => {
+                    // The side channel has one extra bit per sample.
+                    try!(subframe::decode::<Sample>(&mut bitstream, bps + 1,
+                                                    &mut self.wide_buffer[.. bs]));
+                    try!(subframe::decode::<Sample>(&mut bitstream, bps,
+                                                    &mut self.wide_buffer[bs .. bs * 2]));
+
+                    // Then decode the side channel into the left channel.
+                    try!(decode_right_side::<Sample>(&mut self.wide_buffer[.. bs * 2]));
+                },
+                ChannelAssignment::MidSideStereo => {
+                    // Decode mid as the first channel, then side with one
+                    // extra bitp per sample.
+                    try!(subframe::decode::<Sample>(&mut bitstream, bps,
+                                                    &mut self.wide_buffer[.. bs]));
+                    try!(subframe::decode::<Sample>(&mut bitstream, bps + 1,
+                                                    &mut self.wide_buffer[bs .. bs * 2]));
+
+                    // Then decode mid-side channel into left-right.
+                    try!(decode_mid_side::<Sample>(&mut self.wide_buffer[.. bs * 2]));
                 }
             }
 

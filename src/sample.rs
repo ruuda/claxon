@@ -22,7 +22,7 @@
 
 use std::cmp::Eq;
 use std::fmt;
-use std::ops::{Add, BitAnd, BitOr, Neg, Shl, Shr, Sub};
+use std::ops::{Add, BitAnd, BitOr, Mul, Neg, Shl, Shr, Sub};
 
 /// A trait that allows decoding into integers of various widths.
 ///
@@ -54,8 +54,8 @@ pub trait Sample: Copy + Clone + Eq + fmt::Debug +
     // TODO: associated constants, once those land.
     fn zero() -> Self;
 
-    /// Casts an `i32` to the sample type, assuming it does not overflow.
-    fn from_i32_nofail(from: i32) -> Self;
+    /// Tries to narrow the sample, returning `None` on overflow.
+    fn from_wide(wide: Self::Wide) -> Option<Self>;
 
     /// Casts the sample to its wide type.
     fn widen(self) -> Self::Wide;
@@ -65,13 +65,11 @@ pub trait WideSample: Copy + Clone + Eq + fmt::Debug +
     Neg<Output = Self> +
     Add<Output = Self> +
     Sub<Output = Self> +
+    Mul<Output = Self> +
     Shl<usize, Output = Self> +
     Shr<usize, Output = Self> +
     BitOr<Self, Output = Self> +
     BitAnd<Self, Output = Self> {
-
-    /// The signed integer type that this is the wide version of.
-    type Narrow: Sample;
 
     /// The zero sample.
     // TODO: associated constants, once those land.
@@ -92,6 +90,9 @@ pub trait WideSample: Copy + Clone + Eq + fmt::Debug +
     /// Casts a `u16` to the wide sample type.
     fn from_u16(from: u16) -> Self;
 
+    /// Casts a `i32` to the wide sample type, assuming it will not overflow.
+    fn from_i32_nofail(from: i32) -> Self;
+
     /// Tries to cast an `i64` to the wide sample type.
     ///
     /// This will return `None` if `2 * from` would overflow the wide sample type.
@@ -99,9 +100,6 @@ pub trait WideSample: Copy + Clone + Eq + fmt::Debug +
 
     /// Casts the sample to an `i64`.
     fn to_i64(self) -> i64;
-
-    /// Tries to cast the sample to its narrow type, returning `None` on overflow.
-    fn narrow(self) -> Option<Self::Narrow>;
 }
 
 macro_rules! impl_sample {
@@ -113,8 +111,11 @@ macro_rules! impl_sample {
                 0
             }
 
-            fn from_i32_nofail(from: i32) -> $narrow {
-                from as $narrow
+            fn from_wide(wide: $wide) -> Option<$narrow> {
+                use std::$narrow;
+                if wide < $narrow::MIN as $wide { return None; }
+                if wide > $narrow::MAX as $wide { return None; }
+                Some(wide as $narrow)
             }
 
             fn widen(self) -> $wide {
@@ -123,7 +124,6 @@ macro_rules! impl_sample {
         }
 
         impl WideSample for $wide {
-            type Narrow = $narrow;
 
             fn zero() -> $wide {
                 0
@@ -150,22 +150,19 @@ macro_rules! impl_sample {
                 from as $wide
             }
 
+            fn from_i32_nofail(from: i32) -> $wide {
+                from as $wide
+            }
+
             fn from_i64_spare_bit(from: i64) -> Option<$wide> {
                 use std::$wide;
                 if from < ($wide::MIN as i64) >> 1 { return None; }
                 if from > ($wide::MAX as i64) >> 1 { return None; }
-                Ok(from as $wide)
+                Some(from as $wide)
             }
 
             fn to_i64(self) -> i64 {
                 self as i64
-            }
-
-            fn narrow(self) -> Option<$narrow> {
-                use std::$narrow;
-                if self < $narrow::MIN as $wide { return None; }
-                if self > $narrow::MAX as $wide { return None; }
-                Ok(self as $narrow)
             }
         }
     };

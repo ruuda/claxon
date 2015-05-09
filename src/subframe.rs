@@ -200,6 +200,9 @@ pub fn decode<Sample: sample::Sample>
               bps: u8,
               buffer: &mut [Sample::Wide])
               -> FlacResult<()> {
+
+    use sample::WideSample;
+
     // The sample type should be wide enough to accomodate for all bits of the
     // stream, but this can be verified at a higher level than here. Still, it
     // is a good idea to make the assumption explicit. Due to prediction delta,
@@ -296,6 +299,7 @@ fn decode_rice_partition<Sample: sample::Sample>
                          buffer: &mut [Sample::Wide])
                          -> FlacResult<()> {
     use std::mem;
+    use sample::WideSample;
 
     // The Rice partition starts with 4 bits Rice parameter.
     let rice_param = try!(input.read_leq_u8(4));
@@ -379,6 +383,9 @@ fn decode_constant<Sample: sample::Sample>
                    bps: u8,
                    buffer: &mut [Sample::Wide])
                    -> FlacResult<()> {
+
+    use sample::WideSample;
+
     // A constant block has <bits per sample> bits: the value of all samples.
     // The nofail variant is safe, because it has been verified before that the
     // `Sample` type is wide enough for the bits per sample. FLAC does not
@@ -387,7 +394,7 @@ fn decode_constant<Sample: sample::Sample>
     // would require 33 bits. But that is not subset FLAC, and the reference
     // decoder does not support it either.
     let sample_u32 = try!(input.read_leq_u32(bps));
-    let sample = Sample::from_i32_nofail(extend_sign_u32(sample_u32, bps));
+    let sample = Sample::Wide::from_i32_nofail(extend_sign_u32(sample_u32, bps));
 
     for s in buffer.iter_mut() {
         *s = sample;
@@ -401,6 +408,9 @@ fn decode_verbatim<Sample: sample::Sample>
                    bps: u8,
                    buffer: &mut [Sample::Wide])
                    -> FlacResult<()> {
+
+    use sample::WideSample;
+
     // This function must not be called for a sample wider than the sample type.
     // This has been verified at an earlier stage, but it is good to state the
     // assumption explicitly.
@@ -413,9 +423,10 @@ fn decode_verbatim<Sample: sample::Sample>
         // not support samples wider than 32 bits, so `read_leq_u32` suffices.
         // TODO: Actually, no. FLAC supports 32-bit samples, so the mid/side
         // delta would require 33 bits. But that is not subset FLAC, and the
-        // reference decoder does not support it either.
+        // reference decoder does not support it either. The best thing to do,
+        // I think, would be to just not support sample widths > 31.
         let sample_u32 = try!(input.read_leq_u32(bps));
-        *s = Sample::from_i32_nofail(extend_sign_u32(sample_u32, bps));
+        *s = Sample::Wide::from_i32_nofail(extend_sign_u32(sample_u32, bps));
     }
 
     Ok(())
@@ -424,6 +435,9 @@ fn decode_verbatim<Sample: sample::Sample>
 fn predict_fixed<Sample: sample::Sample>
                 (order: u8, buffer: &mut [Sample::Wide])
                  -> FlacResult<()> {
+
+    use sample::WideSample;
+
     // When this is called during decoding, the order as read from the subframe
     // header has already been verified, so it is safe to assume that
     // 0 <= order <= 4. Still, it is good to state that assumption explicitly.
@@ -473,7 +487,8 @@ fn predict_fixed<Sample: sample::Sample>
                                      .sum();
 
         // The delta is stored, so the sample is the prediction + delta.
-        window[coefficients.len()] += prediction;
+        let delta = window[coefficients.len()];
+        window[coefficients.len()] = prediction + delta;
 
         // TODO: Verify that the value fits in bps here? It will have to be
         // verified somewhere either way. Probably before decoding left/side,
