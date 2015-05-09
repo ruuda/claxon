@@ -349,7 +349,7 @@ fn decode_right_side<Sample: sample::WideSample>
         // Right is correct already, only the left channel needs to be decoded.
         // side = left - right => left = side + right.
         let left = side + right;
-        buffer[i] = side;
+        buffer[i] = left;
     }
 
     Ok(())
@@ -357,7 +357,6 @@ fn decode_right_side<Sample: sample::WideSample>
 
 #[test]
 fn verify_decode_right_side() {
-    let side =         vec!();
     let mut buffer = vec!(7i16,  38, 142,  238,   0, -152, -52, -18,
                             -5, -33, -59, -125, 127,   89,   7,  3);
     let result =     vec!(2i16,   5,  83,  113, 127,  -63, -45, -15,
@@ -506,7 +505,6 @@ impl<'r, Sample: sample::Sample> FrameReader<'r, Sample> {
     /// TODO: I should really be consistent with 'read' and 'decode'.
     pub fn read_next<'s>(&'s mut self) -> FrameResult<'s, Sample> {
         use std::mem::size_of;
-        use sample::WideSample;
 
         let header = try!(read_frame_header(self.input));
 
