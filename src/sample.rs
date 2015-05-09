@@ -42,169 +42,68 @@ pub trait Sample: Copy + Clone + Eq + fmt::Debug +
     BitOr<Self, Output = Self> +
     BitAnd<Self, Output = Self> {
 
-    /// The accompanying unsigned integer type of the same width.
+    /// The signed integer type that is wide enough to store differences.
     ///
-    /// For example, for `i16` this would be `u16`. The reason that every
-    /// integer type should have an unsigned counterpart, is that FLAC uses
-    /// an unsigned integer internally in several places because it simplifies
-    /// compression. The unsigned integer is then mapped onto a signed integer
-    /// in a later stage via a bijection, so the types must have the same width.
-    type Unsigned: BitAnd<<Self as Sample>::Unsigned,
-                          Output = <Self as Sample>::Unsigned>
-                 + BitOr<Output = <Self as Sample>::Unsigned>
-                 + Shl<usize, Output = <Self as Sample>::Unsigned>
-                 + Shr<usize, Output = <Self as Sample>::Unsigned>
-                 + Add<Output = <Self as Sample>::Unsigned>
-                 + Eq + Copy + Clone + fmt::Debug;
+    /// The difference between two values of the sample type might not fit in
+    /// a sample type any more, so a wider integer type is required.
+    type Wide: WideSample;
 
-    /// Returns the maximal value that the type can contain.
-    // TODO: is this actually required, can we do without in non-debug versions?
-    fn max() -> Self;
-
-    /// Returns the minimal value that the type can contain.
-    // TODO: is this actually required, can we do without in non-debug versions?
-    fn min() -> Self;
-
-    /// Returns the maximal value that the `Unsigned` type can contain.
-    // TODO: is this actually required, can we do without in non-debug versions?
-    fn max_unsigned() -> <Self as Sample>::Unsigned;
-
-    /// Returns 0.
-    // TODO: could be an associated constant once those land.
+    /// The zero sample.
     fn zero() -> Self;
 
-    /// Returns 1.
-    // TODO: could be an associated constant once those land.
-    fn one() -> Self;
+    /// Casts the sample to its wide type.
+    fn widen(self) -> Sample::Wide;
+}
 
-    /// Returns 0 as the unsigned type.
-    // TODO: could be an associated constant once those land.
-    fn zero_unsigned() -> <Self as Sample>::Unsigned;
+pub trait WideSample: Copy + Clone + Eq + fmt::Debug +
+    Add<Output = Self> +
+    Sub<Output = Self> +
+    Shl<usize, Output = Self> +
+    Shr<usize, Output = Self> +
+    BitOr<Self, Output = Self> +
+    BitAnd<Self, Output = Self> {
 
-    /// Returns 1 as the unsigned type.
-    // TODO: could be an associated constant once those land.
-    fn one_unsigned() -> <Self as Sample>::Unsigned;
+    /// The signed integer type that this is the wide version of.
+    type Narrow: Sample;
 
-    /// Interprets the unsigned value as a signed number.
-    fn from_unsigned(unsigned: <Self as Sample>::Unsigned) -> Self;
+    /// The zero sample.
+    fn zero() -> Self;
 
-    /// Converts an `u16` to the unsigned sample, assuming it will not overflow.
-    fn from_u16_nofail(x: u16) -> <Self as Sample>::Unsigned;
-
-    /// Converts an `i32` to the sample, assuming it will not overflow.
-    fn from_i32_nofail(x: i32) -> Self;
-
-    /// Converts an `i32` to the sample, returning `None` on overflow.
-    fn from_i32(x: i32) -> Option<Self>;
-
-    /// Converts an `i64` to the sample, returning `None` on overflow.
-    fn from_i64(x: i64) -> Option<Self>;
-
-    /// Converts the sample into an `i64`.
-    ///
-    /// All sample types are narrow enough to ensure that this cannot overflow:
-    /// FLAC does not support more than 32 bits per sample.
-    fn to_i32(self) -> i32;
-
-    /// Converts the sample into an `i64`.
-    ///
-    /// All sample types are narrow enough to ensure that this cannot overflow:
-    /// FLAC does not support more than 32 bits per sample.
-    fn to_i64(self) -> i64;
-
-    /// Adds with wraparound on overflow.
-    fn wrapping_add(self, other: Self) -> Self;
-
-    /// Subtracts with wraparound on overflow.
-    fn wrapping_sub(self, other: Self) -> Self;
+    /// Tries to cast the sample to its narrow type, returning `None` on overflow.
+    fn narrow(self) -> Option<Sample::Narrow>;
 }
 
 macro_rules! impl_sample {
-    ($signed: ident, $unsigned: ident) => {
-        impl Sample for $signed {
+    ($narrow: ident, $wide: ident) => {
+        impl Sample for $narrow {
+            type Wide = $wide;
 
-            type Unsigned = $unsigned;
-
-            fn max() -> $signed {
-                use std::$signed;
-                $signed::MAX
-            }
-
-            fn min() -> $signed {
-                use std::$signed;
-                $signed::MIN
-            }
-
-            fn max_unsigned() -> $unsigned {
-                use std::$unsigned;
-                $unsigned::MAX
-            }
-
-            fn zero() -> $signed {
+            fn zero() -> $narrow {
                 0
             }
 
-            fn one() -> $signed {
-                1
+            fn widen(self) -> $wide {
+                self as $wide
             }
+        }
 
-            fn zero_unsigned() -> $unsigned {
+        impl WideSample for $wide {
+            type Narrow = $narrow;
+
+            fn zero() -> $wide {
                 0
             }
 
-            fn one_unsigned() -> $unsigned {
-                1
-            }
-
-            fn from_unsigned(unsigned: $unsigned) -> $signed {
-                unsigned as $signed
-            }
-
-            fn from_u16_nofail(x: u16) -> $unsigned {
-                x as $unsigned
-            }
-
-            fn from_i32_nofail(x: i32) -> $signed {
-                x as $signed
-            }
-
-            fn from_i32(x: i32) -> Option<$signed> {
-                use std::$signed;
-                if x > $signed::MAX as i32 || x < $signed::MIN as i32 {
-                    None
-                } else {
-                    Some(x as $signed)
-                }
-            }
-
-            fn from_i64(x: i64) -> Option<$signed> {
-                use std::$signed;
-                if x > $signed::MAX as i64 || x < $signed::MIN as i64 {
-                    None
-                } else {
-                    Some(x as $signed)
-                }
-            }
-
-            fn to_i32(self) -> i32 {
-                self as i32
-            }
-
-            fn to_i64(self) -> i64 {
-                self as i64
-            }
-
-            fn wrapping_add(self, other: $signed) -> $signed {
-                self.wrapping_add(other)
-            }
-
-            fn wrapping_sub(self, other: $signed) -> $signed {
-                self.wrapping_sub(other)
+            fn narrow(self) -> Option<$narrow> {
+                use std::$narrow;
+                if self < $narrow::MIN as $wide { return None; }
+                if self > $narrow::MAX as $wide { return None; }
+                Ok(self as $narrow)
             }
         }
     };
 }
 
-impl_sample!(i8, u8);
-impl_sample!(i16, u16);
-impl_sample!(i32, u32);
+impl_sample!(i8, i16);
+impl_sample!(i16, i32);
+impl_sample!(i32, i64);
