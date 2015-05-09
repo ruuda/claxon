@@ -23,6 +23,7 @@
 use std::cmp::Eq;
 use std::fmt;
 use std::ops::{Add, BitAnd, BitOr, Mul, Neg, Shl, Shr, Sub};
+use std::num::Zero;
 
 /// A trait that allows decoding into integers of various widths.
 ///
@@ -62,6 +63,7 @@ pub trait Sample: Copy + Clone + Eq + fmt::Debug +
 }
 
 pub trait WideSample: Copy + Clone + Eq + fmt::Debug +
+    Zero +
     Neg<Output = Self> +
     Add<Output = Self> +
     Sub<Output = Self> +
@@ -70,10 +72,6 @@ pub trait WideSample: Copy + Clone + Eq + fmt::Debug +
     Shr<usize, Output = Self> +
     BitOr<Self, Output = Self> +
     BitAnd<Self, Output = Self> {
-
-    /// The zero sample.
-    // TODO: associated constants, once those land.
-    fn zero() -> Self;
 
     /// The one sample.
     fn one() -> Self;
@@ -124,10 +122,6 @@ macro_rules! impl_sample {
         }
 
         impl WideSample for $wide {
-
-            fn zero() -> $wide {
-                0
-            }
 
             fn one() -> $wide {
                 1
