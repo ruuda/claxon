@@ -166,12 +166,12 @@ fn verify_extend_sign_u32() {
 ///
 /// This function takes the unsigned value and converts it into a signed
 /// number.
-fn rice_to_signed<S: sample::Sample>(val: <S as sample::Sample>::Unsigned) -> S {
+fn rice_to_signed<Sample: sample::WideSample>(val: Sample) -> Sample {
     // This uses bitwise arithmetic, because a literal cannot have type `Sample`,
     // I believe this is the most concise way to express the decoding.
-    let half = S::from_unsigned(val >> 1);
-    if val & S::one_unsigned() == S::one_unsigned() {
-        -half - S::one()
+    let half = val >> 1;
+    if val & Sample::one() == Sample::one() {
+        -half - Sample::one()
     } else {
         half
     }
@@ -179,29 +179,17 @@ fn rice_to_signed<S: sample::Sample>(val: <S as sample::Sample>::Unsigned) -> S 
 
 #[test]
 fn verify_rice_to_signed() {
-    assert_eq!(rice_to_signed::<i8>(0), 0);
-    assert_eq!(rice_to_signed::<i8>(1), -1);
-    assert_eq!(rice_to_signed::<i8>(2), 1);
-    assert_eq!(rice_to_signed::<i8>(3), -2);
-    assert_eq!(rice_to_signed::<i8>(4), 2);
-
+    assert_eq!(rice_to_signed::<i16>(0), 0);
+    assert_eq!(rice_to_signed::<i16>(1), -1);
+    assert_eq!(rice_to_signed::<i16>(2), 1);
     assert_eq!(rice_to_signed::<i16>(3), -2);
     assert_eq!(rice_to_signed::<i16>(4), 2);
 
     assert_eq!(rice_to_signed::<i32>(3), -2);
     assert_eq!(rice_to_signed::<i32>(4), 2);
-}
 
-fn assert_wide_enough<Sample>(bps: u8) {
-    use std::mem;
-    // TODO: Should this be a full assert, instead of a debug assert?
-    debug_assert!(bps as usize <= mem::size_of::<Sample>() * 8);
-}
-
-fn assert_narrow_enough<Sample>(max_bps: u8) {
-    use std::mem;
-    // TODO: Should this be a full assert, instead of a debug assert?
-    debug_assert!(mem::size_of::<Sample>() * 8 <= max_bps as usize);
+    assert_eq!(rice_to_signed::<i64>(3), -2);
+    assert_eq!(rice_to_signed::<i64>(4), 2);
 }
 
 /// Decodes a subframe into the provided block-size buffer.
@@ -210,12 +198,13 @@ fn assert_narrow_enough<Sample>(max_bps: u8) {
 pub fn decode<Sample: sample::Sample>
              (input: &mut Bitstream,
               bps: u8,
-              buffer: &mut [Sample])
+              buffer: &mut [Sample::Wide])
               -> FlacResult<()> {
     // The sample type should be wide enough to accomodate for all bits of the
     // stream, but this can be verified at a higher level than here. Still, it
-    // is a good idea to make the assumption explicit.
-    assert_wide_enough::<Sample>(bps);
+    // is a good idea to make the assumption explicit. Due to prediction delta,
+    // it must be at least one bit wider than the desired bits per sample.
+    debug_assert!(Sample::Wide::width() > bps);
 
     // First up is the subframe header.
     let header = try!(read_subframe_header(input));
@@ -247,7 +236,7 @@ fn decode_residual<Sample: sample::Sample>
                   (input: &mut Bitstream,
                    bps: u8,
                    block_size: u16,
-                   buffer: &mut [Sample])
+                   buffer: &mut [Sample::Wide])
                    -> FlacResult<()> {
     // Residual starts with two bits of coding method.
     let method = try!(input.read_leq_u8(2));
@@ -263,7 +252,7 @@ fn decode_partitioned_rice<Sample: sample::Sample>
                           (input: &mut Bitstream,
                            bps: u8,
                            block_size: u16,
-                           buffer: &mut [Sample])
+                           buffer: &mut [Sample::Wide])
                            -> FlacResult<()> {
     println!("  decoding partitioned Rice, bs = {}, buffer.len = {}",
             block_size, buffer.len()); // TODO: remove this.
@@ -304,7 +293,7 @@ fn decode_partitioned_rice<Sample: sample::Sample>
 fn decode_rice_partition<Sample: sample::Sample>
                         (input: &mut Bitstream,
                          bps: u8,
-                         buffer: &mut [Sample])
+                         buffer: &mut [Sample::Wide])
                          -> FlacResult<()> {
     use std::mem;
 
@@ -323,17 +312,20 @@ fn decode_rice_partition<Sample: sample::Sample>
 
         panic!("unencoded binary is not yet implemented"); // TODO
     } else {
-        let max_sample = Sample::max_unsigned();
+        let max_sample = Sample::Wide::max();
         let max_q = max_sample >> rice_param as usize;
 
         // TODO: It is possible for the rice_param to be larger than the
         // sample width, which would be invalid. Check for that.
+        // So instead of using `Sample::Wide::max`, the important thing is
+        // that the decoded value cannot require more bits than bps + 1,
+        // because the prediction delta adds at most one bit.
 
         for sample in buffer.iter_mut() {
             // First part of the sample is the quotient, unary encoded.
             // This means that there are q zeroes, and then a one. There
             // should not be more than max_q consecutive zeroes.
-            let mut q = Sample::zero_unsigned();
+            let mut q = Sample::Wide::zero();
             while try!(input.read_leq_u8(1)) == 0 {
                 if q == max_q {
                     println!("WARNING:
@@ -357,16 +349,14 @@ fn decode_rice_partition<Sample: sample::Sample>
                     // and be fully generic, but still use i32 to decode i16,
                     // so we don't have to use i64 everywhere.
                 }
-                q = q + Sample::one_unsigned();
+                q = q + Sample::Wide::one();
             }
 
             // What follows is the remainder in `rice_param` bits. Because
             // rice_param is at most 14, this fits in an u16. TODO: for
             // the RICE2 partition it will not fit.
-            // TODO: what if the sample is an u8? Then it will can fail.
-            // Probably should use an option and report an error instead.
             let r_u16 = try!(input.read_leq_u16(rice_param));
-            let r = Sample::from_u16_nofail(r_u16);
+            let r = Sample::Wide::from_u16(r_u16);
 
             *sample = rice_to_signed((q << rice_param as usize) | r);
         }
@@ -379,7 +369,7 @@ fn decode_partitioned_rice2<Sample: sample::Sample>
                            (input: &mut Bitstream,
                             bps: u8,
                             block_size: u16,
-                            buffer: &mut [Sample])
+                            buffer: &mut [Sample::Wide])
                             -> FlacResult<()> {
     panic!("partitioned_rice2 is not yet implemented"); // TODO
 }
@@ -387,11 +377,15 @@ fn decode_partitioned_rice2<Sample: sample::Sample>
 fn decode_constant<Sample: sample::Sample>
                   (input: &mut Bitstream,
                    bps: u8,
-                   buffer: &mut [Sample])
+                   buffer: &mut [Sample::Wide])
                    -> FlacResult<()> {
-    // A constant block has <bits per sample> bits: the value of all
-    // samples. The nofail variant is safe, because it has been verified before
-    // that the `Sample` type is wide enough for the bits per sample.
+    // A constant block has <bits per sample> bits: the value of all samples.
+    // The nofail variant is safe, because it has been verified before that the
+    // `Sample` type is wide enough for the bits per sample. FLAC does not
+    // support samples wider than 32 bits, so `read_leq_u32` suffices.
+    // TODO: Actually, no. FLAC supports 32-bit samples, so the mid/side delta
+    // would require 33 bits. But that is not subset FLAC, and the reference
+    // decoder does not support it either.
     let sample_u32 = try!(input.read_leq_u32(bps));
     let sample = Sample::from_i32_nofail(extend_sign_u32(sample_u32, bps));
 
@@ -405,15 +399,21 @@ fn decode_constant<Sample: sample::Sample>
 fn decode_verbatim<Sample: sample::Sample>
                   (input: &mut Bitstream,
                    bps: u8,
-                   buffer: &mut [Sample])
+                   buffer: &mut [Sample::Wide])
                    -> FlacResult<()> {
     // This function must not be called for a sample wider than the sample type.
-    assert_wide_enough::<Sample>(bps);
+    // This has been verified at an earlier stage, but it is good to state the
+    // assumption explicitly.
+    debug_assert!(Sample::Wide::width() >= bps);
 
     // A verbatim block stores samples without encoding whatsoever.
     for s in buffer.iter_mut() {
         // The nofail version is safe, because it has been verified before that
-        // the `Sample` type is wide enough for the bits per sample.
+        // the `Sample` type is wide enough for the bits per sample. FLAC does
+        // not support samples wider than 32 bits, so `read_leq_u32` suffices.
+        // TODO: Actually, no. FLAC supports 32-bit samples, so the mid/side
+        // delta would require 33 bits. But that is not subset FLAC, and the
+        // reference decoder does not support it either.
         let sample_u32 = try!(input.read_leq_u32(bps));
         *s = Sample::from_i32_nofail(extend_sign_u32(sample_u32, bps));
     }
@@ -422,7 +422,7 @@ fn decode_verbatim<Sample: sample::Sample>
 }
 
 fn predict_fixed<Sample: sample::Sample>
-                (order: u8, buffer: &mut [Sample])
+                (order: u8, buffer: &mut [Sample::Wide])
                  -> FlacResult<()> {
     // When this is called during decoding, the order as read from the subframe
     // header has already been verified, so it is safe to assume that
@@ -439,7 +439,15 @@ fn predict_fixed<Sample: sample::Sample>
     let o3 = [1, -3, 3];
     let o4 = [-1, 4, -6, 4];
 
-    let coefficients: &[i64] = match order {
+    // Multiplying samples with at most 6 adds 3 bits. Then summing at most 5
+    // of those values again adds at most 3 bits, so a sample type that is 6
+    // bits wider than bps should suffice. Note that although this means that
+    // `Sample::Wide` does not overflow when the starting sample fitted in
+    // <bps + 1> bits, this does not guarantee that the value will fit in
+    // <bps + 1> bits after prediction, which should be the case for valid FLAC
+    // streams.
+
+    let coefficients: &[i8] = match order {
         0 => &o0,
         1 => &o1,
         2 => &o2,
@@ -458,17 +466,18 @@ fn predict_fixed<Sample: sample::Sample>
         // The #coefficcients elements of the window store already decoded
         // samples, the last element of the window is the delta. Therefore,
         // predict based on the first #coefficients samples.
-        let prediction = coefficients.iter().zip(window.iter())
-                                     .map(|(&c, &s)| c * s.to_i64())
-                                     .sum::<i64>();
+        let prediction = coefficients.iter()
+                                     .map(|&c| Sample::Wide::from_i8(c))
+                                     .zip(window.iter())
+                                     .map(|(c, &s)| c * s)
+                                     .sum();
 
         // The delta is stored, so the sample is the prediction + delta.
-        let sample = window[coefficients.len()].to_i64() + prediction;
+        window[coefficients.len()] += prediction;
 
-        // Cast the i64 back to the `Sample` type, which should be safe for a
-        // valid stream.
-        let sample = Sample::from_i64(sample).ok_or(Error::InvalidFixedSample);
-        window[coefficients.len()] = try!(sample);
+        // TODO: Verify that the value fits in bps here? It will have to be
+        // verified somewhere either way. Probably before decoding left/side,
+        // to ensure that those do not overflow.
     }
 
     Ok(())
@@ -494,7 +503,7 @@ fn decode_fixed<Sample: sample::Sample>
                (input: &mut Bitstream,
                 bps: u8,
                 order: u8,
-                buffer: &mut [Sample])
+                buffer: &mut [Sample::Wide])
                 -> FlacResult<()> {
     println!("begin decoding fixed subframe"); // TODO: Remove this.
     // There are order * bits per sample unencoded warm-up sample bits.
@@ -517,14 +526,18 @@ fn decode_fixed<Sample: sample::Sample>
 fn predict_lpc<Sample: sample::Sample>
               (coefficients: &[i16],
                qlp_shift: i16,
-               buffer: &mut [Sample])
+               buffer: &mut [Sample::Wide])
                -> FlacResult<()> {
+
+    use sample::WideSample;
+
     // The linear prediction is essentially an inner product of the known
     // samples with the coefficients, followed by the shift. The
     // coefficients are 16-bit at most, and there are at most 32 (2^5)
     // coefficients, so multiplying and summing fits in an i64 for sample
-    // widths up to 32 bits (the next is 64, which certainly does not fit).
-    assert_narrow_enough::<Sample>(32);
+    // widths up to 43 bits.
+    // TODO: But it is never verified that the samples do actually fit in 43
+    // bits. Is that required, or is it guaranteed in some other way?
 
     let window_size = coefficients.len() + 1;
     debug_assert!(buffer.len() >= window_size);
@@ -542,13 +555,14 @@ fn predict_lpc<Sample: sample::Sample>
                                      .map(|(&c, &s)| c as i64 * s.to_i64())
                                      .sum::<i64>() >> qlp_shift;
 
-        // The delta is stored, so the sample is the prediction + delta.
-        let sample = window[coefficients.len()].to_i64() + prediction;
+        // The result should fit in the `Sample::Wide` type again, even with
+        // one bit unused.
+        let prediction = Sample::Wide::from_i64_spare_bit(prediction)
+                                      .ok_or(Error::InvalidLpcSample);
 
-        // Cast the i64 back to the `Sample` type, which _should_ be safe after
-        // the shift.
-        let sample = Sample::from_i64(sample).ok_or(Error::InvalidLpcSample);
-        window[coefficients.len()] = try!(sample);
+        // The delta is stored, so the sample is the prediction + delta.
+        let delta = window[coefficients.len()];
+        window[coefficients.len()] = try!(prediction) + delta;
     }
 
     Ok(())
@@ -576,7 +590,7 @@ fn decode_lpc<Sample: sample::Sample>
              (input: &mut Bitstream,
               bps: u8,
               order: u8,
-              buffer: &mut [Sample])
+              buffer: &mut [Sample::Wide])
               -> FlacResult<()> {
     println!("begin decoding of LPC subframe"); // TODO: Remove this.
     // There are order * bits per sample unencoded warm-up sample bits.

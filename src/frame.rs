@@ -20,7 +20,7 @@ use std::iter::repeat;
 use crc::Crc8Reader;
 use error::{Error, FlacResult};
 use input::{Bitstream, ReadExt};
-use sample::Sample;
+use sample;
 use subframe;
 
 #[derive(Clone, Copy)]
@@ -306,8 +306,9 @@ fn assert_not_too_wide<S>(max_bps: u8) {
 }
 
 /// Converts a buffer with left samples and a side channel in-place to left ++ right.
-fn decode_left_side<S: Sample>(buffer: &mut [S], side: &[<S as Sample>::Wide])
-                               -> FlacResult<()> {
+fn decode_left_side<Sample: sample::Sample>
+                   (buffer: &mut [Sample], side: &[Sample::Wide])
+                    -> FlacResult<()> {
     let block_size = buffer.len() / 2;
     for i in 0 .. block_size {
         let left = buffer[i];
@@ -338,8 +339,9 @@ fn verify_decode_left_side() {
 }
 
 /// Converts a buffer with right samples and a side channel in-place to left ++ right.
-fn decode_right_side<S: Sample>(buffer: &mut [S], side: &[<S as Sample>::Wide])
-                                -> FlacResult<()> {
+fn decode_right_side<Sample: sample::Sample>
+                    (buffer: &mut [Sample], side: &[Sample::Wide])
+                     -> FlacResult<()> {
     let block_size = buffer.len() / 2;
     for i in 0 .. block_size {
         let right = buffer[block_size + i];
@@ -370,8 +372,9 @@ fn verify_decode_right_side() {
 }
 
 /// Converts a buffer with mid samples and a side channel in-place to left ++ right.
-fn decode_mid_side<S: Sample>(buffer: &mut [S], side: &[<S as Sample>::Wide])
-                              -> FlacResult<()> {
+fn decode_mid_side<Sample: sample::Sample>
+                  (buffer: &mut [Sample], side: &[Sample::Wide])
+                   -> FlacResult<()> {
     let block_size = buffer.len() / 2;
     for i in 0 .. block_size {
         let mid = buffer[i].widen();
@@ -381,7 +384,7 @@ fn decode_mid_side<S: Sample>(buffer: &mut [S], side: &[<S as Sample>::Wide])
 
         // Double mid first, and then correct for truncated rounding that
         // will have occured if side is odd.
-        let mid = (mid << 1) | (side[i] & 1);
+        let mid = (mid << 1) | (side[i] & Sample::Wide::one());
         let left = ((mid + side[i]) >> 1).narrow();
         let right = ((mid - side[i]) >> 1).narrow();
 
@@ -415,7 +418,7 @@ fn verify_decode_mid_side() {
 }
 
 /// A block of raw audio samples.
-pub struct Block<'b, S> where S: 'b {
+pub struct Block<'b, Sample> where Sample: 'b {
     /// The sample number of the first sample in the this block.
     first_sample_number: u64,
     /// The number of samples in the block.
@@ -423,11 +426,11 @@ pub struct Block<'b, S> where S: 'b {
     /// The number of channels in the block.
     n_channels: u8,
     /// The decoded samples, the channels stored consecutively.
-    samples: &'b [S]
+    samples: &'b [Sample]
 }
 
-impl <'b, S: Sample> Block<'b, S> {
-    fn new(time: u64, bs: u16, buffer: &'b [S]) -> Block<'b, S> {
+impl <'b, Sample: sample::Sample> Block<'b, Sample> {
+    fn new(time: u64, bs: u16, buffer: &'b [Sample]) -> Block<'b, Sample> {
         Block {
             first_sample_number: time,
             block_size: bs,
@@ -456,7 +459,7 @@ impl <'b, S: Sample> Block<'b, S> {
     ///
     /// # Panics
     /// Panics if `ch` is larger than `channels()`.
-    pub fn channel(&'b self, ch: u8) -> &'b [S] {
+    pub fn channel(&'b self, ch: u8) -> &'b [Sample] {
         &self.samples[ch as usize * self.block_size as usize ..
                      (ch as usize + 1) * self.block_size as usize]
     }
@@ -466,19 +469,19 @@ impl <'b, S: Sample> Block<'b, S> {
 ///
 /// TODO: for now, it is assumes that the reader starts at a frame header;
 /// no searching for a sync code is performed at the moment.
-pub struct FrameReader<'r, S> {
+pub struct FrameReader<'r, Sample: sample::Sample> {
     input: &'r mut (io::Read + 'r),
-    buffer: Vec<S>,
-    wide_buffer: Vec<i32>
+    buffer: Vec<Sample>,
+    wide_buffer: Vec<Sample::Wide>
 }
 
 /// Either a `Block` or an `Error`.
-pub type FrameResult<'b, S> = FlacResult<Block<'b, S>>;
+pub type FrameResult<'b, Sample> = FlacResult<Block<'b, Sample>>;
 
-impl<'r, S: Sample> FrameReader<'r, S> {
+impl<'r, Sample: sample::Sample> FrameReader<'r, Sample> {
 
     /// Creates a new frame reader that will yield at least one element.
-    pub fn new(input: &'r mut io::Read) -> FrameReader<'r, S> {
+    pub fn new(input: &'r mut io::Read) -> FrameReader<'r, Sample> {
         // TODO: a hit for the vector size can be provided.
         FrameReader {
             input: input,
@@ -514,7 +517,7 @@ impl<'r, S: Sample> FrameReader<'r, S> {
     /// Tries to decode the next frame.
     ///
     /// TODO: I should really be consistent with 'read' and 'decode'.
-    pub fn read_next<'s>(&'s mut self) -> FrameResult<'s, S> {
+    pub fn read_next<'s>(&'s mut self) -> FrameResult<'s, Sample> {
         use std::mem::size_of;
 
         let header = try!(read_frame_header(self.input));
