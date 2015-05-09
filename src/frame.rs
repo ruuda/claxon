@@ -300,11 +300,6 @@ fn read_frame_header(input: &mut io::Read) -> FlacResult<FrameHeader> {
     Ok(frame_header)
 }
 
-fn assert_not_too_wide<S>(max_bps: u8) {
-    use std::mem;
-    debug_assert!(max_bps as usize >= mem::size_of::<S>() * 8);
-}
-
 /// Converts a buffer with left samples and a side channel in-place to left ++ right.
 // TODO: This could take iterators, and decode and narrow in-place. Better yet,
 // this should produce an iterator that decodes.
