@@ -21,9 +21,9 @@
 //! encountered in a FLAC stream. (This excludes `i64` and unsigned integers.)
 
 use std::cmp::Eq;
-use std::fmt;
+use std::fmt::Debug;
 use std::ops::{Add, BitAnd, BitOr, Mul, Neg, Shl, Shr, Sub};
-use std::num::Zero;
+use std::num::{One, Zero};
 
 /// A trait that allows decoding into integers of various widths.
 ///
@@ -34,14 +34,7 @@ use std::num::Zero;
 ///   Therefore, converting a sample to `i32` or `i64` can never fail.
 ///
 /// This trait should only be implemented for `i8`, `i16` and `i32`.
-pub trait Sample: Copy + Clone + Eq + fmt::Debug +
-    Neg<Output = Self> +
-    Add<Output = Self> +
-    Sub<Output = Self> +
-    Shl<usize, Output = Self> +
-    Shr<usize, Output = Self> +
-    BitOr<Self, Output = Self> +
-    BitAnd<Self, Output = Self> {
+pub trait Sample: Copy + Clone + Debug + Eq + Zero {
 
     /// The signed integer type that is wide enough to store differences.
     ///
@@ -51,19 +44,12 @@ pub trait Sample: Copy + Clone + Eq + fmt::Debug +
     /// two bits wider than the sample type itself.
     type Wide: WideSample;
 
-    /// The zero sample.
-    // TODO: associated constants, once those land.
-    fn zero() -> Self;
-
     /// Tries to narrow the sample, returning `None` on overflow.
     fn from_wide(wide: Self::Wide) -> Option<Self>;
-
-    /// Casts the sample to its wide type.
-    fn widen(self) -> Self::Wide;
 }
 
-pub trait WideSample: Copy + Clone + Eq + fmt::Debug +
-    Zero +
+pub trait WideSample: Copy + Clone + Debug + Eq +
+    Zero + One +
     Neg<Output = Self> +
     Add<Output = Self> +
     Sub<Output = Self> +
@@ -72,9 +58,6 @@ pub trait WideSample: Copy + Clone + Eq + fmt::Debug +
     Shr<usize, Output = Self> +
     BitOr<Self, Output = Self> +
     BitAnd<Self, Output = Self> {
-
-    /// The one sample.
-    fn one() -> Self;
 
     /// The maximum value of the wide sample type.
     fn max() -> Self;
@@ -105,27 +88,15 @@ macro_rules! impl_sample {
         impl Sample for $narrow {
             type Wide = $wide;
 
-            fn zero() -> $narrow {
-                0
-            }
-
             fn from_wide(wide: $wide) -> Option<$narrow> {
                 use std::$narrow;
                 if wide < $narrow::MIN as $wide { return None; }
                 if wide > $narrow::MAX as $wide { return None; }
                 Some(wide as $narrow)
             }
-
-            fn widen(self) -> $wide {
-                self as $wide
-            }
         }
 
         impl WideSample for $wide {
-
-            fn one() -> $wide {
-                1
-            }
 
             fn max() -> $wide {
                 use std::$wide;

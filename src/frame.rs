@@ -491,7 +491,8 @@ impl<'r, Sample: sample::Sample> FrameReader<'r, Sample> {
                 self.wide_buffer = Vec::with_capacity(new_len);
             }
             let len = self.wide_buffer.len();
-            self.wide_buffer.extend(repeat(Zero::zero()).take(new_len - len));
+            self.wide_buffer.extend(repeat(Sample::Wide::zero())
+                                   .take(new_len - len));
         }
     }
 
