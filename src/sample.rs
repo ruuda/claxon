@@ -48,6 +48,14 @@ pub trait Sample: Copy + Clone + Debug + Eq + Zero {
     fn from_wide(wide: Self::Wide) -> Option<Self>;
 }
 
+/// A trait that enables efficient decoding for every bit depth.
+///
+/// This trait is what is used internally for decoding. It is accessed via
+/// `Sample::Wide`. A wider sample than the final result is required for two
+/// reasons: channel decorrelation might need an extra bit for the side
+/// channel, and prediction might need an extra bit to store the residues. One
+/// could use `i64` everywhere and it will be wide enough, but this trait
+/// enables using the narrowest integer type that is wide enough, saving memory.
 pub trait WideSample: Copy + Clone + Debug + Eq +
     Zero + One +
     Neg<Output = Self> +
