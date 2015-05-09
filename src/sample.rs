@@ -101,7 +101,7 @@ pub trait WideSample: Copy + Clone + Eq + fmt::Debug +
 }
 
 macro_rules! impl_sample {
-    ($narrow: ident, $wide: ident, $width: expr) => {
+    ($narrow: ident, $wide: ident, $wide_width: expr) => {
         impl Sample for $narrow {
             type Wide = $wide;
 
@@ -133,7 +133,7 @@ macro_rules! impl_sample {
             }
 
             fn width() -> u8 {
-                $width * 2
+                $wide_width
             }
 
             fn from_i8(from: i8) -> $wide {
@@ -162,6 +162,6 @@ macro_rules! impl_sample {
     };
 }
 
-impl_sample!(i8, i16, 8);
-impl_sample!(i16, i32, 16);
-impl_sample!(i32, i64, 32);
+impl_sample!(i8, i16, 16);
+impl_sample!(i16, i32, 32);
+impl_sample!(i32, i64, 64);
