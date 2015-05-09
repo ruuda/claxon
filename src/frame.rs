@@ -586,6 +586,19 @@ impl<'r, Sample: sample::Sample> FrameReader<'r, Sample> {
             // method on the bit reader; it'd be a simple comparison.
         }
 
+        {
+            // Narrow down the wide samples to the requested sample type.
+            // TODO: this should not verify that it fits the sample type, but that
+            // it fits the requested bps.
+            let n = header.block_size as usize * header.channels() as usize;
+            let wide_iter = self.wide_buffer[.. n].iter();
+            let dest_iter = self.buffer[.. n].iter_mut();
+            for (&src, dest) in wide_iter.zip(dest_iter) {
+                let narrow = Sample::from_wide(src).ok_or(Error::SampleTooWide);
+                *dest = try!(narrow);
+            }
+        }
+
         println!("Decoding of all subframes completed"); // TODO: remove this.
 
         // The frame footer is a 16-bit CRC.
