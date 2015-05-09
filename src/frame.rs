@@ -599,7 +599,7 @@ impl<'r, Sample: sample::Sample> FrameReader<'r, Sample> {
 
         // The frame footer is a 16-bit CRC.
         // TODO: Get CRC of frame read so far.
-        let frame_crc = try!(self.input.read_be_u16());
+        let _frame_crc = try!(self.input.read_be_u16());
         // TODO: Compare CRCs.
 
         // TODO: constant block size should be verified if a frame number is

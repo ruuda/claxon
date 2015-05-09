@@ -367,10 +367,10 @@ fn decode_rice_partition<Sample: sample::WideSample>
 }
 
 fn decode_partitioned_rice2<Sample: sample::WideSample>
-                           (input: &mut Bitstream,
-                            bps: u8,
-                            block_size: u16,
-                            buffer: &mut [Sample])
+                           (_input: &mut Bitstream,
+                            _bps: u8,
+                            _block_size: u16,
+                            _buffer: &mut [Sample])
                             -> FlacResult<()> {
     panic!("partitioned_rice2 is not yet implemented"); // TODO
 }
