@@ -515,9 +515,6 @@ fn decode_fixed<Sample: sample::WideSample>
     // There are order * bits per sample unencoded warm-up sample bits.
     try!(decode_verbatim(input, bps, &mut buffer[.. order as usize]));
 
-    println!("the warm-up samples are {:?}", buffer[0 .. order as usize].iter()
-             .collect::<Vec<_>>()); // TODO: Remove this.
-
     // Next up is the residual. We decode into the buffer directly, the
     // predictor contributions will be added in a second pass. The first
     // `order` samples have been decoded already, so continue after that.
@@ -629,7 +626,6 @@ fn decode_lpc<Sample: sample::WideSample>
         let coef_unsig = try!(input.read_leq_u16(qlp_precision));
         let coef = extend_sign_u16(coef_unsig, qlp_precision);
         coefficients.push(coef);
-        println!("  > coef: {}", coef); // TODO: Remove this.
     }
 
     // Coefficients are used in reverse order for prediction.

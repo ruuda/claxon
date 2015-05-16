@@ -54,9 +54,6 @@ fn main() {
             output.write_sample(l).ok().expect("failed to write sample");
             output.write_sample(r).ok().expect("failed to write sample");
         }
-        println!("block {} decoded\nleft: {:?} .. {:?}\nright: {:?} .. {:?}",
-                 i, &left[..12], &left[block.len() as usize - 12 ..],
-                 &right[..12], &right[block.len() as usize - 12 ..]);
         sample = sample + block.len() as u64;
         i = i + 1;
     }
