@@ -42,7 +42,7 @@ fn main() {
     let fname_wav = fname.with_extension("wav");
     let mut output = WavWriter::create(fname_wav, spec).unwrap();
 
-    let mut blocks = stream.blocks::<i16>();
+    let mut blocks = stream.blocks::<i32>();
     let mut sample = 0u64;
     let mut i = 0u64;
 
