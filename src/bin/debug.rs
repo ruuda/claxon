@@ -24,12 +24,12 @@ fn main() {
     use claxon::FlacStream;
     use hound::{WavSpec, WavWriter};
 
-    let arg = env::args().nth(1).unwrap();
+    let arg = env::args().nth(1).expect("no file given");
     let fname = path::Path::new(&arg);
-    let input = fs::File::open(fname).unwrap();
+    let input = fs::File::open(fname).ok().expect("failed to open file");
     let mut reader = io::BufReader::new(input);
-    let mut stream = FlacStream::new(&mut reader).unwrap();
-    let n_samples = stream.streaminfo().n_samples.unwrap();
+    let mut stream = FlacStream::new(&mut reader).ok().expect("failed to open FLAC stream");
+    let n_samples = stream.streaminfo().n_samples.expect("no sample count present in streaminfo");
 
     let spec = WavSpec {
         // TODO: naming is inconsistent between Hound and Claxon.
@@ -40,14 +40,14 @@ fn main() {
         bits_per_sample: stream.streaminfo().bits_per_sample as u16
     };
     let fname_wav = fname.with_extension("wav");
-    let mut output = WavWriter::create(fname_wav, spec).unwrap();
+    let mut output = WavWriter::create(fname_wav, spec).ok().expect("failed to create wav file");
 
     let mut blocks = stream.blocks::<i32>();
     let mut sample = 0u64;
     let mut i = 0u64;
 
     while sample < n_samples {
-        let block = blocks.read_next().unwrap();
+        let block = blocks.read_next().ok().expect("failed to read block");
         let left = block.channel(0);
         let right = block.channel(1);
         for (&l, &r) in left.iter().zip(right.iter()) {
