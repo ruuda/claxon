@@ -120,12 +120,11 @@ fn compare_decoded_stream(fname: &path::Path) {
         // The streaminfo test will ensure that things like bit depth and
         // sample rate match, only the actual samples are compared here.
 
-        let mut ref_samples = ref_stream.samples::<i16>();
+        let mut ref_samples = ref_stream.samples::<i32>();
 
         let n_samples = try_stream.streaminfo().n_samples.unwrap();
         let n_channels = try_stream.streaminfo().n_channels;
-        // TODO: use i32 to be generic (when Hound supports this).
-        let mut blocks = try_stream.blocks::<i16>();
+        let mut blocks = try_stream.blocks::<i32>();
         let mut sample = 0u64;
         let mut b = 0u64;
 
