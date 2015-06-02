@@ -296,8 +296,6 @@ fn decode_rice_partition<Sample: sample::WideSample>
                          bps: u8,
                          buffer: &mut [Sample])
                          -> FlacResult<()> {
-    use std::mem;
-
     // The Rice partition starts with 4 bits Rice parameter.
     let rice_param = try!(input.read_leq_u8(4));
 
@@ -334,13 +332,14 @@ fn decode_rice_partition<Sample: sample::WideSample>
                 q = q + Sample::one();
             }
 
-            // What follows is the remainder in `rice_param` bits. Because
-            // rice_param is at most 14, this fits in an u16. TODO: for
-            // the RICE2 partition it will not fit.
-            let r_u16 = try!(input.read_leq_u16(rice_param));
-            let r = Sample::from_u16(r_u16);
+            // TODO: for RICE_PARTITION, an u16 would be sufficient, because
+            // `rice_param` is at most 14. Monomorphisation might be beneficial,
+            // because RICE2_PARTITION is extremely rare. This would need to
+            // be benchmarked.
+            let r_u32 = try!(input.read_leq_u32(rice_param));
+            let r = Sample::from_u32(r_u32).ok_or(Error::InvalidRiceCode);
 
-            *sample = rice_to_signed((q << rice_param as usize) | r);
+            *sample = rice_to_signed((q << rice_param as usize) | try!(r));
         }
     }
 

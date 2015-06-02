@@ -79,6 +79,9 @@ pub trait WideSample: Copy + Clone + Debug + Eq +
     /// Casts a `u16` to the wide sample type.
     fn from_u16(from: u16) -> Self;
 
+    /// Casts a `u32` to the wide sample type.
+    fn from_u32(from: u32) -> Option<Self>;
+
     /// Casts a `i32` to the wide sample type, assuming it will not overflow.
     fn from_i32_nofail(from: i32) -> Self;
 
@@ -121,6 +124,13 @@ macro_rules! impl_sample {
 
             fn from_u16(from: u16) -> $wide {
                 from as $wide
+            }
+
+            fn from_u32(from: u32) -> Option<$wide> {
+                use std::$wide;
+                if (from as i64) < $wide::MIN as i64 { return None; }
+                if (from as i64) > $wide::MAX as i64 { return None; }
+                Some(from as $wide)
             }
 
             fn from_i32_nofail(from: i32) -> $wide {
