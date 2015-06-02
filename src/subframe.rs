@@ -329,26 +329,7 @@ fn decode_rice_partition<Sample: sample::WideSample>
             let mut q = Sample::zero();
             while try!(input.read_leq_u8(1)) == 0 {
                 if q == max_q {
-                    println!("WARNING:
-                             max_sample = {:?},
-                             max_q = {:?},
-                             q = {:?},
-                             rice_param = {:?},
-                             sample width = {:?}",
-                             max_sample,
-                             max_q,
-                             q,
-                             rice_param,
-                             mem::size_of::<Sample>() * 8);
-                    //return Err(Error::InvalidRiceCode);
-
-                    // TODO: The reason that this crashes here, might be that
-                    // the residual does not fit within the sample type, but
-                    // after prediction it does. This means that we must use a
-                    // wider type internally. That would be a nice idea anyway,
-                    // because we can get rid of the side buffer in FrameReader
-                    // and be fully generic, but still use i32 to decode i16,
-                    // so we don't have to use i64 everywhere.
+                    return Err(Error::InvalidRiceCode);
                 }
                 q = q + Sample::one();
             }
