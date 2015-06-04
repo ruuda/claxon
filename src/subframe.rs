@@ -283,7 +283,8 @@ fn decode_partitioned_rice<Sample: sample::WideSample>
     let mut start = 0;
     for i in 0 .. n_partitions {
         let partition_size = n_samples - if i == 0 { n_warm_up } else { 0 };
-        try!(decode_rice_partition(input, bps, &mut buffer[start ..
+        try!(decode_rice_partition(input, bps, RicePartitionType::Rice,
+                                   &mut buffer[start ..
                                    start + partition_size as usize]));
         start = start + partition_size as usize;
     }
@@ -291,16 +292,29 @@ fn decode_partitioned_rice<Sample: sample::WideSample>
     Ok(())
 }
 
+enum RicePartitionType {
+    Rice,
+    Rice2
+}
+
 fn decode_rice_partition<Sample: sample::WideSample>
                         (input: &mut Bitstream,
                          bps: u8,
+                         partition_type: RicePartitionType,
                          buffer: &mut [Sample])
                          -> FlacResult<()> {
-    // The Rice partition starts with 4 bits Rice parameter.
-    let rice_param = try!(input.read_leq_u8(4));
+    // The Rice partition starts with 4 or 5 bits Rice parameter, depending on
+    // the partition type.
+    let rice_param = try!(input.read_leq_u8(match partition_type {
+        RicePartitionType::Rice => 4,
+        RicePartitionType::Rice2 => 5
+    }));
 
-    // 1111 is an escape code that indicates unencoded binary.
-    if rice_param == 0b1111 {
+    // All ones is an escape code that indicates unencoded binary.
+    if rice_param == match partition_type {
+        RicePartitionType::Rice => 0b1111,
+        RicePartitionType::Rice2 => 0b11111
+    } {
         // For unencoded binary, there are five bits indicating bits-per-sample.
         let rice_bps = try!(input.read_leq_u8(5));
 
@@ -333,9 +347,10 @@ fn decode_rice_partition<Sample: sample::WideSample>
             }
 
             // TODO: for RICE_PARTITION, an u16 would be sufficient, because
-            // `rice_param` is at most 14. Monomorphisation might be beneficial,
-            // because RICE2_PARTITION is extremely rare. This would need to
-            // be benchmarked.
+            // `rice_param` is at most 14. Monomorphisation is beneficial,
+            // because RICE2_PARTITION is extremely rare and benchmarks
+            // indicate that splitting the methods is faster. For now though,
+            // simplicity is more important.
             let r_u32 = try!(input.read_leq_u32(rice_param));
             let r = Sample::from_u32(r_u32).ok_or(Error::InvalidRiceCode);
 
