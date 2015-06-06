@@ -321,13 +321,3 @@ fn verify_read_mixed() {
     assert_eq!(bits.read_leq_u32(17).unwrap(), minus | (-08489_i16 as u16 as u32));
     assert_eq!(bits.read_leq_u32(17).unwrap(), minus | (-08698_i16 as u16 as u32));
 }
-
-#[test]
-fn verify_align() {
-    let mut data = io::Cursor::new(vec!(0x00, 0xff));
-    let mut bits = Bitstream::new(&mut data);
-
-    assert_eq!(bits.read_leq_u8(5).unwrap(), 0);
-    bits.align_to_byte();
-    assert_eq!(bits.read_leq_u8(3).unwrap(), 7);
-}
