@@ -233,6 +233,12 @@ pub fn decode<Sample: sample::WideSample>
     Ok(())
 }
 
+#[derive(Copy, Clone)]
+enum RicePartitionType {
+    Rice,
+    Rice2
+}
+
 fn decode_residual<Sample: sample::WideSample>
                   (input: &mut Bitstream,
                    bps: u8,
@@ -243,8 +249,10 @@ fn decode_residual<Sample: sample::WideSample>
     let method = try!(input.read_leq_u8(2));
     println!("  residual coding method: {:b}", method); // TODO: Remove this.
     match method {
-        0b00 => decode_partitioned_rice(input, bps, block_size, buffer),
-        0b01 => decode_partitioned_rice2(input, bps, block_size, buffer),
+        0b00 => decode_partitioned_rice(input, bps, RicePartitionType::Rice,
+                                        block_size, buffer),
+        0b01 => decode_partitioned_rice(input, bps, RicePartitionType::Rice2,
+                                        block_size, buffer),
         _ => Err(Error::InvalidResidual) // 10 and 11 are reserved.
     }
 }
@@ -252,6 +260,7 @@ fn decode_residual<Sample: sample::WideSample>
 fn decode_partitioned_rice<Sample: sample::WideSample>
                           (input: &mut Bitstream,
                            bps: u8,
+                           partition_type: RicePartitionType,
                            block_size: u16,
                            buffer: &mut [Sample])
                            -> FlacResult<()> {
@@ -283,18 +292,13 @@ fn decode_partitioned_rice<Sample: sample::WideSample>
     let mut start = 0;
     for i in 0 .. n_partitions {
         let partition_size = n_samples - if i == 0 { n_warm_up } else { 0 };
-        try!(decode_rice_partition(input, bps, RicePartitionType::Rice,
+        try!(decode_rice_partition(input, bps, partition_type,
                                    &mut buffer[start ..
                                    start + partition_size as usize]));
         start = start + partition_size as usize;
     }
 
     Ok(())
-}
-
-enum RicePartitionType {
-    Rice,
-    Rice2
 }
 
 fn decode_rice_partition<Sample: sample::WideSample>
@@ -359,15 +363,6 @@ fn decode_rice_partition<Sample: sample::WideSample>
     }
 
     Ok(())
-}
-
-fn decode_partitioned_rice2<Sample: sample::WideSample>
-                           (_input: &mut Bitstream,
-                            _bps: u8,
-                            _block_size: u16,
-                            _buffer: &mut [Sample])
-                            -> FlacResult<()> {
-    panic!("partitioned_rice2 is not yet implemented"); // TODO
 }
 
 fn decode_constant<Sample: sample::WideSample>
