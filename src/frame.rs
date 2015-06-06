@@ -504,14 +504,6 @@ impl<'r, Sample: sample::Sample> FrameReader<'r, Sample> {
 
         let header = try!(read_frame_header(self.input));
 
-        // TODO: remove this print.
-        println!("frame: bs = {}, sr = {:?}, n_ch = {}, cm = {:?}, bps = {:?}",
-                 header.block_size,
-                 header.sample_rate,
-                 header.channels(),
-                 header.channel_assignment,
-                 header.bits_per_sample);
-
         // We must allocate enough space for all channels in the block to be
         // decoded.
         let total_samples = header.channels() as usize * header.block_size as usize;
@@ -535,7 +527,6 @@ impl<'r, Sample: sample::Sample> FrameReader<'r, Sample> {
             match header.channel_assignment {
                 ChannelAssignment::Independent(n_ch) => {
                     for ch in 0 .. n_ch as usize {
-                        println!("decoding subframe {}", ch); // TODO: remove this.
                         try!(subframe::decode(&mut bitstream, bps,
                                               &mut self.wide_buffer[ch * bs ..
                                                                    (ch + 1) * bs]));
@@ -594,8 +585,6 @@ impl<'r, Sample: sample::Sample> FrameReader<'r, Sample> {
                 *dest = try!(narrow);
             }
         }
-
-        println!("Decoding of all subframes completed"); // TODO: remove this.
 
         // The frame footer is a 16-bit CRC.
         // TODO: Get CRC of frame read so far.

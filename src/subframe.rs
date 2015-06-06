@@ -64,7 +64,6 @@ fn read_subframe_header(input: &mut Bitstream) -> FlacResult<SubframeHeader> {
         // The only possibility left is bit pattern 1xxxxx, an LPC subframe.
         n => {
             // The xxxxx bits are the order minus one.
-            println!("subframe type is LPC, bits: {:b}", n); // TODO: remove this.
             let order_mo = n & 0b011_111;
             SubframeType::Lpc(order_mo + 1)
         }
@@ -83,8 +82,6 @@ fn read_subframe_header(input: &mut Bitstream) -> FlacResult<SubframeHeader> {
         }
         wbits
     };
-
-    println!("subframe has {} wasted bits per sample", wasted_bits); // TODO: remove this.
 
     let subframe_header = SubframeHeader {
         sf_type: sf_type,
@@ -207,12 +204,8 @@ pub fn decode<Sample: sample::WideSample>
     // it must be at least one bit wider than the desired bits per sample.
     debug_assert!(Sample::width() > bps);
 
-    // First up is the subframe header.
     let header = try!(read_subframe_header(input));
 
-    // Then decode the subframe, properly per type.
-    println!("encountered subframe of type {:?}",
-             header.sf_type); // TODO: Remove this.
     match header.sf_type {
         SubframeType::Constant => try!(decode_constant(input, bps, buffer)),
         SubframeType::Verbatim => try!(decode_verbatim(input, bps, buffer)),
@@ -229,7 +222,6 @@ pub fn decode<Sample: sample::WideSample>
         }
     }
 
-    println!("subframe decoded"); // TODO: Remove this.
     Ok(())
 }
 
@@ -247,7 +239,6 @@ fn decode_residual<Sample: sample::WideSample>
                    -> FlacResult<()> {
     // Residual starts with two bits of coding method.
     let method = try!(input.read_leq_u8(2));
-    println!("  residual coding method: {:b}", method); // TODO: Remove this.
     match method {
         0b00 => decode_partitioned_rice(input, bps, RicePartitionType::Rice,
                                         block_size, buffer),
@@ -264,9 +255,6 @@ fn decode_partitioned_rice<Sample: sample::WideSample>
                            block_size: u16,
                            buffer: &mut [Sample])
                            -> FlacResult<()> {
-    println!("  decoding partitioned Rice, bs = {}, buffer.len = {}",
-            block_size, buffer.len()); // TODO: remove this.
-
     // The block size, and therefore the buffer, cannot exceed 2^16 - 1.
     debug_assert!(buffer.len() <= 0xffff);
 
@@ -281,9 +269,6 @@ fn decode_partitioned_rice<Sample: sample::WideSample>
     let n_partitions = 1u32 << order as usize;
     let n_samples = block_size >> order as usize;
     let n_warm_up = block_size - buffer.len() as u16;
-
-    println!("  order: {}, partitions: {}, samples: {}",
-             order, n_partitions, n_samples); // TODO: Remove this.
 
     // The partition size must be at least as big as the number of warm-up
     // samples, otherwise the size of the first partition is negative.
@@ -501,7 +486,6 @@ fn decode_fixed<Sample: sample::WideSample>
                 order: u8,
                 buffer: &mut [Sample])
                 -> FlacResult<()> {
-    println!("begin decoding fixed subframe"); // TODO: Remove this.
     // There are order * bits per sample unencoded warm-up sample bits.
     try!(decode_verbatim(input, bps, &mut buffer[.. order as usize]));
 
@@ -532,8 +516,6 @@ fn predict_lpc<Sample: sample::WideSample>
 
     let window_size = coefficients.len() + 1;
     debug_assert!(buffer.len() >= window_size);
-
-    println!("  predicting using LPC predictor"); // TODO: Remove this.
 
     for i in 0 .. buffer.len() - coefficients.len() {
         // Manually do the windowing, because .windows() returns immutable slices.
@@ -585,12 +567,8 @@ fn decode_lpc<Sample: sample::WideSample>
               order: u8,
               buffer: &mut [Sample])
               -> FlacResult<()> {
-    println!("begin decoding of LPC subframe"); // TODO: Remove this.
     // There are order * bits per sample unencoded warm-up sample bits.
     try!(decode_verbatim(input, bps, &mut buffer[.. order as usize]));
-
-    println!("the warm-up samples are {:?}", buffer[0 .. order as usize].iter()
-             .collect::<Vec<_>>()); // TODO: Remove this.
 
     // Next are four bits quantised linear predictor coefficient precision - 1.
     let qlp_precision = try!(input.read_leq_u8(4)) + 1;
@@ -604,9 +582,6 @@ fn decode_lpc<Sample: sample::WideSample>
     // in signed two's complement. Read 5 bits and then extend the sign bit.
     let qlp_shift_unsig = try!(input.read_leq_u16(5));
     let qlp_shift = extend_sign_u16(qlp_shift_unsig, 5);
-
-    println!("  lpc: qlp_precision: {}, qlp_shift: {}, order: {}",
-             qlp_precision, qlp_shift, order); // TODO: Remove this.
 
     // Finally, the coefficients themselves.
     // TODO: get rid of the allocation by pre-allocating a vector in the decoder.
@@ -626,10 +601,6 @@ fn decode_lpc<Sample: sample::WideSample>
     // `order` samples have been decoded already, so continue after that.
     try!(decode_residual(input, bps, buffer.len() as u16,
                          &mut buffer[order as usize ..]));
-
-    println!("  > first residual: {:?}, last residual: {:?}",
-             buffer[order as usize],
-             buffer[buffer.len() - 1]); // TODO: Remove this.
 
     try!(predict_lpc(&coefficients, qlp_shift, buffer));
 
