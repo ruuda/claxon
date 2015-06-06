@@ -166,27 +166,6 @@ impl<'r> Bitstream<'r> {
         shift_left(0xff, 8 - bits as usize)
     }
 
-    /// Skips bits such that the next read will be byte-aligned.
-    pub fn align_to_byte(&mut self) {
-        self.bits_left = 0;
-    }
-
-    // TODO: Remove this method.
-    pub fn dump_some(&mut self, bytes: u8) -> io::Result<()> {
-        use std::iter::repeat;
-        println!(">=== begin bitstream dump ===>");
-        println!("     data = {:x}, {} bits left", self.data, self.bits_left);
-        print!("     more: [");
-        let mut buf: Vec<u8> = repeat(0).take(bytes as usize - 1).collect();
-        assert_eq!(try!(self.reader.read(&mut buf)), bytes as usize - 1);
-        for i in 0 .. bytes as usize - 1 {
-            print!("{:x}, ", buf[i]);
-        }
-        println!("{:x}]", buf[bytes as usize - 1]);
-        println!("<=== end bitstream dump <===");
-        Ok(())
-    }
-
     /// Reads at most eight bits.
     pub fn read_leq_u8(&mut self, bits: u8) -> io::Result<u8> {
         // Of course we can read no more than 8 bits, but we do not want the

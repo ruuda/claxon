@@ -18,7 +18,7 @@
 //! TODO: Add some examples here.
 
 #![warn(missing_docs)]
-#![allow(dead_code)] // TODO: Remove for v0.1
+#![allow(dead_code)] // TODO: Remove for v0.2
 #![feature(core, zero_one)]
 
 use std::io;
