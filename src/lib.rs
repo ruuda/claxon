@@ -19,7 +19,7 @@
 
 #![warn(missing_docs)]
 #![allow(dead_code)] // TODO: Remove for v0.2
-#![feature(core, zero_one)]
+#![feature(iter_arith, zero_one)]
 
 use std::io;
 use error::{Error, FlacResult};
