@@ -20,6 +20,7 @@ use std::iter::repeat;
 use crc::Crc8Reader;
 use error::{Error, FlacResult};
 use input::{Bitstream, ReadExt};
+use super::fmt_err;
 use sample;
 use subframe;
 
@@ -265,8 +266,12 @@ fn read_frame_header(input: &mut io::Read) -> FlacResult<FrameHeader> {
         // value of 0xffff would be invalid because it exceeds the max block
         // size, though this is not mentioned explicitly in the specification.
         let bs = try!(crc_input.read_be_u16());
-        if bs == 0xffff { return Err(Error::InvalidBlockSize); }
+        if bs == 0xffff { return fmt_err("invalid block size, exceeds 65535"); }
         block_size = bs + 1;
+    }
+
+    if block_size < 16 {
+        return fmt_err("invalid block size, must be at least 16");
     }
 
     if read_8bit_sr {

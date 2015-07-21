@@ -36,9 +36,6 @@ pub enum Error {
     /// A currently unsupported feature of the FLAC format was encountered.
     Unsupported(&'static str),
 
-    /// The minimum block size must be larger than 15, and the block size must
-    /// not exceed 65535.
-    InvalidBlockSize,
     /// The sample rate must be positive and no larger than 6553550 Hz.
     InvalidSampleRate,
 

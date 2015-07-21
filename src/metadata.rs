@@ -216,7 +216,7 @@ fn read_streaminfo_block<R: io::Read>(input: &mut R) -> FlacResult<StreamInfo> {
         return fmt_err("inconsistent bounds, min block size > max block size");
     }
     if min_block_size < 16 {
-        return Err(Error::InvalidBlockSize);
+        return fmt_err("invalid block size, must be at least 16");
     }
     if min_frame_size > max_frame_size && max_frame_size != 0 {
         return fmt_err("inconsistent bounds, min frame size > max frame size");
