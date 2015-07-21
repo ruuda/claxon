@@ -126,7 +126,7 @@ fn read_metadata_block<R: io::Read>(input: &mut R, block_type: u8, length: u32)
                 let streaminfo = try!(read_streaminfo_block(input));
                 Ok(MetadataBlock::StreamInfo(streaminfo))
             } else {
-                Err(Error::InvalidMetadataBlockLength)
+                fmt_err("invalid streaminfo metadata block length")
             }
         },
         1 => {
