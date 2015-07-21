@@ -213,13 +213,13 @@ fn read_streaminfo_block<R: io::Read>(input: &mut R) -> FlacResult<StreamInfo> {
     // Lower bounds can never be larger than upper bounds. Note that 0 indicates
     // unknown for the frame size. Also, the block size must be at least 16.
     if min_block_size > max_block_size {
-        return Err(Error::InconsistentBounds);
+        return fmt_err("inconsistent bounds, min block size > max block size");
     }
     if min_block_size < 16 {
         return Err(Error::InvalidBlockSize);
     }
     if min_frame_size > max_frame_size && max_frame_size != 0 {
-        return Err(Error::InconsistentBounds);
+        return fmt_err("inconsistent bounds, min frame size > max frame size");
     }
 
     // A sample rate of 0 is invalid, and the maximum sample rate is limited by

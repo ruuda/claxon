@@ -36,8 +36,6 @@ pub enum Error {
     /// A currently unsupported feature of the FLAC format was encountered.
     Unsupported(&'static str),
 
-    /// A lower bound was encountered that was bigger than an upper bound.
-    InconsistentBounds,
     /// The minimum block size must be larger than 15, and the block size must
     /// not exceed 65535.
     InvalidBlockSize,
