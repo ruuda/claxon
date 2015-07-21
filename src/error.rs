@@ -15,7 +15,10 @@
 
 //! The `error` module defines the error and result types.
 
+use std::error;
+use std::fmt;
 use std::io;
+use std::result;
 
 /// An error that prevents succesful decoding of the FLAC stream.
 #[derive(Debug)]
@@ -30,8 +33,8 @@ pub enum Error {
     /// buffer to decode into.
     TooWide,
 
-    /// A currently unsupported format was encountered.
-    Unsupported,
+    /// A currently unsupported feature of the FLAC format was encountered.
+    Unsupported(&'static str),
 
     /// The stream header does not equal 'fLaC'.
     InvalidStreamHeader,
@@ -87,21 +90,13 @@ pub enum Error {
     SampleTooWide
 }
 
-// TODO: implement the Error trait for claxon::error::Error.
-
-impl From<io::Error> for Error {
-    fn from(err: io::Error) -> Error {
-        Error::IoError(err)
-    }
-}
-
 impl PartialEq for Error {
     fn eq(&self, other: &Error) -> bool {
         use error::Error::{FormatError, TooWide, Unsupported};
         match (self, other) {
             (&FormatError(r1), &FormatError(r2)) => r1 == r2,
             (&TooWide, &TooWide) => true,
-            (&Unsupported, &Unsupported) => true,
+            (&Unsupported(f1), &Unsupported(f2)) => f1 == f2,
             // TODO: this is error-prone. The _ case is required for all
             // non-equal combinations, but it will prevent the compiler from
             // emitting a warning once a new enum variant is added. There must
@@ -111,5 +106,58 @@ impl PartialEq for Error {
     }
 }
 
+impl fmt::Display for Error {
+    fn fmt(&self, formatter: &mut fmt::Formatter)
+           -> result::Result<(), fmt::Error> {
+        match *self {
+            Error::IoError(ref err) => err.fmt(formatter),
+            Error::FormatError(reason) => {
+                try!(formatter.write_str("Ill-formed FLAC stream: "));
+                formatter.write_str(reason)
+            },
+            Error::TooWide => {
+                formatter.write_str("The audio stream has more bits per sample than the provided sample buffer to decode into.")
+            },
+            Error::Unsupported(feature) => {
+                try!(formatter.write_str("A currently unsupported feature of the FLAC format was encountered: "));
+                formatter.write_str(feature)
+            },
+            // TODO: Remove this when possible.
+            _ => formatter.write_str("deprecated error variant")
+        }
+    }
+}
+
+impl error::Error for Error {
+    fn description(&self) -> &str {
+        match *self {
+            Error::IoError(ref err) => err.description(),
+            Error::FormatError(reason) => reason,
+            Error::TooWide => "the sample has more bits than the destination type",
+            Error::Unsupported(_) => "unsupported feature",
+            // TODO: Remove this when possible.
+            _ => "deprecated error variant"
+        }
+    }
+
+    fn cause(&self) -> Option<&error::Error> {
+        match *self {
+            Error::IoError(ref err) => Some(err),
+            Error::FormatError(_) => None,
+            Error::TooWide => None,
+            Error::Unsupported(_) => None,
+            // TODO: Remove this when possible.
+            _ => None
+        }
+    }
+}
+
+impl From<io::Error> for Error {
+    fn from(err: io::Error) -> Error {
+        Error::IoError(err)
+    }
+}
+
+// TODO: Remove the `Flac` prefix.
 /// Either `T` on success, or an `Error` on failure.
 pub type FlacResult<T> = Result<T, Error>;
