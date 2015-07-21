@@ -79,7 +79,7 @@ impl<'r> FlacStream<'r> {
             let streaminfo_block = try!(metadata_iter.next().unwrap());
             let streaminfo = match streaminfo_block {
                 MetadataBlock::StreamInfo(info) => info,
-                _ => return Err(Error::MissingStreamInfoBlock)
+                _ => return fmt_err("streaminfo block missing")
             };
 
             // There might be more metadata blocks, read and store them.

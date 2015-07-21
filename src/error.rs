@@ -36,9 +36,6 @@ pub enum Error {
     /// A currently unsupported feature of the FLAC format was encountered.
     Unsupported(&'static str),
 
-    /// The streaminfo block must be the very first metadata block.
-    MissingStreamInfoBlock,
-
     /// A frame must start with the frame sync code.
     MissingFrameSyncCode,
     /// The frame header contains an invalid value in one of the reserved bits,
