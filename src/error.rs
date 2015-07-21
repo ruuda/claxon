@@ -23,6 +23,16 @@ pub enum Error {
     /// Not a decoding error, but a problem with the underlying IO.
     IoError(io::Error),
 
+    /// An ill-formed FLAC stream was encountered.
+    FormatError(&'static str),
+
+    /// The audio stream has more bits per sample than the provided sample
+    /// buffer to decode into.
+    TooWide,
+
+    /// A currently unsupported format was encountered.
+    Unsupported,
+
     /// The stream header does not equal 'fLaC'.
     InvalidStreamHeader,
 
@@ -87,22 +97,15 @@ impl From<io::Error> for Error {
 
 impl PartialEq for Error {
     fn eq(&self, other: &Error) -> bool {
-        use error::Error::{InvalidStreamHeader,
-            InvalidMetadataBlockType,
-            InvalidMetadataBlockLength,
-            // ...
-            InvalidVarLengthInt
-        };
+        use error::Error::{FormatError, TooWide, Unsupported};
         match (self, other) {
-            (&InvalidStreamHeader, &InvalidStreamHeader) => true,
-            (&InvalidMetadataBlockType, &InvalidMetadataBlockType) => true,
-            (&InvalidMetadataBlockLength, &InvalidMetadataBlockLength) => true,
-            (&InvalidVarLengthInt, &InvalidVarLengthInt) => true,
-            // TODO: this is not complete, yet.
-            // TODO: this is both cumbersome and error-prone. The _ case is
-            // required for all non-equal combinations, but it will prevent the
-            // compiler from emitting a warning once a new enum variant is
-            // added. There must be a better way, right?
+            (&FormatError(r1), &FormatError(r2)) => r1 == r2,
+            (&TooWide, &TooWide) => true,
+            (&Unsupported, &Unsupported) => true,
+            // TODO: this is error-prone. The _ case is required for all
+            // non-equal combinations, but it will prevent the compiler from
+            // emitting a warning once a new enum variant is added. There must
+            // be a better way, right?
             _ => false
         }
     }
