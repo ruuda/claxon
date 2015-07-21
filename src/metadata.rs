@@ -19,6 +19,7 @@ use std::io;
 use std::iter;
 use error::{Error, FlacResult};
 use input::ReadExt;
+use super::fmt_err;
 
 #[derive(Clone, Copy)]
 struct MetadataBlockHeader {
@@ -158,7 +159,7 @@ fn read_metadata_block<R: io::Read>(input: &mut R, block_type: u8, length: u32)
         },
         127 => {
             // This code is invalid to avoid confusion with a frame sync code.
-            Err(Error::InvalidMetadataBlockType)
+            fmt_err("invalid metadata block type")
         },
         _ => {
             // Any other block type is 'reserved' at the moment of writing. The
