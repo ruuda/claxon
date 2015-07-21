@@ -17,7 +17,7 @@
 
 use std::io;
 use std::iter;
-use error::{Error, FlacResult};
+use error::FlacResult;
 use input::ReadExt;
 use super::fmt_err;
 
@@ -225,7 +225,7 @@ fn read_streaminfo_block<R: io::Read>(input: &mut R) -> FlacResult<StreamInfo> {
     // A sample rate of 0 is invalid, and the maximum sample rate is limited by
     // the structure of the frame headers to 655350 Hz.
     if sample_rate == 0 || sample_rate > 655350 {
-        return Err(Error::InvalidSampleRate);
+        return fmt_err("invalid sample rate");
     }
 
     let stream_info = StreamInfo {

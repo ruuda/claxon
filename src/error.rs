@@ -36,9 +36,6 @@ pub enum Error {
     /// A currently unsupported feature of the FLAC format was encountered.
     Unsupported(&'static str),
 
-    /// The sample rate must be positive and no larger than 6553550 Hz.
-    InvalidSampleRate,
-
     /// The streaminfo block must be the very first metadata block.
     MissingStreamInfoBlock,
 
