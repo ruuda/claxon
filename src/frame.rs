@@ -144,7 +144,7 @@ fn read_frame_header(input: &mut io::Read) -> FlacResult<FrameHeader> {
     // The first 14 bits must be 11111111111110.
     let sync_code = sync_res_block & 0b1111_1111_1111_1100;
     if sync_code != 0b1111_1111_1111_1000 {
-        return Err(Error::MissingFrameSyncCode);
+        return fmt_err("frame sync code missing")
     }
 
     // The next bit has a mandatory value of 0 (at the moment of writing, if
