@@ -89,7 +89,7 @@ fn read_var_length_int<R: io::Read>(input: &mut R) -> FlacResult<u64> {
     // A single leading 1 is a follow-up byte and thus invalid.
     if read_additional > 0 {
         if read_additional == 1 {
-            return Err(Error::InvalidVarLengthInt);
+            return fmt_err("invalid variable-length integer");
         } else {
             // The number of 1s (if > 1) is the total number of bytes, not the
             // number of additional bytes.
@@ -105,7 +105,7 @@ fn read_var_length_int<R: io::Read>(input: &mut R) -> FlacResult<u64> {
 
         // The two most significant bits _must_ be 10.
         if byte & 0b1100_0000 != 0b1000_0000 {
-            return Err(Error::InvalidVarLengthInt);
+            return fmt_err("invalid variable-length integer");
         }
 
         result = result | (((byte & 0b0011_1111) as u64) << (6 * i as usize));
@@ -126,10 +126,10 @@ fn verify_read_var_length_int() {
     assert_eq!(read_var_length_int(&mut reader).unwrap(), 0x010348);
     // Two-byte integer with invalid continuation byte should fail.
     assert_eq!(read_var_length_int(&mut reader).err().unwrap(),
-               Error::InvalidVarLengthInt);
+               Error::FormatError("invalid variable-length integer"));
     // Continuation byte can never be the first byte.
     assert_eq!(read_var_length_int(&mut reader).err().unwrap(),
-               Error::InvalidVarLengthInt);
+               Error::FormatError("invalid variable-length integer"));
 }
 
 fn read_frame_header(input: &mut io::Read) -> FlacResult<FrameHeader> {

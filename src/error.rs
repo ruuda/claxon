@@ -41,8 +41,6 @@ pub enum Error {
     /// which are not implemented by Claxon.
     Unsupported(&'static str),
 
-    /// The expected UTF-8-ish encoded integer contains invalid bit sequences.
-    InvalidVarLengthInt,
     /// The observed frame header CRC does not match the stored CRC.
     FrameHeaderCrcMismatch,
 
