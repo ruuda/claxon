@@ -147,11 +147,13 @@ fn read_frame_header(input: &mut io::Read) -> FlacResult<FrameHeader> {
         return fmt_err("frame sync code missing")
     }
 
-    // The next bit has a mandatory value of 0 (at the moment of writing, if
-    // the bit has a different value, it could be a future stream that we
-    // cannot read).
+    // The next bit has a mandatory value of 0 at the moment of writing. The
+    // spec says "0: mandatory value, 1: reserved for future use". As it is
+    // unlikely that the FLAC format will every change, we treat features in
+    // the spec that are not implemented as `Error::Unsupported`, and this is
+    // a format error.
     if sync_res_block & 0b0000_0000_0000_0010 != 0 {
-        return Err(Error::InvalidFrameHeader);
+        return fmt_err("invalid frame header, encountered reserved value");
     }
 
     // The final bit determines the blocking strategy.
@@ -171,7 +173,7 @@ fn read_frame_header(input: &mut io::Read) -> FlacResult<FrameHeader> {
     // header instead'.
     match bs_sr >> 4 {
         // The value 0000 is reserved.
-        0b0000 => return Err(Error::InvalidFrameHeader),
+        0b0000 => return fmt_err("invalid frame header, encountered reserved value"),
         0b0001 => block_size = 192,
         n if 0b0010 <= n && n <= 0b0101 => block_size = 576 * (1 << (n - 2) as usize),
         0b0110 => read_8bit_bs = true,
@@ -204,7 +206,7 @@ fn read_frame_header(input: &mut io::Read) -> FlacResult<FrameHeader> {
         0b1110 => read_16bit_sr_ten = true, // Read tens of Hz from end of header.
         // 1111 is invalid to prevent sync-fooling.
         // Other values are impossible at this point.
-        _ => return Err(Error::InvalidFrameHeader)
+        _ => return fmt_err("invalid frame header")
     }
 
     // Next are 4 bits channel assignment, 3 bits sample size, and 1 reserved bit.
@@ -218,7 +220,7 @@ fn read_frame_header(input: &mut io::Read) -> FlacResult<FrameHeader> {
         0b1001 => ChannelAssignment::RightSideStereo,
         0b1010 => ChannelAssignment::MidSideStereo,
         // Values 1011 through 1111 are reserved and thus invalid.
-        _ => return Err(Error::InvalidFrameHeader)
+        _ => return fmt_err("invalid frame header, encountered reserved value")
     };
 
     // The next three bits indicate bits per sample.
@@ -230,12 +232,12 @@ fn read_frame_header(input: &mut io::Read) -> FlacResult<FrameHeader> {
         0b101 => Some(20),
         0b110 => Some(24),
         // Values 011 and 111 are reserved. Other values are impossible.
-        _ => return Err(Error::InvalidFrameHeader)
+        _ => return fmt_err("invalid frame header, encountered reserved value")
     };
 
-    // The final bit has a mandatory value of 0.
+    // The final bit has a mandatory value of 0, it is a reserved bit.
     if chan_bps_res & 0b0000_0001 != 0 {
-        return Err(Error::InvalidFrameHeader);
+        return fmt_err("invalid frame header, encountered reserved value");
     }
 
     let block_time = match blocking_strategy {
@@ -249,7 +251,7 @@ fn read_frame_header(input: &mut io::Read) -> FlacResult<FrameHeader> {
             let frame = try!(read_var_length_int(&mut crc_input));
             // A frame number larger than 31 bits is therefore invalid.
             if frame > 0x7fffffff {
-                return Err(Error::InvalidFrameHeader);
+                return fmt_err("invalid frame header, frame number too large");
             }
             BlockTime::FrameNumber(frame as u32)
         }

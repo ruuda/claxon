@@ -34,12 +34,13 @@ pub enum Error {
     TooWide,
 
     /// A currently unsupported feature of the FLAC format was encountered.
+    ///
+    /// Claxon reads the FLAC format as it was with FLAC 1.3.1. Values in the
+    /// specification that are marked as reserved will cause a `FormatError`;
+    /// `Unsupported` is used for features that are in the specification, but
+    /// which are not implemented by Claxon.
     Unsupported(&'static str),
 
-    /// The frame header contains an invalid value in one of the reserved bits,
-    /// or it contains one of the bit patterns that is invalid to prevent
-    /// confusion with a frame sync code, or a bit pattern that is reserved.
-    InvalidFrameHeader,
     /// The expected UTF-8-ish encoded integer contains invalid bit sequences.
     InvalidVarLengthInt,
     /// The observed frame header CRC does not match the stored CRC.
