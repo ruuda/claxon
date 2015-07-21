@@ -35,6 +35,11 @@ pub mod sample;
 pub mod subframe;
 pub mod metadata;
 
+/// Shorthand for producing a format error with reason.
+fn fmt_err<T>(reason: &'static str) -> FlacResult<T> {
+    Err(Error::FormatError(reason))
+}
+
 /// A FLAC decoder that can decode the stream from the underlying reader.
 ///
 /// TODO: Is stream a good name? Should it be called reader/decoder?
@@ -49,8 +54,11 @@ fn read_stream_header<R: io::Read>(input: &mut R) -> FlacResult<()> {
     // A FLAC stream starts with a 32-bit header 'fLaC' (big endian).
     const HEADER: u32 = 0x66_4c_61_43;
     let header = try!(input.read_be_u32());
-    if header != HEADER { return Err(Error::InvalidStreamHeader); }
-    Ok(())
+    if header != HEADER {
+        fmt_err("invalid stream header")
+    } else {
+        Ok(())
+    }
 }
 
 impl<'r> FlacStream<'r> {
