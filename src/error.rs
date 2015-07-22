@@ -41,9 +41,6 @@ pub enum Error {
     /// which are not implemented by Claxon.
     Unsupported(&'static str),
 
-    /// The observed frame header CRC does not match the stored CRC.
-    FrameHeaderCrcMismatch,
-
     /// The subframe header contains an invalid or reserved bit pattern.
     InvalidSubframeHeader,
     /// The subframe contains an invalid or reserved bit pattern.

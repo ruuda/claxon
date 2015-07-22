@@ -294,7 +294,7 @@ fn read_frame_header(input: &mut io::Read) -> FlacResult<FrameHeader> {
     let presumed_crc = try!(crc_input.read_u8());
 
     if computed_crc != presumed_crc {
-        return Err(Error::FrameHeaderCrcMismatch);
+        return fmt_err("frame header CRC mismatch");
     }
 
     let frame_header = FrameHeader {
