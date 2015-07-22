@@ -41,8 +41,6 @@ pub enum Error {
     /// which are not implemented by Claxon.
     Unsupported(&'static str),
 
-    /// A bit pattern is not a valid Rice code in the context.
-    InvalidRiceCode,
     /// An overflow occurred when decoding the side channel.
     InvalidSideSample,
     /// An overflow occurred when doing fixed prediction.

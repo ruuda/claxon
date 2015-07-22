@@ -337,7 +337,7 @@ fn decode_rice_partition<Sample: sample::WideSample>
             let mut q = Sample::zero();
             while try!(input.read_leq_u8(1)) == 0 {
                 if q == max_q {
-                    return Err(Error::InvalidRiceCode);
+                    return fmt_err("invalid Rice code");
                 }
                 q = q + Sample::one();
             }
@@ -348,7 +348,8 @@ fn decode_rice_partition<Sample: sample::WideSample>
             // indicate that splitting the methods is faster. For now though,
             // simplicity is more important.
             let r_u32 = try!(input.read_leq_u32(rice_param));
-            let r = Sample::from_u32(r_u32).ok_or(Error::InvalidRiceCode);
+            let r = Sample::from_u32(r_u32)
+                    .ok_or(Error::FormatError("invalid Rice code"));
 
             *sample = rice_to_signed((q << rice_param as usize) | try!(r));
         }
