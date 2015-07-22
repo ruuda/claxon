@@ -17,6 +17,7 @@
 
 use error::{Error, FlacResult};
 use input::Bitstream;
+use super::fmt_err;
 use sample;
 
 #[derive(Clone, Copy, Debug)]
@@ -36,7 +37,7 @@ struct SubframeHeader {
 fn read_subframe_header(input: &mut Bitstream) -> FlacResult<SubframeHeader> {
     // The first bit must be a 0 padding bit.
     if 0 != try!(input.read_leq_u8(1)) {
-        return Err(Error::InvalidSubframeHeader);
+        return fmt_err("invalid subframe header");
     }
 
     // Next is a 6-bit subframe type.
@@ -45,18 +46,23 @@ fn read_subframe_header(input: &mut Bitstream) -> FlacResult<SubframeHeader> {
         1 => SubframeType::Verbatim,
 
         // Bit patterns 00001x, 0001xx and 01xxxx are reserved, this library
-        // would not know how to handle them, so this is an error.
+        // would not know how to handle them, so this is an error. Values that
+        // are reserved at the time of writing are a format error, the
+        // `Unsupported` error type is for specified features that are not
+        // implemented.
         n if (n & 0b111_110 == 0b000_010)
           || (n & 0b111_100 == 0b000_100)
           || (n & 0b110_000 == 0b010_000) => {
-            return Err(Error::InvalidSubframeHeader);
+            return fmt_err("invalid subframe header, encountered reserved value");
         }
 
         n if n & 0b111_000 == 0b001_000 => {
             let order = n & 0b000_111;
 
             // A fixed frame has order up to 4, other bit patterns are reserved.
-            if order > 4 { return Err(Error::InvalidSubframeHeader); }
+            if order > 4 {
+                return fmt_err("invalid subframe header, encountered reserved value");
+            }
 
             SubframeType::Fixed(order)
         }

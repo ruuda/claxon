@@ -41,8 +41,6 @@ pub enum Error {
     /// which are not implemented by Claxon.
     Unsupported(&'static str),
 
-    /// The subframe header contains an invalid or reserved bit pattern.
-    InvalidSubframeHeader,
     /// The subframe contains an invalid or reserved bit pattern.
     InvalidSubframe,
 
