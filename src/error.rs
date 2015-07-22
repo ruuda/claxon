@@ -41,10 +41,6 @@ pub enum Error {
     /// which are not implemented by Claxon.
     Unsupported(&'static str),
 
-    /// An overflow occurred when decoding the side channel.
-    InvalidSideSample,
-    /// An overflow occurred when doing fixed prediction.
-    InvalidFixedSample,
     /// An overflow occurred when doing LPC prediction.
     InvalidLpcSample,
 
