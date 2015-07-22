@@ -22,7 +22,6 @@
 #![feature(iter_arith, zero_one)]
 
 use std::io;
-use error::{Error, FlacResult};
 use frame::{FrameReader};
 use input::ReadExt;
 use metadata::{MetadataBlock, MetadataBlockReader, StreamInfo};
@@ -34,6 +33,8 @@ pub mod frame;
 pub mod sample;
 pub mod subframe;
 pub mod metadata;
+
+pub use error::{Error, FlacResult};
 
 /// Shorthand for producing a format error with reason.
 fn fmt_err<T>(reason: &'static str) -> FlacResult<T> {
