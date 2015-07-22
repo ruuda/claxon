@@ -19,7 +19,7 @@ use std::io;
 use std::iter;
 use error::FlacResult;
 use input::ReadExt;
-use super::fmt_err;
+use fmt_err;
 
 #[derive(Clone, Copy)]
 struct MetadataBlockHeader {

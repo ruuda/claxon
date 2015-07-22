@@ -17,7 +17,7 @@
 
 use error::{Error, FlacResult};
 use input::Bitstream;
-use super::fmt_err;
+use fmt_err;
 use sample;
 
 #[derive(Clone, Copy, Debug)]

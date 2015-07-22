@@ -20,7 +20,7 @@ use std::iter::repeat;
 use crc::Crc8Reader;
 use error::{Error, FlacResult};
 use input::{Bitstream, ReadExt};
-use super::fmt_err;
+use fmt_err;
 use sample;
 use subframe;
 
