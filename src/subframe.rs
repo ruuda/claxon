@@ -250,7 +250,8 @@ fn decode_residual<Sample: sample::WideSample>
                                         block_size, buffer),
         0b01 => decode_partitioned_rice(input, bps, RicePartitionType::Rice2,
                                         block_size, buffer),
-        _ => Err(Error::InvalidResidual) // 10 and 11 are reserved.
+        // 10 and 11 are reserved.
+        _ => fmt_err("invalid residual, encountered reserved value")
     }
 }
 
@@ -278,7 +279,7 @@ fn decode_partitioned_rice<Sample: sample::WideSample>
 
     // The partition size must be at least as big as the number of warm-up
     // samples, otherwise the size of the first partition is negative.
-    if n_warm_up > n_samples { return Err(Error::InvalidResidual); }
+    if n_warm_up > n_samples { return fmt_err("invalid residual"); }
 
     let mut start = 0;
     for i in 0 .. n_partitions {
