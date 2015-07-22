@@ -44,16 +44,15 @@ pub enum Error {
 
 impl PartialEq for Error {
     fn eq(&self, other: &Error) -> bool {
-        use error::Error::{FormatError, TooWide, Unsupported};
+        use error::Error::{IoError, FormatError, TooWide, Unsupported};
         match (self, other) {
             (&FormatError(r1), &FormatError(r2)) => r1 == r2,
             (&TooWide, &TooWide) => true,
             (&Unsupported(f1), &Unsupported(f2)) => f1 == f2,
-            // TODO: this is error-prone. The _ case is required for all
-            // non-equal combinations, but it will prevent the compiler from
-            // emitting a warning once a new enum variant is added. There must
-            // be a better way, right?
-            _ => false
+            (&IoError(_), _) => false,
+            (&FormatError(_), _) => false,
+            (&TooWide, _) => false,
+            (&Unsupported(_), _) => false
         }
     }
 }
@@ -74,8 +73,6 @@ impl fmt::Display for Error {
                 try!(formatter.write_str("A currently unsupported feature of the FLAC format was encountered: "));
                 formatter.write_str(feature)
             },
-            // TODO: Remove this when possible.
-            _ => formatter.write_str("deprecated error variant")
         }
     }
 }
@@ -87,8 +84,6 @@ impl error::Error for Error {
             Error::FormatError(reason) => reason,
             Error::TooWide => "the sample has more bits than the destination type",
             Error::Unsupported(_) => "unsupported feature",
-            // TODO: Remove this when possible.
-            _ => "deprecated error variant"
         }
     }
 
@@ -98,8 +93,6 @@ impl error::Error for Error {
             Error::FormatError(_) => None,
             Error::TooWide => None,
             Error::Unsupported(_) => None,
-            // TODO: Remove this when possible.
-            _ => None
         }
     }
 }
