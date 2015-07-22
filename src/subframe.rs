@@ -349,7 +349,7 @@ fn decode_rice_partition<Sample: sample::WideSample>
             // simplicity is more important.
             let r_u32 = try!(input.read_leq_u32(rice_param));
             let r = Sample::from_u32(r_u32)
-                    .ok_or(Error::FormatError("invalid Rice code"));
+                           .ok_or(Error::FormatError("invalid Rice code"));
 
             *sample = rice_to_signed((q << rice_param as usize) | try!(r));
         }
@@ -540,7 +540,7 @@ fn predict_lpc<Sample: sample::WideSample>
         // unused. This ensures that adding the delta does not overflow, if
         // the delta is also within the correct range.
         let prediction = Sample::from_i64_spare_bit(prediction)
-                                 .ok_or(Error::InvalidLpcSample);
+                                .ok_or(Error::FormatError("invalid LPC sample"));
 
         // The delta is stored, so the sample is the prediction + delta.
         let delta = window[coefficients.len()];
