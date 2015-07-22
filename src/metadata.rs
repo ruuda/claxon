@@ -17,7 +17,7 @@
 
 use std::io;
 use std::iter;
-use error::{FlacResult, fmt_err};
+use error::{Result, fmt_err};
 use input::ReadExt;
 
 #[derive(Clone, Copy)]
@@ -97,7 +97,7 @@ pub enum MetadataBlock {
 }
 
 fn read_metadata_block_header<R: io::Read>(input: &mut R)
-                                           -> FlacResult<MetadataBlockHeader> {
+                                           -> Result<MetadataBlockHeader> {
     let byte = try!(input.read_u8());
 
     // The first bit specifies whether this is the last block, the next 7 bits
@@ -117,7 +117,7 @@ fn read_metadata_block_header<R: io::Read>(input: &mut R)
 }
 
 fn read_metadata_block<R: io::Read>(input: &mut R, block_type: u8, length: u32)
-                                    -> FlacResult<MetadataBlock> {
+                                    -> Result<MetadataBlock> {
     match block_type {
         0 => {
             // The streaminfo block has a fixed size of 34 bytes.
@@ -172,7 +172,7 @@ fn read_metadata_block<R: io::Read>(input: &mut R, block_type: u8, length: u32)
     }
 }
 
-fn read_streaminfo_block<R: io::Read>(input: &mut R) -> FlacResult<StreamInfo> {
+fn read_streaminfo_block<R: io::Read>(input: &mut R) -> Result<StreamInfo> {
     let min_block_size = try!(input.read_be_u16());
     let max_block_size = try!(input.read_be_u16());
 
@@ -241,7 +241,7 @@ fn read_streaminfo_block<R: io::Read>(input: &mut R) -> FlacResult<StreamInfo> {
     Ok(stream_info)
 }
 
-fn read_padding_block<R: io::Read>(input: &mut R, length: u32) -> FlacResult<()> {
+fn read_padding_block<R: io::Read>(input: &mut R, length: u32) -> Result<()> {
     // The specification dictates that all bits of the padding block must be 0.
     // However, the reference implementation does not issue an error when this
     // is not the case, and frankly, when you are going to skip over these
@@ -250,7 +250,7 @@ fn read_padding_block<R: io::Read>(input: &mut R, length: u32) -> FlacResult<()>
     skip_block(input, length)
 }
 
-fn skip_block<R: io::Read>(input: &mut R, length: u32) -> FlacResult<()> {
+fn skip_block<R: io::Read>(input: &mut R, length: u32) -> Result<()> {
     for _ in 0 .. length {
         try!(input.read_u8());
     }
@@ -259,7 +259,7 @@ fn skip_block<R: io::Read>(input: &mut R, length: u32) -> FlacResult<()> {
 }
 
 fn read_application_block<R: io::Read>(input: &mut R, length: u32)
-                                       -> FlacResult<(u32, Vec<u8>)> {
+                                       -> Result<(u32, Vec<u8>)> {
     let id = try!(input.read_be_u32());
 
     // Four bytes of the block have been used for the ID, the rest is payload.
@@ -281,7 +281,7 @@ pub struct MetadataBlockReader<'r, R> where R: 'r {
 }
 
 /// Either a `MetadataBlock` or an `Error`.
-pub type MetadataBlockResult = FlacResult<MetadataBlock>;
+pub type MetadataBlockResult = Result<MetadataBlock>;
 
 impl<'r, R> MetadataBlockReader<'r, R> where R: io::Read + 'r {
 

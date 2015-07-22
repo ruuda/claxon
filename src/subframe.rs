@@ -15,7 +15,7 @@
 
 //! The `subframe` module deals with subframes that make up a frame of the FLAC stream.
 
-use error::{Error, FlacResult, fmt_err};
+use error::{Error, Result, fmt_err};
 use input::Bitstream;
 use sample;
 
@@ -33,7 +33,7 @@ struct SubframeHeader {
     wasted_bits_per_sample: u8
 }
 
-fn read_subframe_header(input: &mut Bitstream) -> FlacResult<SubframeHeader> {
+fn read_subframe_header(input: &mut Bitstream) -> Result<SubframeHeader> {
     // The first bit must be a 0 padding bit.
     if 0 != try!(input.read_leq_u8(1)) {
         return fmt_err("invalid subframe header");
@@ -201,7 +201,7 @@ pub fn decode<Sample: sample::WideSample>
              (input: &mut Bitstream,
               bps: u8,
               buffer: &mut [Sample])
-              -> FlacResult<()> {
+              -> Result<()> {
 
     // The sample type should be wide enough to accomodate for all bits of the
     // stream, but this can be verified at a higher level than here. Still, it
@@ -241,7 +241,7 @@ fn decode_residual<Sample: sample::WideSample>
                    bps: u8,
                    block_size: u16,
                    buffer: &mut [Sample])
-                   -> FlacResult<()> {
+                   -> Result<()> {
     // Residual starts with two bits of coding method.
     let method = try!(input.read_leq_u8(2));
     match method {
@@ -260,7 +260,7 @@ fn decode_partitioned_rice<Sample: sample::WideSample>
                            partition_type: RicePartitionType,
                            block_size: u16,
                            buffer: &mut [Sample])
-                           -> FlacResult<()> {
+                           -> Result<()> {
     // The block size, and therefore the buffer, cannot exceed 2^16 - 1.
     debug_assert!(buffer.len() <= 0xffff);
 
@@ -297,7 +297,7 @@ fn decode_rice_partition<Sample: sample::WideSample>
                          bps: u8,
                          partition_type: RicePartitionType,
                          buffer: &mut [Sample])
-                         -> FlacResult<()> {
+                         -> Result<()> {
     // The Rice partition starts with 4 or 5 bits Rice parameter, depending on
     // the partition type.
     let rice_param = try!(input.read_leq_u8(match partition_type {
@@ -361,7 +361,7 @@ fn decode_constant<Sample: sample::WideSample>
                   (input: &mut Bitstream,
                    bps: u8,
                    buffer: &mut [Sample])
-                   -> FlacResult<()> {
+                   -> Result<()> {
 
     // A constant block has <bits per sample> bits: the value of all samples.
     // The nofail variant is safe, because it has been verified before that the
@@ -384,7 +384,7 @@ fn decode_verbatim<Sample: sample::WideSample>
                   (input: &mut Bitstream,
                    bps: u8,
                    buffer: &mut [Sample])
-                   -> FlacResult<()> {
+                   -> Result<()> {
 
     // This function must not be called for a sample wider than the sample type.
     // This has been verified at an earlier stage, but it is good to state the
@@ -409,7 +409,7 @@ fn decode_verbatim<Sample: sample::WideSample>
 
 fn predict_fixed<Sample: sample::WideSample>
                 (order: u8, buffer: &mut [Sample])
-                 -> FlacResult<()> {
+                 -> Result<()> {
 
     // When this is called during decoding, the order as read from the subframe
     // header has already been verified, so it is safe to assume that
@@ -492,7 +492,7 @@ fn decode_fixed<Sample: sample::WideSample>
                 bps: u8,
                 order: u8,
                 buffer: &mut [Sample])
-                -> FlacResult<()> {
+                -> Result<()> {
     // There are order * bits per sample unencoded warm-up sample bits.
     try!(decode_verbatim(input, bps, &mut buffer[.. order as usize]));
 
@@ -511,7 +511,7 @@ fn predict_lpc<Sample: sample::WideSample>
               (coefficients: &[i16],
                qlp_shift: i16,
                buffer: &mut [Sample])
-               -> FlacResult<()> {
+               -> Result<()> {
 
     // The linear prediction is essentially an inner product of the known
     // samples with the coefficients, followed by the shift. The
@@ -573,7 +573,7 @@ fn decode_lpc<Sample: sample::WideSample>
               bps: u8,
               order: u8,
               buffer: &mut [Sample])
-              -> FlacResult<()> {
+              -> Result<()> {
     // There are order * bits per sample unencoded warm-up sample bits.
     try!(decode_verbatim(input, bps, &mut buffer[.. order as usize]));
 

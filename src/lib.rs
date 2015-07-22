@@ -35,7 +35,7 @@ pub mod sample;
 pub mod subframe;
 pub mod metadata;
 
-pub use error::{Error, FlacResult};
+pub use error::{Error, Result};
 
 /// A FLAC decoder that can decode the stream from the underlying reader.
 ///
@@ -47,7 +47,7 @@ pub struct FlacStream<'r> {
     input: &'r mut (io::Read + 'r)
 }
 
-fn read_stream_header<R: io::Read>(input: &mut R) -> FlacResult<()> {
+fn read_stream_header<R: io::Read>(input: &mut R) -> Result<()> {
     // A FLAC stream starts with a 32-bit header 'fLaC' (big endian).
     const HEADER: u32 = 0x66_4c_61_43;
     let header = try!(input.read_be_u32());
@@ -62,7 +62,7 @@ impl<'r> FlacStream<'r> {
     /// Constructs a flac stream from the given input.
     ///
     /// This will read all metadata and stop at the first audio frame.
-    pub fn new<R>(input: &mut R) -> FlacResult<FlacStream> where R: io::Read {
+    pub fn new<R>(input: &mut R) -> Result<FlacStream> where R: io::Read {
         // A flac stream first of all starts with a stream header.
         try!(read_stream_header(input));
 

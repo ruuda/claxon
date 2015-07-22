@@ -18,7 +18,7 @@
 use std::io;
 use std::iter::repeat;
 use crc::Crc8Reader;
-use error::{Error, FlacResult, fmt_err};
+use error::{Error, Result, fmt_err};
 use input::{Bitstream, ReadExt};
 use sample;
 use subframe;
@@ -70,7 +70,7 @@ impl FrameHeader {
 /// Reads a variable-length integer encoded as what is called "UTF-8" coding
 /// in the specification. (It is not real UTF-8.) This function can read
 /// integers encoded in this way up to 36-bit integers.
-fn read_var_length_int<R: io::Read>(input: &mut R) -> FlacResult<u64> {
+fn read_var_length_int<R: io::Read>(input: &mut R) -> Result<u64> {
     // The number of consecutive 1s followed by a 0 is the number of additional
     // bytes to read.
     let first = try!(input.read_u8());
@@ -131,7 +131,7 @@ fn verify_read_var_length_int() {
                Error::FormatError("invalid variable-length integer"));
 }
 
-fn read_frame_header(input: &mut io::Read) -> FlacResult<FrameHeader> {
+fn read_frame_header(input: &mut io::Read) -> Result<FrameHeader> {
     // The frame header includes a CRC-8 at the end. It can be computed
     // automatically while reading, by wrapping the input reader in a reader
     // that computes the CRC.
@@ -311,7 +311,7 @@ fn read_frame_header(input: &mut io::Read) -> FlacResult<FrameHeader> {
 // this should produce an iterator that decodes.
 fn decode_left_side<Sample: sample::WideSample>
                    (buffer: &mut [Sample])
-                    -> FlacResult<()> {
+                    -> Result<()> {
 
     let block_size = buffer.len() / 2;
     for i in 0 .. block_size {
@@ -340,7 +340,7 @@ fn verify_decode_left_side() {
 /// Converts a buffer with right samples and a side channel in-place to left ++ right.
 fn decode_right_side<Sample: sample::WideSample>
                     (buffer: &mut [Sample])
-                     -> FlacResult<()> {
+                     -> Result<()> {
 
     let block_size = buffer.len() / 2;
     for i in 0 .. block_size {
@@ -369,7 +369,7 @@ fn verify_decode_right_side() {
 /// Converts a buffer with mid samples and a side channel in-place to left ++ right.
 fn decode_mid_side<Sample: sample::WideSample>
                   (buffer: &mut [Sample])
-                   -> FlacResult<()> {
+                   -> Result<()> {
 
     let block_size = buffer.len() / 2;
     for i in 0 .. block_size {
@@ -461,7 +461,7 @@ pub struct FrameReader<'r, Sample: sample::Sample> {
 }
 
 /// Either a `Block` or an `Error`.
-pub type FrameResult<'b, Sample> = FlacResult<Block<'b, Sample>>;
+pub type FrameResult<'b, Sample> = Result<Block<'b, Sample>>;
 
 impl<'r, Sample: sample::Sample> FrameReader<'r, Sample> {
 
