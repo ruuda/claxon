@@ -581,7 +581,7 @@ fn decode_lpc<Sample: sample::WideSample>
 
     // The bit pattern 1111 is invalid.
     if qlp_precision - 1 == 0b1111 {
-        return Err(Error::InvalidSubframe);
+        return fmt_err("invalid subframe, qlp precision value invalid");
     }
 
     // Next are five bits quantized linear predictor coefficient shift,
