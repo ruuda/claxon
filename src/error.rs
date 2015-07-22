@@ -41,9 +41,6 @@ pub enum Error {
     /// which are not implemented by Claxon.
     Unsupported(&'static str),
 
-    /// The number of bits per sample in an unencoded binary Rice partition
-    /// is larger than the bits per sample of the stream.
-    InvalidBitsPerSample,
     /// A bit pattern is not a valid Rice code in the context.
     InvalidRiceCode,
     /// An overflow occurred when decoding the side channel.

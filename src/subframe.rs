@@ -316,7 +316,7 @@ fn decode_rice_partition<Sample: sample::WideSample>
 
         // There cannot be more bits per sample than the sample type.
         if bps < rice_bps {
-            return Err(Error::InvalidBitsPerSample);
+            return fmt_err("invalid Rice partition, too many bits per sample");
         }
 
         panic!("unencoded binary is not yet implemented"); // TODO
