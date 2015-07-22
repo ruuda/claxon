@@ -22,24 +22,20 @@
 #![feature(iter_arith, zero_one)]
 
 use std::io;
+use error::fmt_err;
 use frame::{FrameReader};
 use input::ReadExt;
 use metadata::{MetadataBlock, MetadataBlockReader, StreamInfo};
 
 mod crc;
 mod input;
-pub mod error;
+mod error;
 pub mod frame;
 pub mod sample;
 pub mod subframe;
 pub mod metadata;
 
 pub use error::{Error, FlacResult};
-
-/// Shorthand for producing a format error with reason.
-fn fmt_err<T>(reason: &'static str) -> FlacResult<T> {
-    Err(Error::FormatError(reason))
-}
 
 /// A FLAC decoder that can decode the stream from the underlying reader.
 ///

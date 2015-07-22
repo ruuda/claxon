@@ -18,9 +18,8 @@
 use std::io;
 use std::iter::repeat;
 use crc::Crc8Reader;
-use error::{Error, FlacResult};
+use error::{Error, FlacResult, fmt_err};
 use input::{Bitstream, ReadExt};
-use fmt_err;
 use sample;
 use subframe;
 

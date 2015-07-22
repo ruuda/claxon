@@ -103,6 +103,11 @@ impl From<io::Error> for Error {
     }
 }
 
+/// Shorthand for producing a format error with reason.
+pub fn fmt_err<T>(reason: &'static str) -> FlacResult<T> {
+    Err(Error::FormatError(reason))
+}
+
 // TODO: Remove the `Flac` prefix.
 /// Either `T` on success, or an `Error` on failure.
 pub type FlacResult<T> = Result<T, Error>;

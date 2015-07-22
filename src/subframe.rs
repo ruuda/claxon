@@ -15,9 +15,8 @@
 
 //! The `subframe` module deals with subframes that make up a frame of the FLAC stream.
 
-use error::{Error, FlacResult};
+use error::{Error, FlacResult, fmt_err};
 use input::Bitstream;
-use fmt_err;
 use sample;
 
 #[derive(Clone, Copy, Debug)]
