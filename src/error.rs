@@ -40,10 +40,6 @@ pub enum Error {
     /// `Unsupported` is used for features that are in the specification, but
     /// which are not implemented by Claxon.
     Unsupported(&'static str),
-
-    /// The audio stream has more bits per sample than the provided sample
-    /// buffer to decode into.
-    SampleTooWide
 }
 
 impl PartialEq for Error {

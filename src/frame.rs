@@ -588,7 +588,7 @@ impl<'r, Sample: sample::Sample> FrameReader<'r, Sample> {
             let wide_iter = self.wide_buffer[.. n].iter();
             let dest_iter = self.buffer[.. n].iter_mut();
             for (&src, dest) in wide_iter.zip(dest_iter) {
-                let narrow = Sample::from_wide(src).ok_or(Error::SampleTooWide);
+                let narrow = Sample::from_wide(src).ok_or(Error::TooWide);
                 *dest = try!(narrow);
             }
         }
