@@ -134,8 +134,7 @@ impl<'r> io::Read for Crc8Reader<'r> {
         let n = try!(self.reader.read(buf));
 
         // And also update the CRC with the bytes just read.
-        // TODO: Is the .iter() required here? Would coercions help?
-        for x in buf[0 .. n].iter() {
+        for x in &buf[0 .. n] {
             self.state = CRC8_TABLE[(self.state ^ *x) as usize];
         }
 
@@ -149,7 +148,7 @@ impl<'r> io::Read for Crc16Reader<'r> {
         let n = try!(self.reader.read(buf));
 
         // And also update the CRC with the bytes just read.
-        for x in buf[0 .. n].iter() {
+        for x in &buf[0 .. n] {
             self.state = (self.state << 8)
                        ^ CRC16_TABLE[((self.state >> 8) as u8 ^ *x) as usize];
         }
