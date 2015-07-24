@@ -5,6 +5,10 @@ rust:
 
 before_script: testsamples/populate.sh
 
+script:
+  - cargo build --verbose
+  - cargo test --verbose -- --nocapture
+
 addons:
   apt:
     packages:
