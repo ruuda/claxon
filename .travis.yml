@@ -2,3 +2,10 @@ language: rust
 
 rust:
   - nightly
+
+before_script: testsamples/populate.sh
+
+addons:
+  apt:
+    packages:
+      - flac
