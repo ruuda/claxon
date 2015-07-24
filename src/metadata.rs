@@ -41,11 +41,11 @@ pub struct StreamInfo {
     /// The sample rate in Hz.
     pub sample_rate: u32,
     /// The number of channels.
-    pub n_channels: u8,
+    pub channels: u8,
     /// The number of bits per sample.
     pub bits_per_sample: u8,
     /// The total number of inter-channel samples in the stream.
-    pub n_samples: Option<u64>,
+    pub samples: Option<u64>,
     /// MD5 signature of the unencoded audio data.
     pub md5sum: [u8; 16]
 }
@@ -59,7 +59,7 @@ pub struct SeekPoint {
     /// target frame's header.
     pub offset: u64,
     /// Number of samples in the target frame.
-    pub n_samples: u16
+    pub samples: u16
 }
 
 /// A seek table to aid seeking in the stream.
@@ -233,9 +233,9 @@ fn read_streaminfo_block<R: io::Read>(input: &mut R) -> Result<StreamInfo> {
         min_frame_size: if min_frame_size == 0 { None } else { Some(min_frame_size) },
         max_frame_size: if max_frame_size == 0 { None } else { Some(max_frame_size) },
         sample_rate: sample_rate,
-        n_channels: n_channels,
+        channels: n_channels,
         bits_per_sample: bits_per_sample,
-        n_samples: if n_samples == 0 { None } else { Some(n_samples) },
+        samples: if n_samples == 0 { None } else { Some(n_samples) },
         md5sum: md5sum
     };
     Ok(stream_info)

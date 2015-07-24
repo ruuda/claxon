@@ -29,12 +29,12 @@ fn main() {
     let input = fs::File::open(fname).ok().expect("failed to open file");
     let mut reader = io::BufReader::new(input);
     let mut stream = FlacStream::new(&mut reader).ok().expect("failed to open FLAC stream");
-    let n_samples = stream.streaminfo().n_samples.expect("no sample count present in streaminfo");
+    let samples = stream.streaminfo().samples.expect("no sample count present in streaminfo");
 
     let spec = WavSpec {
         // TODO: naming is inconsistent between Hound and Claxon.
-        // TODO: u8 for n_channels, is that weird? Would u32 be better?
-        channels: stream.streaminfo().n_channels as u16,
+        // TODO: u8 for channels, is that weird? Would u32 be better?
+        channels: stream.streaminfo().channels as u16,
         sample_rate: stream.streaminfo().sample_rate,
         // TODO: again, would u32 be better, even if the range is smaller?
         bits_per_sample: stream.streaminfo().bits_per_sample as u16
@@ -46,7 +46,7 @@ fn main() {
     let mut sample = 0u64;
     let mut i = 0u64;
 
-    while sample < n_samples {
+    while sample < samples {
         let block = blocks.read_next().ok().expect("failed to read block");
         let left = block.channel(0);
         let right = block.channel(1);

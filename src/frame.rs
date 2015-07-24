@@ -409,7 +409,7 @@ pub struct Block<'b, Sample> where Sample: 'b {
     /// The number of samples in the block.
     block_size: u16,
     /// The number of channels in the block.
-    n_channels: u8,
+    channels: u8,
     /// The decoded samples, the channels stored consecutively.
     samples: &'b [Sample]
 }
@@ -419,7 +419,7 @@ impl <'b, Sample: sample::Sample> Block<'b, Sample> {
         Block {
             first_sample_number: time,
             block_size: bs,
-            n_channels: (buffer.len() / bs as usize) as u8,
+            channels: (buffer.len() / bs as usize) as u8,
             samples: buffer
         }
     }
@@ -437,7 +437,7 @@ impl <'b, Sample: sample::Sample> Block<'b, Sample> {
     /// Returns the number of channels in the block.
     // TODO: should a frame know this? #channels must be constant throughout the stream anyway ...
     pub fn channels(&self) -> u8 {
-        self.n_channels
+        self.channels
     }
 
     /// Returns the (zero-based) `ch`-th channel as a slice.

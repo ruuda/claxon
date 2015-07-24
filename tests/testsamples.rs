@@ -74,9 +74,9 @@ fn read_streaminfo(fname: &path::Path) -> String {
             streaminfo.min_frame_size.unwrap_or(0),
             streaminfo.max_frame_size.unwrap_or(0),
             streaminfo.sample_rate,
-            streaminfo.n_channels,
+            streaminfo.channels,
             streaminfo.bits_per_sample,
-            streaminfo.n_samples.unwrap_or(0),
+            streaminfo.samples.unwrap_or(0),
             print_hex(&streaminfo.md5sum)) // TODO implement LowerHex for &[u8] and submit a PR.
 }
 
@@ -122,13 +122,13 @@ fn compare_decoded_stream(fname: &path::Path) {
 
         let mut ref_samples = ref_stream.samples::<i32>();
 
-        let n_samples = try_stream.streaminfo().n_samples.unwrap();
-        let n_channels = try_stream.streaminfo().n_channels;
+        let samples = try_stream.streaminfo().samples.unwrap();
+        let n_channels = try_stream.streaminfo().channels;
         let mut blocks = try_stream.blocks::<i32>();
         let mut sample = 0u64;
         let mut b = 0u64;
 
-        while sample < n_samples {
+        while sample < samples {
             let block = blocks.read_next().unwrap();
             let mut channels: Vec<_> = (0 .. n_channels)
                                        .map(|i| block.channel(i).iter().cloned())
