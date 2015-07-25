@@ -91,22 +91,22 @@ const CRC16_TABLE: [u16; 256] = [
 /// A reader that computes the CRC-8 over everything it reads.
 ///
 /// The polynomial used is x^8 + x^2 + x^1 + x^0, and the initial value is 0.
-pub struct Crc8Reader<'r> {
-    reader: &'r mut (io::Read + 'r),
+pub struct Crc8Reader<R: io::Read> {
+    reader: R,
     state: u8
 }
 
 /// A reader that computes the CRC-16 over everything it reads.
 ///
 /// The polynomial used is x^16 + x^15 + x^2 + x^0, and the initial value is 0.
-pub struct Crc16Reader<'r> {
-    reader: &'r mut (io::Read + 'r),
+pub struct Crc16Reader<R: io::Read> {
+    reader: R,
     state: u16
 }
 
-impl<'r> Crc8Reader<'r> {
+impl<R: io::Read> Crc8Reader<R> {
     /// Wraps the reader with a CRC-8 computing reader with initial value 0.
-    pub fn new(reader: &'r mut io::Read) -> Crc8Reader<'r> {
+    pub fn new(reader: R) -> Crc8Reader<R> {
         Crc8Reader { reader: reader, state: 0 }
     }
 
@@ -116,9 +116,9 @@ impl<'r> Crc8Reader<'r> {
     }
 }
 
-impl<'r> Crc16Reader<'r> {
+impl<R: io::Read> Crc16Reader<R> {
     /// Wraps the reader with a CRC-16 computing reader with initial value 0.
-    pub fn new(reader: &'r mut io::Read) -> Crc16Reader<'r> {
+    pub fn new(reader: R) -> Crc16Reader<R> {
         Crc16Reader { reader: reader, state: 0 }
     }
 
@@ -128,7 +128,7 @@ impl<'r> Crc16Reader<'r> {
     }
 }
 
-impl<'r> io::Read for Crc8Reader<'r> {
+impl<R: io::Read> io::Read for Crc8Reader<R> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         // Pass through to the regular reader.
         let n = try!(self.reader.read(buf));
@@ -142,7 +142,7 @@ impl<'r> io::Read for Crc8Reader<'r> {
     }
 }
 
-impl<'r> io::Read for Crc16Reader<'r> {
+impl<R: io::Read> io::Read for Crc16Reader<R> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         // Pass through to the regular reader.
         let n = try!(self.reader.read(buf));
@@ -159,16 +159,16 @@ impl<'r> io::Read for Crc16Reader<'r> {
 
 #[cfg(test)]
 fn verify_crc8(test_vector: Vec<u8>, result: u8) {
-    let mut data = io::Cursor::new(test_vector);
-    let mut reader = Crc8Reader::new(&mut data);
+    let data = io::Cursor::new(test_vector);
+    let mut reader = Crc8Reader::new(data);
     reader.read_to_end(&mut Vec::new()).unwrap();
     assert_eq!(reader.crc(), result);
 }
 
 #[cfg(test)]
 fn verify_crc16(test_vector: Vec<u8>, result: u16) {
-    let mut data = io::Cursor::new(test_vector);
-    let mut reader = Crc16Reader::new(&mut data);
+    let data = io::Cursor::new(test_vector);
+    let mut reader = Crc16Reader::new(data);
     reader.read_to_end(&mut Vec::new()).unwrap();
     assert_eq!(reader.crc(), result);
 }
