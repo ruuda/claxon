@@ -131,7 +131,7 @@ fn verify_read_var_length_int() {
                Error::FormatError("invalid variable-length integer"));
 }
 
-fn read_frame_header(input: &mut io::Read) -> Result<FrameHeader> {
+fn read_frame_header<R: io::Read>(input: &mut R) -> Result<FrameHeader> {
     // The frame header includes a CRC-8 at the end. It can be computed
     // automatically while reading, by wrapping the input reader in a reader
     // that computes the CRC.
@@ -454,8 +454,8 @@ impl <'b, Sample: sample::Sample> Block<'b, Sample> {
 ///
 /// TODO: for now, it is assumes that the reader starts at a frame header;
 /// no searching for a sync code is performed at the moment.
-pub struct FrameReader<'r, Sample: sample::Sample> {
-    input: &'r mut (io::Read + 'r),
+pub struct FrameReader<R: io::Read, Sample: sample::Sample> {
+    input: R,
     buffer: Vec<Sample>,
     wide_buffer: Vec<Sample::Wide>
 }
@@ -463,10 +463,10 @@ pub struct FrameReader<'r, Sample: sample::Sample> {
 /// Either a `Block` or an `Error`.
 pub type FrameResult<'b, Sample> = Result<Block<'b, Sample>>;
 
-impl<'r, Sample: sample::Sample> FrameReader<'r, Sample> {
+impl<R: io::Read, Sample: sample::Sample> FrameReader<R, Sample> {
 
     /// Creates a new frame reader that will yield at least one element.
-    pub fn new(input: &'r mut io::Read) -> FrameReader<'r, Sample> {
+    pub fn new(input: R) -> FrameReader<R, Sample> {
         // TODO: a hit for the vector size can be provided.
         FrameReader {
             input: input,
@@ -508,7 +508,7 @@ impl<'r, Sample: sample::Sample> FrameReader<'r, Sample> {
     pub fn read_next<'s>(&'s mut self) -> FrameResult<'s, Sample> {
         use std::mem::size_of;
 
-        let header = try!(read_frame_header(self.input));
+        let header = try!(read_frame_header(&mut self.input));
 
         // We must allocate enough space for all channels in the block to be
         // decoded.
@@ -527,7 +527,7 @@ impl<'r, Sample: sample::Sample> FrameReader<'r, Sample> {
         // In the next part of the stream, nothing is byte-aligned any more,
         // we need a bitstream. Then we can decode subframes from the bitstream.
         {
-            let mut bitstream = Bitstream::new(self.input);
+            let mut bitstream = Bitstream::new(&mut self.input);
             let bs = header.block_size as usize;
 
             match header.channel_assignment {

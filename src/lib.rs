@@ -107,7 +107,7 @@ impl<R: io::Read> FlacStream<R> {
     }
 
     /// Returns an iterator that decodes a single frame on every iteration.
-    pub fn blocks<'r, S: sample::Sample>(&'r mut self) -> FrameReader<'r, S> {
+    pub fn blocks<'r, S: sample::Sample>(&'r mut self) -> FrameReader<&'r mut R, S> {
         FrameReader::new(&mut self.input)
     }
 }
