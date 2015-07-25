@@ -170,11 +170,40 @@ fn for_each_test_sample<F: Fn(&path::Path)>(f: F) {
 }
 
 #[test]
-fn verify_streaminfo() {
+fn verify_streaminfo_all() {
     for_each_test_sample(compare_metaflac);
 }
 
 #[test]
-fn verify_decoded_stream() {
+fn verify_decoded_stream_all() {
     for_each_test_sample(compare_decoded_stream);
+}
+
+// Hard-coded tests for the test samples added py populate.sh.
+// This allows us to run these tests in parallel and follow progress without
+// enabling --nocapture.
+
+#[test]
+fn verify_streaminfo_p0() {
+    compare_metaflac(path::Path::new("testsamples/p0.flac"));
+}
+
+#[test]
+fn verify_streaminfo_p1() {
+    compare_metaflac(path::Path::new("testsamples/p1.flac"));
+}
+
+#[test]
+fn verify_streaminfo_p2() {
+    compare_metaflac(path::Path::new("testsamples/p2.flac"));
+}
+
+#[test]
+fn verify_streaminfo_p3() {
+    compare_metaflac(path::Path::new("testsamples/p3.flac"));
+}
+
+#[test]
+fn verify_streaminfo_p4() {
+    compare_metaflac(path::Path::new("testsamples/p4.flac"));
 }
