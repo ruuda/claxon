@@ -3,11 +3,9 @@ language: rust
 rust:
   - nightly
 
-before_script: testsamples/populate.sh
-
-script:
-  - cargo build --verbose
-  - cargo test --verbose -- --nocapture
+before_script:
+  - cd testsamples
+  - ./populate.sh
 
 addons:
   apt:
