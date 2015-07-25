@@ -30,9 +30,9 @@ fn bench_decode(path: &Path, bencher: &mut Bencher) {
     let mut file = File::open(path).unwrap();
     let mut data = Vec::new();
     file.read_to_end(&mut data).unwrap();
-    let mut cursor = Cursor::new(data);
+    let cursor = Cursor::new(data);
 
-    let mut stream = claxon::FlacStream::new(&mut cursor).unwrap();
+    let mut stream = claxon::FlacStream::new(cursor).unwrap();
 
     let bps = stream.streaminfo().bits_per_sample as u64;
     let channels = stream.streaminfo().channels as u64;

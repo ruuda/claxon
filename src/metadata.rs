@@ -275,32 +275,32 @@ fn read_application_block<R: io::Read>(input: &mut R, length: u32)
 /// byte of a metadata block header. This means that the iterator will yield at
 /// least a single value. If the iterator ever yields an error, then no more
 /// data will be read thereafter, and the next value will be `None`.
-pub struct MetadataBlockReader<'r, R> where R: 'r {
-    input: &'r mut R,
+pub struct MetadataBlockReader<R: io::Read> {
+    input: R,
     done: bool
 }
 
 /// Either a `MetadataBlock` or an `Error`.
 pub type MetadataBlockResult = Result<MetadataBlock>;
 
-impl<'r, R> MetadataBlockReader<'r, R> where R: io::Read + 'r {
+impl<R: io::Read> MetadataBlockReader<R> {
 
     /// Creates a metadata block reader that will yield at least one element.
-    pub fn new(input: &'r mut R) -> MetadataBlockReader<'r, R> {
+    pub fn new(input: R) -> MetadataBlockReader<R> {
         MetadataBlockReader { input: input, done: false }
     }
 
     fn read_next(&mut self) -> MetadataBlockResult {
-        let header = try!(read_metadata_block_header(self.input));
-        let block = try!(read_metadata_block(self.input, header.block_type,
-                                                         header.length));
+        let header = try!(read_metadata_block_header(&mut self.input));
+        let block = try!(read_metadata_block(&mut self.input,
+                                             header.block_type,
+                                             header.length));
         self.done = header.is_last;
         Ok(block)
     }
 }
 
-impl<'r, R> Iterator
-    for MetadataBlockReader<'r, R> where R: io::Read + 'r {
+impl<R: io::Read> Iterator for MetadataBlockReader<R> {
 
     type Item = MetadataBlockResult;
 

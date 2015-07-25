@@ -63,8 +63,8 @@ fn read_streaminfo(fname: &path::Path) -> String {
 
     // Use a buffered reader, this speeds up the test by 120%.
     let file = fs::File::open(fname).unwrap();
-    let mut reader = io::BufReader::new(file);
-    let stream = FlacStream::new(&mut reader).unwrap();
+    let reader = io::BufReader::new(file);
+    let stream = FlacStream::new(reader).unwrap();
     let streaminfo = stream.streaminfo();
 
     // Format the streaminfo in the same way that metaflac prints it.
@@ -113,9 +113,8 @@ fn compare_decoded_stream(fname: &path::Path) {
         let mut ref_stream = hound::WavReader::open(ref_fname).unwrap();
 
         let try_file = fs::File::open(fname).unwrap();
-        let mut try_reader = io::BufReader::new(try_file);
-        // TODO: Claxon should take R by value, not by mut reference.
-        let mut try_stream = claxon::FlacStream::new(&mut try_reader).unwrap();
+        let try_reader = io::BufReader::new(try_file);
+        let mut try_stream = claxon::FlacStream::new(try_reader).unwrap();
 
         // The streaminfo test will ensure that things like bit depth and
         // sample rate match, only the actual samples are compared here.

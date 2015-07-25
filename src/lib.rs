@@ -41,10 +41,10 @@ pub use error::{Error, Result};
 ///
 /// TODO: Is stream a good name? Should it be called reader/decoder?
 /// TODO: Add an example.
-pub struct FlacStream<'r> {
+pub struct FlacStream<R: io::Read> {
     streaminfo: StreamInfo,
     metadata_blocks: Vec<MetadataBlock>,
-    input: &'r mut (io::Read + 'r)
+    input: R
 }
 
 fn read_stream_header<R: io::Read>(input: &mut R) -> Result<()> {
@@ -58,13 +58,13 @@ fn read_stream_header<R: io::Read>(input: &mut R) -> Result<()> {
     }
 }
 
-impl<'r> FlacStream<'r> {
+impl<R: io::Read> FlacStream<R> {
     /// Constructs a flac stream from the given input.
     ///
     /// This will read all metadata and stop at the first audio frame.
-    pub fn new<R>(input: &mut R) -> Result<FlacStream> where R: io::Read {
+    pub fn new(mut input: R) -> Result<FlacStream<R>> {
         // A flac stream first of all starts with a stream header.
-        try!(read_stream_header(input));
+        try!(read_stream_header(&mut input));
 
         // Start a new scope, because the input reader must be available again
         // for the frame reader next.
@@ -72,7 +72,7 @@ impl<'r> FlacStream<'r> {
             // Next are one or more metadata blocks. The flac specification
             // dictates that the streaminfo block is the first block. The metadata
             // block reader will yield at least one element, so the unwrap is safe.
-            let mut metadata_iter = MetadataBlockReader::new(input);
+            let mut metadata_iter = MetadataBlockReader::new(&mut input);
             let streaminfo_block = try!(metadata_iter.next().unwrap());
             let streaminfo = match streaminfo_block {
                 MetadataBlock::StreamInfo(info) => info,
@@ -107,7 +107,7 @@ impl<'r> FlacStream<'r> {
     }
 
     /// Returns an iterator that decodes a single frame on every iteration.
-    pub fn blocks<S: sample::Sample>(&'r mut self) -> FrameReader<'r, S> {
+    pub fn blocks<'r, S: sample::Sample>(&'r mut self) -> FrameReader<'r, S> {
         FrameReader::new(&mut self.input)
     }
 }
