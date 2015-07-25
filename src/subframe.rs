@@ -15,6 +15,7 @@
 
 //! The `subframe` module deals with subframes that make up a frame of the FLAC stream.
 
+use std::io;
 use error::{Error, Result, fmt_err};
 use input::Bitstream;
 use sample;
@@ -33,7 +34,8 @@ struct SubframeHeader {
     wasted_bits_per_sample: u8
 }
 
-fn read_subframe_header(input: &mut Bitstream) -> Result<SubframeHeader> {
+fn read_subframe_header<R: io::Read>(input: &mut Bitstream<R>)
+                                     -> Result<SubframeHeader> {
     // The first bit must be a 0 padding bit.
     if 0 != try!(input.read_leq_u8(1)) {
         return fmt_err("invalid subframe header");
@@ -197,8 +199,8 @@ fn verify_rice_to_signed() {
 /// Decodes a subframe into the provided block-size buffer.
 ///
 /// It is assumed that the length of the buffer is the block size.
-pub fn decode<Sample: sample::WideSample>
-             (input: &mut Bitstream,
+pub fn decode<R: io::Read, Sample: sample::WideSample>
+             (input: &mut Bitstream<R>,
               bps: u8,
               buffer: &mut [Sample])
               -> Result<()> {
@@ -236,8 +238,8 @@ enum RicePartitionType {
     Rice2
 }
 
-fn decode_residual<Sample: sample::WideSample>
-                  (input: &mut Bitstream,
+fn decode_residual<R: io::Read, Sample: sample::WideSample>
+                  (input: &mut Bitstream<R>,
                    bps: u8,
                    block_size: u16,
                    buffer: &mut [Sample])
@@ -254,8 +256,8 @@ fn decode_residual<Sample: sample::WideSample>
     }
 }
 
-fn decode_partitioned_rice<Sample: sample::WideSample>
-                          (input: &mut Bitstream,
+fn decode_partitioned_rice<R: io::Read, Sample: sample::WideSample>
+                          (input: &mut Bitstream<R>,
                            bps: u8,
                            partition_type: RicePartitionType,
                            block_size: u16,
@@ -292,8 +294,8 @@ fn decode_partitioned_rice<Sample: sample::WideSample>
     Ok(())
 }
 
-fn decode_rice_partition<Sample: sample::WideSample>
-                        (input: &mut Bitstream,
+fn decode_rice_partition<R: io::Read, Sample: sample::WideSample>
+                        (input: &mut Bitstream<R>,
                          bps: u8,
                          partition_type: RicePartitionType,
                          buffer: &mut [Sample])
@@ -357,8 +359,8 @@ fn decode_rice_partition<Sample: sample::WideSample>
     Ok(())
 }
 
-fn decode_constant<Sample: sample::WideSample>
-                  (input: &mut Bitstream,
+fn decode_constant<R: io::Read, Sample: sample::WideSample>
+                  (input: &mut Bitstream<R>,
                    bps: u8,
                    buffer: &mut [Sample])
                    -> Result<()> {
@@ -380,8 +382,8 @@ fn decode_constant<Sample: sample::WideSample>
     Ok(())
 }
 
-fn decode_verbatim<Sample: sample::WideSample>
-                  (input: &mut Bitstream,
+fn decode_verbatim<R: io::Read, Sample: sample::WideSample>
+                  (input: &mut Bitstream<R>,
                    bps: u8,
                    buffer: &mut [Sample])
                    -> Result<()> {
@@ -487,8 +489,8 @@ fn verify_predict_fixed() {
     assert_eq!(&buffer, &[21877, 27482, 26574]);
 }
 
-fn decode_fixed<Sample: sample::WideSample>
-               (input: &mut Bitstream,
+fn decode_fixed<R: io::Read, Sample: sample::WideSample>
+               (input: &mut Bitstream<R>,
                 bps: u8,
                 order: u8,
                 buffer: &mut [Sample])
@@ -568,8 +570,8 @@ fn verify_predict_lpc() {
     assert_eq!(&buffer, &[-21363, -21951, -22649, -24364, -27297, -26870, -30017, -29718]);
 }
 
-fn decode_lpc<Sample: sample::WideSample>
-             (input: &mut Bitstream,
+fn decode_lpc<R: io::Read, Sample: sample::WideSample>
+             (input: &mut Bitstream<R>,
               bps: u8,
               order: u8,
               buffer: &mut [Sample])

@@ -144,18 +144,18 @@ fn shift_right(x: u8, shift: usize) -> u8 {
 }
 
 /// Wraps a `Reader` to facilitate reading that is not byte-aligned.
-pub struct Bitstream<'r> {
+pub struct Bitstream<R: io::Read> {
     /// The source where bits are read from.
-    reader: &'r mut (io::Read + 'r),
+    reader: R,
     /// Data read from the reader, but not yet fully consumed.
     data: u8,
     /// The number of bits of `data` that have not been consumed.
     bits_left: u8
 }
 
-impl<'r> Bitstream<'r> {
+impl<R: io::Read> Bitstream<R> {
     /// Wraps the reader with a reader that facilitates reading individual bits.
-    pub fn new(reader: &'r mut io::Read) -> Bitstream<'r> {
+    pub fn new(reader: R) -> Bitstream<R> {
         Bitstream { reader: reader, data: 0, bits_left: 0 }
     }
 
@@ -183,7 +183,7 @@ impl<'r> Bitstream<'r> {
             // From the next byte, we take the additional bits that we need.
             // Those start at the most significant bit, so we need to shift so
             // that it does not overlap with what we have already.
-            let lsb = (self.data & Bitstream::mask_u8(bits - self.bits_left))
+            let lsb = (self.data & Bitstream::<R>::mask_u8(bits - self.bits_left))
                     >> self.bits_left as usize;
 
             // Shift out the bits that we have consumed.
@@ -192,7 +192,7 @@ impl<'r> Bitstream<'r> {
 
             msb | lsb
         } else {
-            let result = self.data & Bitstream::mask_u8(bits);
+            let result = self.data & Bitstream::<R>::mask_u8(bits);
 
             // Shift out the bits that we have consumed.
             self.data = self.data << bits as usize;
@@ -205,7 +205,7 @@ impl<'r> Bitstream<'r> {
         debug_assert!(self.bits_left < 8);
 
         // The least significant bits should be zero.
-        debug_assert_eq!(self.data & !Bitstream::mask_u8(self.bits_left), 0u8);
+        debug_assert_eq!(self.data & !Bitstream::<R>::mask_u8(self.bits_left), 0u8);
 
         // The resulting data is padded with zeroes in the least significant
         // bits, but we want to pad in the most significant bits, so shift.
@@ -253,11 +253,11 @@ impl<'r> Bitstream<'r> {
 
 #[test]
 fn verify_read_leq_u8() {
-    let mut data = io::Cursor::new(vec!(0b1010_0101, 0b1110_0001,
-                                        0b1101_0010, 0b0101_0101,
-                                        0b0111_0011, 0b0011_1111,
-                                        0b1010_1010, 0b0000_1100));
-    let mut bits = Bitstream::new(&mut data);
+    let data = io::Cursor::new(vec!(0b1010_0101, 0b1110_0001,
+                                    0b1101_0010, 0b0101_0101,
+                                    0b0111_0011, 0b0011_1111,
+                                    0b1010_1010, 0b0000_1100));
+    let mut bits = Bitstream::new(data);
 
     assert_eq!(bits.read_leq_u8(0).unwrap(), 0);
     assert_eq!(bits.read_leq_u8(1).unwrap(), 1);
@@ -281,9 +281,9 @@ fn verify_read_leq_u8() {
 
 #[test]
 fn verify_read_leq_u16() {
-    let mut data = io::Cursor::new(vec!(0b1010_0101, 0b1110_0001,
-                                        0b1101_0010, 0b0101_0101));
-    let mut bits = Bitstream::new(&mut data);
+    let data = io::Cursor::new(vec!(0b1010_0101, 0b1110_0001,
+                                    0b1101_0010, 0b0101_0101));
+    let mut bits = Bitstream::new(data);
 
     assert_eq!(bits.read_leq_u16(0).unwrap(), 0);
     assert_eq!(bits.read_leq_u16(1).unwrap(), 1);
@@ -293,9 +293,9 @@ fn verify_read_leq_u16() {
 
 #[test]
 fn verify_read_leq_u32() {
-    let mut data = io::Cursor::new(vec!(0b1010_0101, 0b1110_0001,
-                                        0b1101_0010, 0b0101_0101));
-    let mut bits = Bitstream::new(&mut data);
+    let data = io::Cursor::new(vec!(0b1010_0101, 0b1110_0001,
+                                    0b1101_0010, 0b0101_0101));
+    let mut bits = Bitstream::new(data);
 
     assert_eq!(bits.read_leq_u32(1).unwrap(), 1);
     assert_eq!(bits.read_leq_u32(17).unwrap(), 0b010_0101_1110_0001_11);
@@ -305,10 +305,10 @@ fn verify_read_leq_u32() {
 #[test]
 fn verify_read_mixed() {
     // These test data are warm-up samples from an actual stream.
-    let mut data = io::Cursor::new(vec!(0x03, 0xc7, 0xbf, 0xe5, 0x9b, 0x74,
-                                        0x1e, 0x3a, 0xdd, 0x7d, 0xc5, 0x5e,
-                                        0xf6, 0xbf, 0x78, 0x1b, 0xbd));
-    let mut bits = Bitstream::new(&mut data);
+    let data = io::Cursor::new(vec!(0x03, 0xc7, 0xbf, 0xe5, 0x9b, 0x74,
+                                    0x1e, 0x3a, 0xdd, 0x7d, 0xc5, 0x5e,
+                                    0xf6, 0xbf, 0x78, 0x1b, 0xbd));
+    let mut bits = Bitstream::new(data);
 
     assert_eq!(bits.read_leq_u8(6).unwrap(), 0);
     assert_eq!(bits.read_leq_u8(1).unwrap(), 1);
