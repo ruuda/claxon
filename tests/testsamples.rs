@@ -207,3 +207,28 @@ fn verify_streaminfo_p3() {
 fn verify_streaminfo_p4() {
     compare_metaflac(path::Path::new("testsamples/p4.flac"));
 }
+
+#[test]
+fn verify_decoded_stream_p0() {
+    compare_decoded_stream(path::Path::new("testsamples/p0.flac"));
+}
+
+#[test]
+fn verify_decoded_stream_p1() {
+    compare_decoded_stream(path::Path::new("testsamples/p1.flac"));
+}
+
+#[test]
+fn verify_decoded_stream_p2() {
+    compare_decoded_stream(path::Path::new("testsamples/p2.flac"));
+}
+
+#[test]
+fn verify_decoded_stream_p3() {
+    compare_decoded_stream(path::Path::new("testsamples/p3.flac"));
+}
+
+#[test]
+fn verify_decoded_stream_p4() {
+    compare_decoded_stream(path::Path::new("testsamples/p4.flac"));
+}
