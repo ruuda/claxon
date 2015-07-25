@@ -150,35 +150,6 @@ fn compare_decoded_stream(fname: &path::Path) {
     }
 }
 
-fn for_each_test_sample<F: Fn(&path::Path)>(f: F) {
-    use std::ffi::OsStr;
-    use std::fs::PathExt;
-
-    // Enumerate all the flac files in the testsamples directory, and execute
-    // the function `f` for it.
-    let dir = fs::read_dir("testsamples")
-                 .ok().expect("failed to enumerate flac files");
-    for path in dir {
-        let path = path.ok().expect("failed to obtain path info").path();
-        if path.is_file() && path.extension() == Some(OsStr::new("flac")) {
-            print!("    comparing {} ...", path.to_str()
-                                               .expect("unsupported filename"));
-            f(&path);
-            println!(" ok");
-        }
-    }
-}
-
-#[test]
-fn verify_streaminfo_all() {
-    for_each_test_sample(compare_metaflac);
-}
-
-#[test]
-fn verify_decoded_stream_all() {
-    for_each_test_sample(compare_decoded_stream);
-}
-
 // Hard-coded tests for the test samples added py populate.sh.
 // This allows us to run these tests in parallel and follow progress without
 // enabling --nocapture.
