@@ -17,7 +17,7 @@
 
 use std::io;
 use std::iter::repeat;
-use crc::Crc8Reader;
+use crc::{Crc8Reader, Crc16Reader};
 use error::{Error, Result, fmt_err};
 use input::{Bitstream, ReadExt};
 use sample;
@@ -463,6 +463,28 @@ pub struct FrameReader<R: io::Read, Sample: sample::Sample> {
 /// Either a `Block` or an `Error`.
 pub type FrameResult<'b, Sample> = Result<Block<'b, Sample>>;
 
+/// A macro to expand the length of a buffer, or replace the buffer altogether,
+/// so it can hold at least `$new_len` elements. The contents of the buffer can
+/// be anything, it is assumed they will be overwritten anyway.
+///
+/// The reason that this is a macro, not a method, is that the method would
+/// require a mutable borrow, of which there can only be one. The macro can be
+/// invoked even if a (different) part of the `FrameReader` is mutably borrowed.
+macro_rules! ensure_buffer_len {
+    ($buffer: expr, $new_len: expr, $zero: expr) => {
+        if $buffer.len() < $new_len {
+            // Previous data will be overwritten, so instead of resizing the
+            // vector if it is too small, we might as well allocate a new one.
+            if $buffer.capacity() < $new_len {
+                $buffer = Vec::with_capacity($new_len);
+            }
+            let len = $buffer.len();
+            // TODO: Can this be optimized by using unsafe code?
+            $buffer.extend(repeat($zero).take($new_len - len));
+        }
+    }
+}
+
 impl<R: io::Read, Sample: sample::Sample> FrameReader<R, Sample> {
 
     /// Creates a new frame reader that will yield at least one element.
@@ -475,122 +497,102 @@ impl<R: io::Read, Sample: sample::Sample> FrameReader<R, Sample> {
         }
     }
  
-    fn ensure_buffer_len(&mut self, new_len: usize) {
-        if self.buffer.len() < new_len {
-            // Previous data will be overwritten, so instead of resizing the
-            // vector if it is too small, we might as well allocate a new one.
-            if self.buffer.capacity() < new_len {
-                self.buffer = Vec::with_capacity(new_len);
-            }
-            let len = self.buffer.len();
-            self.buffer.extend(repeat(Sample::zero()).take(new_len - len));
-        }
-    }
-
-    fn ensure_wide_buffer_len(&mut self, new_len: usize) {
-        use std::num::Zero;
-
-        if self.wide_buffer.len() < new_len {
-            // Previous data will be overwritten, so instead of resizing the
-            // vector if it is too small, we might as well allocate a new one.
-            if self.wide_buffer.capacity() < new_len {
-                self.wide_buffer = Vec::with_capacity(new_len);
-            }
-            let len = self.wide_buffer.len();
-            self.wide_buffer.extend(repeat(Sample::Wide::zero())
-                                   .take(new_len - len));
-        }
-    }
-
     /// Tries to decode the next frame.
     ///
     /// TODO: I should really be consistent with 'read' and 'decode'.
     pub fn read_next<'s>(&'s mut self) -> FrameResult<'s, Sample> {
         use std::mem::size_of;
+        use std::num::Zero;
 
-        let header = try!(read_frame_header(&mut self.input));
+        // Start a new scope in which we compute the CRC-16 over anything we read.
+        let (header, total_samples, crc16) = {
+            let mut crc_input = Crc16Reader::new(&mut self.input);
+            let header = try!(read_frame_header(&mut crc_input));
 
-        // We must allocate enough space for all channels in the block to be
-        // decoded.
-        let total_samples = header.channels() as usize * header.block_size as usize;
-        self.ensure_buffer_len(total_samples);
-        self.ensure_wide_buffer_len(total_samples);
+            // We must allocate enough space for all channels in the block to be
+            // decoded.
+            let total_samples = header.channels() as usize * header.block_size as usize;
+            ensure_buffer_len!(self.buffer, total_samples, Sample::zero());
+            ensure_buffer_len!(self.wide_buffer, total_samples, Sample::Wide::zero());
 
-        // TODO: if the bps is missing from the header, we must get it from
-        // the streaminfo block.
-        let bps = header.bits_per_sample.unwrap();
+            // TODO: if the bps is missing from the header, we must get it from
+            // the streaminfo block.
+            let bps = header.bits_per_sample.unwrap();
 
-        // The sample size must be wide enough to accomodate for the bits per sample.
-        // TODO: Turn this into an error instead of panic? Or is it enforced elsewhere?
-        debug_assert!(bps as usize <= size_of::<Sample>() * 8);
+            // The sample size must be wide enough to accomodate for the bits per sample.
+            // TODO: Turn this into an error instead of panic? Or is it enforced elsewhere?
+            debug_assert!(bps as usize <= size_of::<Sample>() * 8);
 
-        // In the next part of the stream, nothing is byte-aligned any more,
-        // we need a bitstream. Then we can decode subframes from the bitstream.
-        {
-            let mut bitstream = Bitstream::new(&mut self.input);
-            let bs = header.block_size as usize;
+            // In the next part of the stream, nothing is byte-aligned any more,
+            // we need a bitstream. Then we can decode subframes from the bitstream.
+            {
+                let mut bitstream = Bitstream::new(&mut crc_input);
+                let bs = header.block_size as usize;
 
-            match header.channel_assignment {
-                ChannelAssignment::Independent(n_ch) => {
-                    for ch in 0 .. n_ch as usize {
+                match header.channel_assignment {
+                    ChannelAssignment::Independent(n_ch) => {
+                        for ch in 0 .. n_ch as usize {
+                            try!(subframe::decode(&mut bitstream, bps,
+                                                  &mut self.wide_buffer[ch * bs ..
+                                                                       (ch + 1) * bs]));
+                        }
+                    }
+                    ChannelAssignment::LeftSideStereo => {
+                        // The side channel has one extra bit per sample.
                         try!(subframe::decode(&mut bitstream, bps,
-                                              &mut self.wide_buffer[ch * bs ..
-                                                                   (ch + 1) * bs]));
+                                              &mut self.wide_buffer[.. bs]));
+                        try!(subframe::decode(&mut bitstream, bps + 1,
+                                              &mut self.wide_buffer[bs .. bs * 2]));
+
+                        // Then decode the side channel into the right channel.
+                        try!(decode_left_side(&mut self.wide_buffer[.. bs * 2]));
+                    },
+                    ChannelAssignment::RightSideStereo => {
+                        // The side channel has one extra bit per sample.
+                        try!(subframe::decode(&mut bitstream, bps + 1,
+                                              &mut self.wide_buffer[.. bs]));
+                        try!(subframe::decode(&mut bitstream, bps,
+                                              &mut self.wide_buffer[bs .. bs * 2]));
+
+                        // Then decode the side channel into the left channel.
+                        try!(decode_right_side(&mut self.wide_buffer[.. bs * 2]));
+                    },
+                    ChannelAssignment::MidSideStereo => {
+                        // Decode mid as the first channel, then side with one
+                        // extra bitp per sample.
+                        try!(subframe::decode(&mut bitstream, bps,
+                                              &mut self.wide_buffer[.. bs]));
+                        try!(subframe::decode(&mut bitstream, bps + 1,
+                                              &mut self.wide_buffer[bs .. bs * 2]));
+
+                        // Then decode mid-side channel into left-right.
+                        try!(decode_mid_side(&mut self.wide_buffer[.. bs * 2]));
                     }
                 }
-                ChannelAssignment::LeftSideStereo => {
-                    // The side channel has one extra bit per sample.
-                    try!(subframe::decode(&mut bitstream, bps,
-                                          &mut self.wide_buffer[.. bs]));
-                    try!(subframe::decode(&mut bitstream, bps + 1,
-                                          &mut self.wide_buffer[bs .. bs * 2]));
 
-                    // Then decode the side channel into the right channel.
-                    try!(decode_left_side(&mut self.wide_buffer[.. bs * 2]));
-                },
-                ChannelAssignment::RightSideStereo => {
-                    // The side channel has one extra bit per sample.
-                    try!(subframe::decode(&mut bitstream, bps + 1,
-                                          &mut self.wide_buffer[.. bs]));
-                    try!(subframe::decode(&mut bitstream, bps,
-                                          &mut self.wide_buffer[bs .. bs * 2]));
+                // When the bitstream goes out of scope, we can use the `input`
+                // reader again, which will be byte-aligned. The specification
+                // dictates that padding should consist of zero bits, but we do not
+                // enforce this here.
+                // TODO: It could be enforced by having a read_to_byte_aligned
+                // method on the bit reader; it'd be a simple comparison.
+            }
 
-                    // Then decode the side channel into the left channel.
-                    try!(decode_right_side(&mut self.wide_buffer[.. bs * 2]));
-                },
-                ChannelAssignment::MidSideStereo => {
-                    // Decode mid as the first channel, then side with one
-                    // extra bitp per sample.
-                    try!(subframe::decode(&mut bitstream, bps,
-                                          &mut self.wide_buffer[.. bs]));
-                    try!(subframe::decode(&mut bitstream, bps + 1,
-                                          &mut self.wide_buffer[bs .. bs * 2]));
-
-                    // Then decode mid-side channel into left-right.
-                    try!(decode_mid_side(&mut self.wide_buffer[.. bs * 2]));
+            {
+                // Narrow down the wide samples to the requested sample type.
+                // TODO: this should not verify that it fits the sample type, but that
+                // it fits the requested bps.
+                let n = header.block_size as usize * header.channels() as usize;
+                let wide_iter = self.wide_buffer[.. n].iter();
+                let dest_iter = self.buffer[.. n].iter_mut();
+                for (&src, dest) in wide_iter.zip(dest_iter) {
+                    let narrow = Sample::from_wide(src).ok_or(Error::TooWide);
+                    *dest = try!(narrow);
                 }
             }
 
-            // When the bitstream goes out of scope, we can use the `input`
-            // reader again, which will be byte-aligned. The specification
-            // dictates that padding should consist of zero bits, but we do not
-            // enforce this here.
-            // TODO: It could be enforced by having a read_to_byte_aligned
-            // method on the bit reader; it'd be a simple comparison.
-        }
-
-        {
-            // Narrow down the wide samples to the requested sample type.
-            // TODO: this should not verify that it fits the sample type, but that
-            // it fits the requested bps.
-            let n = header.block_size as usize * header.channels() as usize;
-            let wide_iter = self.wide_buffer[.. n].iter();
-            let dest_iter = self.buffer[.. n].iter_mut();
-            for (&src, dest) in wide_iter.zip(dest_iter) {
-                let narrow = Sample::from_wide(src).ok_or(Error::TooWide);
-                *dest = try!(narrow);
-            }
-        }
+            (header, total_samples, crc_input.crc())
+        };
 
         // The frame footer is a 16-bit CRC.
         // TODO: Get CRC of frame read so far.
