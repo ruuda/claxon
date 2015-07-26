@@ -505,7 +505,7 @@ impl<R: io::Read, Sample: sample::Sample> FrameReader<R, Sample> {
         use std::num::Zero;
 
         // Start a new scope in which we compute the CRC-16 over anything we read.
-        let (header, total_samples, crc16) = {
+        let (header, total_samples, computed_crc) = {
             let mut crc_input = Crc16Reader::new(&mut self.input);
             let header = try!(read_frame_header(&mut crc_input));
 
@@ -593,11 +593,14 @@ impl<R: io::Read, Sample: sample::Sample> FrameReader<R, Sample> {
 
             (header, total_samples, crc_input.crc())
         };
+        // At this point the CRC-16 reader goes out of scope, and we read via
+        // `self.input` again.
 
         // The frame footer is a 16-bit CRC.
-        // TODO: Get CRC of frame read so far.
-        let _frame_crc = try!(self.input.read_be_u16());
-        // TODO: Compare CRCs.
+        let presumed_crc = try!(self.input.read_be_u16());
+        if computed_crc != presumed_crc {
+            return fmt_err("frame CRC mismatch");
+        }
 
         // TODO: constant block size should be verified if a frame number is
         // encountered.
