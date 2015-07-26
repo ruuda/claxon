@@ -504,100 +504,98 @@ impl<R: io::Read, Sample: sample::Sample> FrameReader<R, Sample> {
         use std::mem::size_of;
         use std::num::Zero;
 
-        // Start a new scope in which we compute the CRC-16 over anything we read.
-        let (header, total_samples, computed_crc) = {
-            let mut crc_input = Crc16Reader::new(&mut self.input);
-            let header = try!(read_frame_header(&mut crc_input));
+        // The frame includes a CRC-16 at the end. It can be computed
+        // automatically while reading, by wrapping the input reader in a reader
+        // that computes the CRC.
+        let mut crc_input = Crc16Reader::new(&mut self.input);
+        let header = try!(read_frame_header(&mut crc_input));
 
-            // We must allocate enough space for all channels in the block to be
-            // decoded.
-            let total_samples = header.channels() as usize * header.block_size as usize;
-            ensure_buffer_len!(self.buffer, total_samples, Sample::zero());
-            ensure_buffer_len!(self.wide_buffer, total_samples, Sample::Wide::zero());
+        // We must allocate enough space for all channels in the block to be
+        // decoded.
+        let total_samples = header.channels() as usize * header.block_size as usize;
+        ensure_buffer_len!(self.buffer, total_samples, Sample::zero());
+        ensure_buffer_len!(self.wide_buffer, total_samples, Sample::Wide::zero());
 
-            // TODO: if the bps is missing from the header, we must get it from
-            // the streaminfo block.
-            let bps = header.bits_per_sample.unwrap();
+        // TODO: if the bps is missing from the header, we must get it from
+        // the streaminfo block.
+        let bps = header.bits_per_sample.unwrap();
 
-            // The sample size must be wide enough to accomodate for the bits per sample.
-            // TODO: Turn this into an error instead of panic? Or is it enforced elsewhere?
-            debug_assert!(bps as usize <= size_of::<Sample>() * 8);
+        // The sample size must be wide enough to accomodate for the bits per sample.
+        // TODO: Turn this into an error instead of panic? Or is it enforced elsewhere?
+        debug_assert!(bps as usize <= size_of::<Sample>() * 8);
 
-            // In the next part of the stream, nothing is byte-aligned any more,
-            // we need a bitstream. Then we can decode subframes from the bitstream.
-            {
-                let mut bitstream = Bitstream::new(&mut crc_input);
-                let bs = header.block_size as usize;
+        // In the next part of the stream, nothing is byte-aligned any more,
+        // we need a bitstream. Then we can decode subframes from the bitstream.
+        {
+            let mut bitstream = Bitstream::new(&mut crc_input);
+            let bs = header.block_size as usize;
 
-                match header.channel_assignment {
-                    ChannelAssignment::Independent(n_ch) => {
-                        for ch in 0 .. n_ch as usize {
-                            try!(subframe::decode(&mut bitstream, bps,
-                                                  &mut self.wide_buffer[ch * bs ..
-                                                                       (ch + 1) * bs]));
-                        }
-                    }
-                    ChannelAssignment::LeftSideStereo => {
-                        // The side channel has one extra bit per sample.
+            match header.channel_assignment {
+                ChannelAssignment::Independent(n_ch) => {
+                    for ch in 0 .. n_ch as usize {
                         try!(subframe::decode(&mut bitstream, bps,
-                                              &mut self.wide_buffer[.. bs]));
-                        try!(subframe::decode(&mut bitstream, bps + 1,
-                                              &mut self.wide_buffer[bs .. bs * 2]));
-
-                        // Then decode the side channel into the right channel.
-                        try!(decode_left_side(&mut self.wide_buffer[.. bs * 2]));
-                    },
-                    ChannelAssignment::RightSideStereo => {
-                        // The side channel has one extra bit per sample.
-                        try!(subframe::decode(&mut bitstream, bps + 1,
-                                              &mut self.wide_buffer[.. bs]));
-                        try!(subframe::decode(&mut bitstream, bps,
-                                              &mut self.wide_buffer[bs .. bs * 2]));
-
-                        // Then decode the side channel into the left channel.
-                        try!(decode_right_side(&mut self.wide_buffer[.. bs * 2]));
-                    },
-                    ChannelAssignment::MidSideStereo => {
-                        // Decode mid as the first channel, then side with one
-                        // extra bitp per sample.
-                        try!(subframe::decode(&mut bitstream, bps,
-                                              &mut self.wide_buffer[.. bs]));
-                        try!(subframe::decode(&mut bitstream, bps + 1,
-                                              &mut self.wide_buffer[bs .. bs * 2]));
-
-                        // Then decode mid-side channel into left-right.
-                        try!(decode_mid_side(&mut self.wide_buffer[.. bs * 2]));
+                                              &mut self.wide_buffer[ch * bs ..
+                                                                   (ch + 1) * bs]));
                     }
                 }
+                ChannelAssignment::LeftSideStereo => {
+                    // The side channel has one extra bit per sample.
+                    try!(subframe::decode(&mut bitstream, bps,
+                                          &mut self.wide_buffer[.. bs]));
+                    try!(subframe::decode(&mut bitstream, bps + 1,
+                                          &mut self.wide_buffer[bs .. bs * 2]));
 
-                // When the bitstream goes out of scope, we can use the `input`
-                // reader again, which will be byte-aligned. The specification
-                // dictates that padding should consist of zero bits, but we do not
-                // enforce this here.
-                // TODO: It could be enforced by having a read_to_byte_aligned
-                // method on the bit reader; it'd be a simple comparison.
-            }
+                    // Then decode the side channel into the right channel.
+                    try!(decode_left_side(&mut self.wide_buffer[.. bs * 2]));
+                },
+                ChannelAssignment::RightSideStereo => {
+                    // The side channel has one extra bit per sample.
+                    try!(subframe::decode(&mut bitstream, bps + 1,
+                                          &mut self.wide_buffer[.. bs]));
+                    try!(subframe::decode(&mut bitstream, bps,
+                                          &mut self.wide_buffer[bs .. bs * 2]));
 
-            {
-                // Narrow down the wide samples to the requested sample type.
-                // TODO: this should not verify that it fits the sample type, but that
-                // it fits the requested bps.
-                let n = header.block_size as usize * header.channels() as usize;
-                let wide_iter = self.wide_buffer[.. n].iter();
-                let dest_iter = self.buffer[.. n].iter_mut();
-                for (&src, dest) in wide_iter.zip(dest_iter) {
-                    let narrow = Sample::from_wide(src).ok_or(Error::TooWide);
-                    *dest = try!(narrow);
+                    // Then decode the side channel into the left channel.
+                    try!(decode_right_side(&mut self.wide_buffer[.. bs * 2]));
+                },
+                ChannelAssignment::MidSideStereo => {
+                    // Decode mid as the first channel, then side with one
+                    // extra bitp per sample.
+                    try!(subframe::decode(&mut bitstream, bps,
+                                          &mut self.wide_buffer[.. bs]));
+                    try!(subframe::decode(&mut bitstream, bps + 1,
+                                          &mut self.wide_buffer[bs .. bs * 2]));
+
+                    // Then decode mid-side channel into left-right.
+                    try!(decode_mid_side(&mut self.wide_buffer[.. bs * 2]));
                 }
             }
 
-            (header, total_samples, crc_input.crc())
-        };
-        // At this point the CRC-16 reader goes out of scope, and we read via
-        // `self.input` again.
+            // When the bitstream goes out of scope, we can use the `input`
+            // reader again, which will be byte-aligned. The specification
+            // dictates that padding should consist of zero bits, but we do not
+            // enforce this here.
+            // TODO: It could be enforced by having a read_to_byte_aligned
+            // method on the bit reader; it'd be a simple comparison.
+        }
+
+        {
+            // Narrow down the wide samples to the requested sample type.
+            // TODO: this should not verify that it fits the sample type, but that
+            // it fits the requested bps.
+            let n = header.block_size as usize * header.channels() as usize;
+            let wide_iter = self.wide_buffer[.. n].iter();
+            let dest_iter = self.buffer[.. n].iter_mut();
+            for (&src, dest) in wide_iter.zip(dest_iter) {
+                let narrow = Sample::from_wide(src).ok_or(Error::TooWide);
+                *dest = try!(narrow);
+            }
+        }
 
         // The frame footer is a 16-bit CRC.
-        let presumed_crc = try!(self.input.read_be_u16());
+        let computed_crc = crc_input.crc();
+        let presumed_crc = try!(crc_input.read_be_u16());
+
         if computed_crc != presumed_crc {
             return fmt_err("frame CRC mismatch");
         }
