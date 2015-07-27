@@ -367,11 +367,15 @@ fn decode_constant<R: io::Read, Sample: sample::WideSample>
 
     // A constant block has <bits per sample> bits: the value of all samples.
     // The nofail variant is safe, because it has been verified before that the
-    // sample type is wide enough for the bits per sample. FLAC does not
-    // support samples wider than 32 bits, so `read_leq_u32` suffices.
-    // TODO: Actually, no. FLAC supports 32-bit samples, so the mid/side delta
-    // would require 33 bits. But that is not subset FLAC, and the reference
-    // decoder does not support it either.
+    // sample type is wide enough for the bits per sample. However, FLAC does
+    // support up to 32 bits per sample, which means the mid/side delta would
+    // require 33 bits. We could read more than 32 bits here to support this,
+    // but 32 bits per sample is not subset FLAC, and the reference decoder
+    // does not support it either, so we just bail out in that case.
+    if bps > 32 {
+        return Err(Error::Unsupported("too many bits per sample"));
+    }
+
     let sample_u32 = try!(input.read_leq_u32(bps));
     let sample = Sample::from_i32_nofail(extend_sign_u32(sample_u32, bps));
 
