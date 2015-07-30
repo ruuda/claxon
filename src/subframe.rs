@@ -224,7 +224,7 @@ pub fn decode<R: io::Read, Sample: sample::WideSample>
     // the left. Note: it might be better performance-wise to do this on
     // the fly while decoding. That could be done if this is a bottleneck.
     if header.wasted_bits_per_sample > 0 {
-        for s in buffer.iter_mut() {
+        for s in buffer {
             *s = *s << header.wasted_bits_per_sample as usize;
         }
     }
@@ -379,7 +379,7 @@ fn decode_constant<R: io::Read, Sample: sample::WideSample>
     let sample_u32 = try!(input.read_leq_u32(bps));
     let sample = Sample::from_i32_nofail(extend_sign_u32(sample_u32, bps));
 
-    for s in buffer.iter_mut() {
+    for s in buffer {
         *s = sample;
     }
 
@@ -398,7 +398,7 @@ fn decode_verbatim<R: io::Read, Sample: sample::WideSample>
     debug_assert!(Sample::width() >= bps);
 
     // A verbatim block stores samples without encoding whatsoever.
-    for s in buffer.iter_mut() {
+    for s in buffer {
         // The nofail version is safe, because it has been verified before that
         // the Sample type is wide enough for the bits per sample. FLAC does
         // not support samples wider than 32 bits, so `read_leq_u32` suffices.
