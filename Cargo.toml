@@ -13,4 +13,4 @@ repository = "https://github.com/ruud-v-a/claxon"
 [dependencies]
 
 # TODO: turn into dev-dependency (and "decode" binary into example)
-hound = "1.0.0"
+hound = "1.1.0"
