@@ -83,8 +83,8 @@ fn read_streaminfo(fname: &path::Path) -> String {
 fn compare_metaflac(fname: &path::Path) {
     let metaflac = run_metaflac(fname);
     let streaminfo = read_streaminfo(fname);
-    let mut mf_lines = metaflac.lines_any();
-    let mut si_lines = streaminfo.lines_any();
+    let mut mf_lines = metaflac.lines();
+    let mut si_lines = streaminfo.lines();
     while let (Some(mf), Some(si)) = (mf_lines.next(), si_lines.next()) {
         if mf != si {
             println!("metaflac\n--------\n{}", metaflac);
