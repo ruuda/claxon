@@ -13,8 +13,6 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-#![feature(path_ext)]
-
 extern crate claxon;
 extern crate hound;
 
@@ -95,8 +93,6 @@ fn compare_metaflac(fname: &path::Path) {
 }
 
 fn compare_decoded_stream(fname: &path::Path) {
-    use std::fs::PathExt;
-
     let ref_fname = fname.with_extension("wav");
     if !ref_fname.exists() {
         // TODO: actually, we might only want to run the test for files that
