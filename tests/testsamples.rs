@@ -132,8 +132,8 @@ fn compare_decoded_stream(fname: &path::Path) {
             let mut channels: Vec<_> = (0 .. n_channels)
                                        .map(|i| block.channel(i).iter().cloned())
                                        .collect();
-            for i in (0 .. block.len()) {
-                for ch in (0 .. n_channels as usize) {
+            for i in 0 .. block.len() {
+                for ch in 0 .. n_channels as usize {
                     let ref_sample = ref_samples.next().map(|r| r.ok().unwrap());
                     let try_sample = channels[ch].next();
                     if ref_sample != try_sample {
