@@ -51,9 +51,9 @@ fn read_subframe_header<R: io::Read>(input: &mut Bitstream<R>)
         // are reserved at the time of writing are a format error, the
         // `Unsupported` error type is for specified features that are not
         // implemented.
-        n if (n & 0b111_110 == 0b000_010)
-          || (n & 0b111_100 == 0b000_100)
-          || (n & 0b110_000 == 0b010_000) => {
+        n if (n & 0b111_110 == 0b000_010) ||
+             (n & 0b111_100 == 0b000_100) ||
+             (n & 0b110_000 == 0b010_000) => {
             return fmt_err("invalid subframe header, encountered reserved value");
         }
 
@@ -537,7 +537,8 @@ fn predict_lpc<Sample: sample::WideSample>
         // The #coefficcients elements of the window store already decoded
         // samples, the last element of the window is the delta. Therefore,
         // predict based on the first #coefficients samples.
-        let prediction = coefficients.iter().zip(window.iter())
+        let prediction = coefficients.iter()
+                                     .zip(window.iter())
                                      .map(|(&c, &s)| c as i64 * s.to_i64())
                                      .sum::<i64>() >> qlp_shift;
 
@@ -612,8 +613,10 @@ fn decode_lpc<R: io::Read, Sample: sample::WideSample>
     // Next up is the residual. We decode it into the buffer directly, the
     // predictor contributions will be added in a second pass. The first
     // `order` samples have been decoded already, so continue after that.
-    try!(decode_residual(input, bps, buffer.len() as u16,
-                         &mut buffer[order as usize ..]));
+    try!(decode_residual(input,
+                         bps,
+                         buffer.len() as u16,
+                         &mut buffer[order as usize..]));
 
     try!(predict_lpc(&coefficients, qlp_shift, buffer));
 

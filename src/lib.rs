@@ -23,7 +23,7 @@
 
 use std::io;
 use error::fmt_err;
-use frame::{FrameReader};
+use frame::FrameReader;
 use input::ReadExt;
 use metadata::{MetadataBlock, MetadataBlockReader, StreamInfo};
 

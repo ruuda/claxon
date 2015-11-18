@@ -297,11 +297,11 @@ fn read_frame_header<R: io::Read>(input: &mut R) -> Result<FrameHeader> {
     }
 
     let frame_header = FrameHeader {
-       block_time: block_time,
-       block_size: block_size,
-       sample_rate: sample_rate,
-       channel_assignment: channel_assignment,
-       bits_per_sample: bits_per_sample
+        block_time: block_time,
+        block_size: block_size,
+        sample_rate: sample_rate,
+        channel_assignment: channel_assignment,
+        bits_per_sample: bits_per_sample
     };
     Ok(frame_header)
 }
