@@ -29,7 +29,7 @@ fn main() {
     let input = fs::File::open(fname).expect("failed to open file");
     let mut buf_reader = io::BufReader::new(input);
     let mut reader = FlacReader::new(&mut buf_reader).expect("failed to open FLAC stream");
-    let samples = reader.streaminfo().samples.expect("no sample count present in streaminfo");
+    let num_samples = reader.streaminfo().samples.expect("no sample count present in streaminfo");
 
     let spec = WavSpec {
         // TODO: u8 for channels, is that weird? Would u32 be better?
@@ -41,23 +41,18 @@ fn main() {
     let fname_wav = fname.with_extension("wav");
     let mut output = WavWriter::create(fname_wav, spec).expect("failed to create wav file");
 
-    let mut blocks = reader.blocks::<i32>();
-    let mut sample = 0u64;
     let mut i = 0u64;
-    let mut buffer = Vec::new();
 
-    while sample < samples {
-        let block = blocks.read_next(buffer).ok().expect("failed to read block");
-        {
-            let left = block.channel(0);
-            let right = block.channel(1);
-            for (&l, &r) in left.iter().zip(right.iter()) {
-                output.write_sample(l).ok().expect("failed to write sample");
-                output.write_sample(r).ok().expect("failed to write sample");
-            }
-            sample = sample + block.len() as u64;
-            i = i + 1;
+    for maybe_sample in reader.samples::<i32>() {
+        let sample = maybe_sample.expect("failed to read sample");
+        output.write_sample(sample).expect("failed to write sample");
+
+        i += 1;
+        if i == num_samples {
+            // TODO: Make iterator stop at file end.
+            break;
         }
-        buffer = block.into_buffer();
     }
+
+    output.finalize().expect("failed to finalize wav file");
 }
