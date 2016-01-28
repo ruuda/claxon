@@ -41,7 +41,7 @@ pub use error::{Error, Result};
 ///
 /// TODO: Is stream a good name? Should it be called reader/decoder?
 /// TODO: Add an example.
-pub struct FlacStream<R: io::Read> {
+pub struct FlacReader<R: io::Read> {
     streaminfo: StreamInfo,
     metadata_blocks: Vec<MetadataBlock>,
     input: R
@@ -58,11 +58,11 @@ fn read_stream_header<R: io::Read>(input: &mut R) -> Result<()> {
     }
 }
 
-impl<R: io::Read> FlacStream<R> {
+impl<R: io::Read> FlacReader<R> {
     /// Constructs a flac stream from the given input.
     ///
     /// This will read all metadata and stop at the first audio frame.
-    pub fn new(mut input: R) -> Result<FlacStream<R>> {
+    pub fn new(mut input: R) -> Result<FlacReader<R>> {
         // A flac stream first of all starts with a stream header.
         try!(read_stream_header(&mut input));
 
@@ -91,14 +91,14 @@ impl<R: io::Read> FlacStream<R> {
             (streaminfo, metadata_blocks)
         };
 
-        // The flac stream will contain the reader that will read frames.
-        let flac_stream = FlacStream {
+        // The flac reader will contain the reader that will read frames.
+        let reader = FlacReader {
             streaminfo: streaminfo,
             metadata_blocks: metadata_blocks,
             input: input
         };
 
-        Ok(flac_stream)
+        Ok(reader)
     }
 
     /// Returns the streaminfo metadata.

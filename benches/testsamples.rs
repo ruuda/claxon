@@ -32,10 +32,10 @@ fn bench_decode(path: &Path, bencher: &mut Bencher) {
     file.read_to_end(&mut data).unwrap();
     let cursor = Cursor::new(data);
 
-    let mut stream = claxon::FlacStream::new(cursor).unwrap();
+    let mut reader = claxon::FlacReader::new(cursor).unwrap();
 
-    let bps = stream.streaminfo().bits_per_sample as u64;
-    let channels = stream.streaminfo().channels as u64;
+    let bps = reader.streaminfo().bits_per_sample as u64;
+    let channels = reader.streaminfo().channels as u64;
     let bytes_per_sample = channels * (bps / 8);
 
     // Use the more space-efficient 16-bit integers if it is sufficient,
@@ -45,7 +45,7 @@ fn bench_decode(path: &Path, bencher: &mut Bencher) {
     // `Iterator`, we can assume values and panic on `None`.
     match bps {
         n if n <= 16 => {
-            let mut blocks = stream.blocks::<i16>();
+            let mut blocks = reader.blocks::<i16>();
             let mut bytes = 0u64;
             bencher.iter(|| {
                 let block = blocks.read_next().unwrap();
@@ -55,7 +55,7 @@ fn bench_decode(path: &Path, bencher: &mut Bencher) {
             bencher.bytes = bytes;
         }
         _ => {
-            let mut blocks = stream.blocks::<i32>();
+            let mut blocks = reader.blocks::<i32>();
             let mut bytes = 0u64;
             bencher.iter(|| {
                 let block = blocks.read_next().unwrap();

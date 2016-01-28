@@ -57,12 +57,10 @@ fn print_hex(seq: &[u8]) -> String {
 }
 
 fn read_streaminfo(fname: &path::Path) -> String {
-    use claxon::FlacStream;
-
     // Use a buffered reader, this speeds up the test by 120%.
     let file = fs::File::open(fname).unwrap();
     let reader = io::BufReader::new(file);
-    let stream = FlacStream::new(reader).unwrap();
+    let stream = claxon::FlacReader::new(reader).unwrap();
     let streaminfo = stream.streaminfo();
 
     // Format the streaminfo in the same way that metaflac prints it.
@@ -106,20 +104,20 @@ fn compare_decoded_stream(fname: &path::Path) {
     // If the reference file does exist after decoding, we can compare it to
     // how Claxon decodes it, sample by sample.
     if ref_fname.exists() {
-        let mut ref_stream = hound::WavReader::open(ref_fname).unwrap();
+        let mut ref_wav_reader = hound::WavReader::open(ref_fname).unwrap();
 
         let try_file = fs::File::open(fname).unwrap();
-        let try_reader = io::BufReader::new(try_file);
-        let mut try_stream = claxon::FlacStream::new(try_reader).unwrap();
+        let try_buf_reader = io::BufReader::new(try_file);
+        let mut try_flac_reader = claxon::FlacReader::new(try_buf_reader).unwrap();
 
         // The streaminfo test will ensure that things like bit depth and
         // sample rate match, only the actual samples are compared here.
 
-        let mut ref_samples = ref_stream.samples::<i32>();
+        let mut ref_samples = ref_wav_reader.samples::<i32>();
 
-        let samples = try_stream.streaminfo().samples.unwrap();
-        let n_channels = try_stream.streaminfo().channels;
-        let mut blocks = try_stream.blocks::<i32>();
+        let samples = try_flac_reader.streaminfo().samples.unwrap();
+        let n_channels = try_flac_reader.streaminfo().channels;
+        let mut blocks = try_flac_reader.blocks::<i32>();
         let mut sample = 0u64;
         let mut b = 0u64;
 

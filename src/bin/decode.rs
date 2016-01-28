@@ -21,28 +21,27 @@ fn main() {
     use std::fs;
     use std::io;
     use std::path;
-    use claxon::FlacStream;
+    use claxon::FlacReader;
     use hound::{WavSpec, WavWriter};
 
     let arg = env::args().nth(1).expect("no file given");
     let fname = path::Path::new(&arg);
     let input = fs::File::open(fname).ok().expect("failed to open file");
-    let mut reader = io::BufReader::new(input);
-    let mut stream = FlacStream::new(&mut reader).ok().expect("failed to open FLAC stream");
-    let samples = stream.streaminfo().samples.expect("no sample count present in streaminfo");
+    let mut buf_reader = io::BufReader::new(input);
+    let mut reader = FlacReader::new(&mut buf_reader).ok().expect("failed to open FLAC stream");
+    let samples = reader.streaminfo().samples.expect("no sample count present in streaminfo");
 
     let spec = WavSpec {
-        // TODO: naming is inconsistent between Hound and Claxon.
         // TODO: u8 for channels, is that weird? Would u32 be better?
-        channels: stream.streaminfo().channels as u16,
-        sample_rate: stream.streaminfo().sample_rate,
+        channels: reader.streaminfo().channels as u16,
+        sample_rate: reader.streaminfo().sample_rate,
         // TODO: again, would u32 be better, even if the range is smaller?
-        bits_per_sample: stream.streaminfo().bits_per_sample as u16
+        bits_per_sample: reader.streaminfo().bits_per_sample as u16
     };
     let fname_wav = fname.with_extension("wav");
     let mut output = WavWriter::create(fname_wav, spec).ok().expect("failed to create wav file");
 
-    let mut blocks = stream.blocks::<i32>();
+    let mut blocks = reader.blocks::<i32>();
     let mut sample = 0u64;
     let mut i = 0u64;
 
