@@ -35,8 +35,8 @@ fn run_metaflac(fname: &path::Path) -> String {
                          .arg("--show-total-samples")
                          .arg("--show-md5sum")
                          .arg(fname.to_str().expect("unsupported filename"))
-                         .output().ok().expect("failed to run metaflac");
-    String::from_utf8(output.stdout).ok().expect("metaflac wrote invalid UTF-8")
+                         .output().expect("failed to run metaflac");
+    String::from_utf8(output.stdout).expect("metaflac wrote invalid UTF-8")
 }
 
 fn decode_file(fname: &path::Path) {
@@ -46,7 +46,7 @@ fn decode_file(fname: &path::Path) {
     let success = Command::new("flac")
                           .arg("--decode")
                           .arg(fname.to_str().expect("unsupported filename"))
-                          .status().ok().expect("failed to run flac")
+                          .status().expect("failed to run flac")
                           .success();
     assert!(success);
 }

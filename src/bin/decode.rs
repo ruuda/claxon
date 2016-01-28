@@ -26,9 +26,9 @@ fn main() {
 
     let arg = env::args().nth(1).expect("no file given");
     let fname = path::Path::new(&arg);
-    let input = fs::File::open(fname).ok().expect("failed to open file");
+    let input = fs::File::open(fname).expect("failed to open file");
     let mut buf_reader = io::BufReader::new(input);
-    let mut reader = FlacReader::new(&mut buf_reader).ok().expect("failed to open FLAC stream");
+    let mut reader = FlacReader::new(&mut buf_reader).expect("failed to open FLAC stream");
     let samples = reader.streaminfo().samples.expect("no sample count present in streaminfo");
 
     let spec = WavSpec {
@@ -39,7 +39,7 @@ fn main() {
         bits_per_sample: reader.streaminfo().bits_per_sample as u16
     };
     let fname_wav = fname.with_extension("wav");
-    let mut output = WavWriter::create(fname_wav, spec).ok().expect("failed to create wav file");
+    let mut output = WavWriter::create(fname_wav, spec).expect("failed to create wav file");
 
     let mut blocks = reader.blocks::<i32>();
     let mut sample = 0u64;

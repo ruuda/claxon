@@ -362,7 +362,7 @@ fn verify_decode_right_side() {
                             -5, -33, -59, -125, 127,   89,   7,  3);
     let result =     vec!(2i16,   5,  83,  113, 127,  -63, -45, -15,
                             -5, -33, -59, -125, 127,   89,   7,   3);
-    decode_right_side(&mut buffer).ok().expect("decoding is wrong");
+    decode_right_side(&mut buffer).expect("decoding is wrong");
     assert_eq!(buffer, result);
 }
 
@@ -398,7 +398,7 @@ fn verify_decode_mid_side() {
                               7,  38, 142,  238,   0, -152, -52, -18);
     let result =      vec!(2i16,   5,  83,  113, 127,  -63, -45, -15,
                              -5, -33, -59, -125, 127,   89,   7,   3);
-    decode_mid_side(&mut buffer).ok().expect("decoding is wrong");
+    decode_mid_side(&mut buffer).expect("decoding is wrong");
     assert_eq!(buffer, result);
 }
 
