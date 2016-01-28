@@ -120,25 +120,29 @@ fn compare_decoded_stream(fname: &path::Path) {
         let mut blocks = try_flac_reader.blocks::<i32>();
         let mut sample = 0u64;
         let mut b = 0u64;
+        let mut buffer = Vec::new();
 
         while sample < samples {
-            let block = blocks.read_next().unwrap();
-            let mut channels: Vec<_> = (0 .. n_channels)
-                                       .map(|i| block.channel(i).iter().cloned())
-                                       .collect();
-            for i in 0 .. block.len() {
-                for ch in 0 .. n_channels as usize {
-                    let ref_sample = ref_samples.next().map(|r| r.ok().unwrap());
-                    let try_sample = channels[ch].next();
-                    if ref_sample != try_sample {
-                        println!("disagreement at sample {} of block {} in channel {}: reference is {} but decoded is {}",
-                                 i, b, ch, ref_sample.unwrap(), try_sample.unwrap());
-                        panic!("decoding differs from reference decoder");
+            let block = blocks.read_next(buffer).unwrap();
+            {
+                let mut channels: Vec<_> = (0 .. n_channels)
+                                           .map(|i| block.channel(i).iter().cloned())
+                                           .collect();
+                for i in 0 .. block.len() {
+                    for ch in 0 .. n_channels as usize {
+                        let ref_sample = ref_samples.next().map(|r| r.ok().unwrap());
+                        let try_sample = channels[ch].next();
+                        if ref_sample != try_sample {
+                            println!("disagreement at sample {} of block {} in channel {}: reference is {} but decoded is {}",
+                                     i, b, ch, ref_sample.unwrap(), try_sample.unwrap());
+                            panic!("decoding differs from reference decoder");
+                        }
                     }
                 }
+                sample = sample + block.len() as u64;
             }
-            sample = sample + block.len() as u64;
             b = b + 1;
+            buffer = block.into_buffer();
         }
     }
 }

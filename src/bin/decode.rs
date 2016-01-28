@@ -44,16 +44,20 @@ fn main() {
     let mut blocks = reader.blocks::<i32>();
     let mut sample = 0u64;
     let mut i = 0u64;
+    let mut buffer = Vec::new();
 
     while sample < samples {
-        let block = blocks.read_next().ok().expect("failed to read block");
-        let left = block.channel(0);
-        let right = block.channel(1);
-        for (&l, &r) in left.iter().zip(right.iter()) {
-            output.write_sample(l).ok().expect("failed to write sample");
-            output.write_sample(r).ok().expect("failed to write sample");
+        let block = blocks.read_next(buffer).ok().expect("failed to read block");
+        {
+            let left = block.channel(0);
+            let right = block.channel(1);
+            for (&l, &r) in left.iter().zip(right.iter()) {
+                output.write_sample(l).ok().expect("failed to write sample");
+                output.write_sample(r).ok().expect("failed to write sample");
+            }
+            sample = sample + block.len() as u64;
+            i = i + 1;
         }
-        sample = sample + block.len() as u64;
-        i = i + 1;
+        buffer = block.into_buffer();
     }
 }

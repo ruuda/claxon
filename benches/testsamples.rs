@@ -48,7 +48,7 @@ fn bench_decode(path: &Path, bencher: &mut Bencher) {
             let mut blocks = reader.blocks::<i16>();
             let mut bytes = 0u64;
             bencher.iter(|| {
-                let block = blocks.read_next().unwrap();
+                let block = blocks.read_next(Vec::new()).unwrap();
                 test::black_box(block.channel(0));
                 bytes += bytes_per_sample * block.len() as u64;
             });
@@ -58,7 +58,7 @@ fn bench_decode(path: &Path, bencher: &mut Bencher) {
             let mut blocks = reader.blocks::<i32>();
             let mut bytes = 0u64;
             bencher.iter(|| {
-                let block = blocks.read_next().unwrap();
+                let block = blocks.read_next(Vec::new()).unwrap();
                 test::black_box(block.channel(0));
                 bytes += bytes_per_sample * block.len() as u64;
             });

@@ -403,7 +403,7 @@ fn verify_decode_mid_side() {
 }
 
 /// A block of raw audio samples.
-pub struct Block<'b, Sample> where Sample: 'b {
+pub struct Block<Sample> {
     /// The sample number of the first sample in the this block.
     first_sample_number: u64,
     /// The number of samples in the block.
@@ -411,16 +411,16 @@ pub struct Block<'b, Sample> where Sample: 'b {
     /// The number of channels in the block.
     channels: u8,
     /// The decoded samples, the channels stored consecutively.
-    samples: &'b [Sample]
+    buffer: Vec<Sample>
 }
 
-impl <'b, Sample: sample::Sample> Block<'b, Sample> {
-    fn new(time: u64, bs: u16, buffer: &'b [Sample]) -> Block<'b, Sample> {
+impl <Sample: sample::Sample> Block<Sample> {
+    fn new(time: u64, bs: u16, buffer: Vec<Sample>) -> Block<Sample> {
         Block {
             first_sample_number: time,
             block_size: bs,
             channels: (buffer.len() / bs as usize) as u8,
-            samples: buffer
+            buffer: buffer
         }
     }
 
@@ -445,12 +445,13 @@ impl <'b, Sample: sample::Sample> Block<'b, Sample> {
     /// # Panics
     ///
     /// Panics if `ch >= channels()`.
-    pub fn channel(&'b self, ch: u8) -> &'b [Sample] {
-        &self.samples[ch as usize * self.block_size as usize ..
-                     (ch as usize + 1) * self.block_size as usize]
+    pub fn channel(&self, ch: u8) -> &[Sample] {
+        &self.buffer[ch as usize * self.block_size as usize ..
+                    (ch as usize + 1) * self.block_size as usize]
     }
 
-    /// Returns the sample value for the zero-based `ch`-th channel of the
+    /// Returns a sample in this block.
+    /// The value returned is for the zero-based `ch`-th channel of the
     /// inter-channel sample with index `sample` in this block (so this is not
     /// the global sample number).
     ///
@@ -459,8 +460,15 @@ impl <'b, Sample: sample::Sample> Block<'b, Sample> {
     /// Panics if `ch >= channels()` or if `sample >= len()` for the last
     /// channel.
     pub fn sample(&self, ch: u8, sample: u16) -> Sample {
-        return self.samples[ch as usize * self.block_size as usize +
-                            sample as usize];
+        return self.buffer[ch as usize * self.block_size as usize +
+                           sample as usize];
+    }
+
+    /// Returns the underlying buffer that stores the samples in this block.
+    /// This allows the buffer to be reused to decode the next frame. The
+    /// capacity of the buffer may be bigger than `len()` times `channels()`.
+    pub fn into_buffer(self) -> Vec<Sample> {
+        return self.buffer;
     }
 }
 
@@ -470,9 +478,9 @@ fn verify_block_sample() {
         first_sample_number: 0,
         block_size: 5,
         channels: 3,
-        samples: &[2i8, 3,  5,  7, 11,
-                   13, 17, 19, 23, 29,
-                   31, 37, 41, 43, 47]
+        buffer: vec!(2i8, 3,  5,  7, 11,
+                     13, 17, 19, 23, 29,
+                     31, 37, 41, 43, 47)
     };
 
     assert_eq!(block.sample(0, 2), 5);
@@ -486,12 +494,11 @@ fn verify_block_sample() {
 /// no searching for a sync code is performed at the moment.
 pub struct FrameReader<R: io::Read, Sample: sample::Sample> {
     input: R,
-    buffer: Vec<Sample>,
     wide_buffer: Vec<Sample::Wide>
 }
 
 /// Either a `Block` or an `Error`.
-pub type FrameResult<'b, Sample> = Result<Block<'b, Sample>>;
+pub type FrameResult<Sample> = Result<Block<Sample>>;
 
 /// A macro to expand the length of a buffer, or replace the buffer altogether,
 /// so it can hold at least `$new_len` elements. The contents of the buffer can
@@ -511,6 +518,8 @@ macro_rules! ensure_buffer_len {
             let len = $buffer.len();
             // TODO: Can this be optimized by using unsafe code?
             $buffer.extend(repeat($zero).take($new_len - len));
+        } else {
+            $buffer.truncate($new_len);
         }
     }
 }
@@ -522,15 +531,20 @@ impl<R: io::Read, Sample: sample::Sample> FrameReader<R, Sample> {
         // TODO: a hit for the vector size can be provided.
         FrameReader {
             input: input,
-            buffer: Vec::new(),
             wide_buffer: Vec::new()
         }
     }
  
     /// Tries to decode the next frame.
     ///
+    /// The buffer is moved into the returned block, so that the same buffer may
+    /// be reused to decode multiple blocks, avoiding a heap allocation every
+    /// time. It can be retrieved again with `block.into_buffer()`. If the
+    /// buffer is not large enough to hold all samples, a larger buffer is
+    /// allocated automatically.
+    ///
     /// TODO: I should really be consistent with 'read' and 'decode'.
-    pub fn read_next<'s>(&'s mut self) -> FrameResult<'s, Sample> {
+    pub fn read_next(&mut self, mut buffer: Vec<Sample>) -> FrameResult<Sample> {
         use std::mem::size_of;
         use std::num::Zero;
 
@@ -543,7 +557,7 @@ impl<R: io::Read, Sample: sample::Sample> FrameReader<R, Sample> {
         // We must allocate enough space for all channels in the block to be
         // decoded.
         let total_samples = header.channels() as usize * header.block_size as usize;
-        ensure_buffer_len!(self.buffer, total_samples, Sample::zero());
+        ensure_buffer_len!(buffer, total_samples, Sample::zero());
         ensure_buffer_len!(self.wide_buffer, total_samples, Sample::Wide::zero());
 
         // TODO: if the bps is missing from the header, we must get it from
@@ -611,11 +625,14 @@ impl<R: io::Read, Sample: sample::Sample> FrameReader<R, Sample> {
 
         {
             // Narrow down the wide samples to the requested sample type.
-            // TODO: this should not verify that it fits the sample type, but that
+            // TODO: This should not verify that it fits the sample type, but that
             // it fits the requested bps.
+            // TODO: This is probably a good point for optimisation: instead of
+            // doing the check for every sample, check once that everything is
+            // in range and then iterate again to convert.
             let n = header.block_size as usize * header.channels() as usize;
             let wide_iter = self.wide_buffer[.. n].iter();
-            let dest_iter = self.buffer[.. n].iter_mut();
+            let dest_iter = buffer[.. n].iter_mut();
             for (&src, dest) in wide_iter.zip(dest_iter) {
                 let narrow = Sample::from_wide(src).ok_or(Error::TooWide);
                 *dest = try!(narrow);
@@ -637,8 +654,7 @@ impl<R: io::Read, Sample: sample::Sample> FrameReader<R, Sample> {
             BlockTime::SampleNumber(snr) => snr
         };
 
-        let block = Block::new(time, header.block_size,
-                               &self.buffer[.. total_samples]);
+        let block = Block::new(time, header.block_size, buffer);
 
         Ok(block)
     }
