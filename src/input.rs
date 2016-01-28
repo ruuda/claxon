@@ -36,11 +36,12 @@ pub trait ReadExt: io::Read {
     fn read_be_u32(&mut self) -> io::Result<u32>;
 }
 
-impl<R> ReadExt for R where R: io::Read {
+impl<R> ReadExt for R where R: io::Read
+{
     fn read_into(&mut self, buf: &mut [u8]) -> io::Result<()> {
         let mut n = 0;
         while n < buf.len() {
-            let progress = try!(self.read(&mut buf[n ..]));
+            let progress = try!(self.read(&mut buf[n..]));
             if progress > 0 {
                 n += progress;
             } else {
@@ -75,14 +76,14 @@ impl<R> ReadExt for R where R: io::Read {
     fn read_be_u32(&mut self) -> io::Result<u32> {
         let mut buf = [0u8; 4];
         try!(self.read_into(&mut buf));
-        Ok((buf[0] as u32) << 24 | (buf[1] as u32) << 16 |
-           (buf[2] as u32) << 8  | (buf[3] as u32) << 0)
+        Ok((buf[0] as u32) << 24 | (buf[1] as u32) << 16 | (buf[2] as u32) << 8 |
+           (buf[3] as u32) << 0)
     }
 }
 
 #[test]
 fn verify_read_into() {
-    let mut reader = io::Cursor::new(vec!(2u8, 3, 5, 7, 11, 13, 17, 19, 23));
+    let mut reader = io::Cursor::new(vec![2u8, 3, 5, 7, 11, 13, 17, 19, 23]);
     let mut buf1 = [0u8; 3];
     let mut buf2 = [0u8; 5];
     let mut buf3 = [0u8; 2];
@@ -95,7 +96,7 @@ fn verify_read_into() {
 
 #[test]
 fn verify_read_be_u16() {
-    let mut reader = io::Cursor::new(vec!(0u8, 2, 129, 89, 122));
+    let mut reader = io::Cursor::new(vec![0u8, 2, 129, 89, 122]);
     assert_eq!(reader.read_be_u16().ok(), Some(2));
     assert_eq!(reader.read_be_u16().ok(), Some(33113));
     assert!(reader.read_be_u16().is_err());
@@ -103,7 +104,7 @@ fn verify_read_be_u16() {
 
 #[test]
 fn verify_read_be_u24() {
-    let mut reader = io::Cursor::new(vec!(0u8, 0, 2, 0x8f, 0xff, 0xf3, 122));
+    let mut reader = io::Cursor::new(vec![0u8, 0, 2, 0x8f, 0xff, 0xf3, 122]);
     assert_eq!(reader.read_be_u24().ok(), Some(2));
     assert_eq!(reader.read_be_u24().ok(), Some(9_437_171));
     assert!(reader.read_be_u24().is_err());
@@ -111,7 +112,7 @@ fn verify_read_be_u24() {
 
 #[test]
 fn verify_read_be_u32() {
-    let mut reader = io::Cursor::new(vec!(0u8, 0, 0, 2, 0x80, 0x01, 0xff, 0xe9, 0));
+    let mut reader = io::Cursor::new(vec![0u8, 0, 0, 2, 0x80, 0x01, 0xff, 0xe9, 0]);
     assert_eq!(reader.read_be_u32().ok(), Some(2));
     assert_eq!(reader.read_be_u32().ok(), Some(2_147_614_697));
     assert!(reader.read_be_u32().is_err());
@@ -150,13 +151,17 @@ pub struct Bitstream<R: io::Read> {
     /// Data read from the reader, but not yet fully consumed.
     data: u8,
     /// The number of bits of `data` that have not been consumed.
-    bits_left: u8
+    bits_left: u8,
 }
 
 impl<R: io::Read> Bitstream<R> {
     /// Wraps the reader with a reader that facilitates reading individual bits.
     pub fn new(reader: R) -> Bitstream<R> {
-        Bitstream { reader: reader, data: 0, bits_left: 0 }
+        Bitstream {
+            reader: reader,
+            data: 0,
+            bits_left: 0,
+        }
     }
 
     /// Generates a bitmask with 1s in the `bits` most significant bits.
@@ -183,8 +188,8 @@ impl<R: io::Read> Bitstream<R> {
             // From the next byte, we take the additional bits that we need.
             // Those start at the most significant bit, so we need to shift so
             // that it does not overlap with what we have already.
-            let lsb = (self.data & Bitstream::<R>::mask_u8(bits - self.bits_left))
-                    >> self.bits_left as usize;
+            let lsb = (self.data & Bitstream::<R>::mask_u8(bits - self.bits_left)) >>
+                      self.bits_left as usize;
 
             // Shift out the bits that we have consumed.
             self.data = shift_left(self.data, (bits - self.bits_left) as usize);
@@ -253,10 +258,14 @@ impl<R: io::Read> Bitstream<R> {
 
 #[test]
 fn verify_read_leq_u8() {
-    let data = io::Cursor::new(vec!(0b1010_0101, 0b1110_0001,
-                                    0b1101_0010, 0b0101_0101,
-                                    0b0111_0011, 0b0011_1111,
-                                    0b1010_1010, 0b0000_1100));
+    let data = io::Cursor::new(vec![0b1010_0101,
+                                    0b1110_0001,
+                                    0b1101_0010,
+                                    0b0101_0101,
+                                    0b0111_0011,
+                                    0b0011_1111,
+                                    0b1010_1010,
+                                    0b0000_1100]);
     let mut bits = Bitstream::new(data);
 
     assert_eq!(bits.read_leq_u8(0).unwrap(), 0);
@@ -281,8 +290,7 @@ fn verify_read_leq_u8() {
 
 #[test]
 fn verify_read_leq_u16() {
-    let data = io::Cursor::new(vec!(0b1010_0101, 0b1110_0001,
-                                    0b1101_0010, 0b0101_0101));
+    let data = io::Cursor::new(vec![0b1010_0101, 0b1110_0001, 0b1101_0010, 0b0101_0101]);
     let mut bits = Bitstream::new(data);
 
     assert_eq!(bits.read_leq_u16(0).unwrap(), 0);
@@ -293,8 +301,7 @@ fn verify_read_leq_u16() {
 
 #[test]
 fn verify_read_leq_u32() {
-    let data = io::Cursor::new(vec!(0b1010_0101, 0b1110_0001,
-                                    0b1101_0010, 0b0101_0101));
+    let data = io::Cursor::new(vec![0b1010_0101, 0b1110_0001, 0b1101_0010, 0b0101_0101]);
     let mut bits = Bitstream::new(data);
 
     assert_eq!(bits.read_leq_u32(1).unwrap(), 1);
@@ -305,9 +312,8 @@ fn verify_read_leq_u32() {
 #[test]
 fn verify_read_mixed() {
     // These test data are warm-up samples from an actual stream.
-    let data = io::Cursor::new(vec!(0x03, 0xc7, 0xbf, 0xe5, 0x9b, 0x74,
-                                    0x1e, 0x3a, 0xdd, 0x7d, 0xc5, 0x5e,
-                                    0xf6, 0xbf, 0x78, 0x1b, 0xbd));
+    let data = io::Cursor::new(vec![0x03, 0xc7, 0xbf, 0xe5, 0x9b, 0x74, 0x1e, 0x3a, 0xdd, 0x7d,
+                                    0xc5, 0x5e, 0xf6, 0xbf, 0x78, 0x1b, 0xbd]);
     let mut bits = Bitstream::new(data);
 
     assert_eq!(bits.read_leq_u8(6).unwrap(), 0);

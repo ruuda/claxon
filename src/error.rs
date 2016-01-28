@@ -52,27 +52,28 @@ impl PartialEq for Error {
             (&IoError(_), _) => false,
             (&FormatError(_), _) => false,
             (&TooWide, _) => false,
-            (&Unsupported(_), _) => false
+            (&Unsupported(_), _) => false,
         }
     }
 }
 
 impl fmt::Display for Error {
-    fn fmt(&self, formatter: &mut fmt::Formatter)
-           -> result::Result<(), fmt::Error> {
+    fn fmt(&self, formatter: &mut fmt::Formatter) -> result::Result<(), fmt::Error> {
         match *self {
             Error::IoError(ref err) => err.fmt(formatter),
             Error::FormatError(reason) => {
                 try!(formatter.write_str("Ill-formed FLAC stream: "));
                 formatter.write_str(reason)
-            },
+            }
             Error::TooWide => {
-                formatter.write_str("The audio stream has more bits per sample than the provided sample buffer to decode into.")
-            },
+                formatter.write_str("The audio stream has more bits per sample than the provided \
+                                     sample buffer to decode into.")
+            }
             Error::Unsupported(feature) => {
-                try!(formatter.write_str("A currently unsupported feature of the FLAC format was encountered: "));
+                try!(formatter.write_str("A currently unsupported feature of the FLAC format \
+                                          was encountered: "));
                 formatter.write_str(feature)
-            },
+            }
         }
     }
 }

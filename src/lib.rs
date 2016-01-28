@@ -45,7 +45,7 @@ pub use error::{Error, Result};
 pub struct FlacReader<R: io::Read> {
     streaminfo: StreamInfo,
     metadata_blocks: Vec<MetadataBlock>,
-    input: R
+    input: R,
 }
 
 /// An iterator that yields samples of type `S` read from a `FlacReader`.
@@ -60,7 +60,7 @@ pub struct FlacSamples<'fr, R: 'fr + io::Read, S: sample::Sample> {
 
     /// If reading ever failed, this flag is set, so that the iterator knows not
     /// to return any new values.
-    has_failed: bool
+    has_failed: bool,
 }
 
 // TODO: Add a `FlacIntoSamples`.
@@ -94,7 +94,7 @@ impl<R: io::Read> FlacReader<R> {
             let streaminfo_block = try!(metadata_iter.next().unwrap());
             let streaminfo = match streaminfo_block {
                 MetadataBlock::StreamInfo(info) => info,
-                _ => return fmt_err("streaminfo block missing")
+                _ => return fmt_err("streaminfo block missing"),
             };
 
             // There might be more metadata blocks, read and store them.
@@ -102,7 +102,7 @@ impl<R: io::Read> FlacReader<R> {
             for block_result in metadata_iter {
                 match block_result {
                     Err(error) => return Err(error),
-                    Ok(block) => metadata_blocks.push(block)
+                    Ok(block) => metadata_blocks.push(block),
                 }
             }
 
@@ -113,7 +113,7 @@ impl<R: io::Read> FlacReader<R> {
         let reader = FlacReader {
             streaminfo: streaminfo,
             metadata_blocks: metadata_blocks,
-            input: input
+            input: input,
         };
 
         Ok(reader)
@@ -151,18 +151,19 @@ impl<R: io::Read> FlacReader<R> {
             block: frame::Block::empty(),
             sample: 0,
             channel: 0,
-            has_failed: false
+            has_failed: false,
         }
     }
 }
 
 impl<'fr, R: 'fr + io::Read, S: sample::Sample> Iterator for FlacSamples<'fr, R, S> {
-
     type Item = Result<S>;
 
     fn next(&mut self) -> Option<Result<S>> {
         // If the previous read failed, end iteration.
-        if self.has_failed { return None; }
+        if self.has_failed {
+            return None;
+        }
 
         // Iterate the samples channel interleaved, so first increment the
         // channel.
@@ -184,7 +185,7 @@ impl<'fr, R: 'fr + io::Read, S: sample::Sample> Iterator for FlacSamples<'fr, R,
                 match self.frame_reader.read_next(current_block.into_buffer()) {
                     Ok(next_block) => {
                         self.block = next_block;
-                    },
+                    }
                     Err(error) => {
                         self.has_failed = true;
                         // block = frame::Block::empty();

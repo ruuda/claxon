@@ -26,13 +26,13 @@ use subframe;
 #[derive(Clone, Copy)]
 enum BlockingStrategy {
     Fixed,
-    Variable
+    Variable,
 }
 
 #[derive(Clone, Copy)]
 enum BlockTime {
     FrameNumber(u32),
-    SampleNumber(u64)
+    SampleNumber(u64),
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -44,7 +44,7 @@ enum ChannelAssignment {
     /// Channel 0 is the side channel, channel 1 is the right channel.
     RightSideStereo,
     /// Channel 0 is the mid channel, channel 1 is the side channel.
-    MidSideStereo
+    MidSideStereo,
 }
 
 #[derive(Clone, Copy)]
@@ -53,7 +53,7 @@ struct FrameHeader {
     pub block_size: u16,
     pub sample_rate: Option<u32>,
     pub channel_assignment: ChannelAssignment,
-    pub bits_per_sample: Option<u8>
+    pub bits_per_sample: Option<u8>,
 }
 
 impl FrameHeader {
@@ -62,7 +62,7 @@ impl FrameHeader {
             ChannelAssignment::Independent(n) => n,
             ChannelAssignment::LeftSideStereo => 2,
             ChannelAssignment::RightSideStereo => 2,
-            ChannelAssignment::MidSideStereo => 2
+            ChannelAssignment::MidSideStereo => 2,
         }
     }
 }
@@ -99,7 +99,7 @@ fn read_var_length_int<R: io::Read>(input: &mut R) -> Result<u64> {
     // Each additional byte will yield 6 extra bits, so shift the most
     // significant bits into the correct position.
     let mut result = ((first & mask_data) as u64) << (6 * read_additional);
-    for i in (0 .. read_additional as i16).rev() {
+    for i in (0..read_additional as i16).rev() {
         let byte = try!(input.read_u8());
 
         // The two most significant bits _must_ be 10.
@@ -116,9 +116,8 @@ fn read_var_length_int<R: io::Read>(input: &mut R) -> Result<u64> {
 #[test]
 fn verify_read_var_length_int() {
 
-    let mut reader = io::Cursor::new(vec!(0x24, 0xc2, 0xa2, 0xe2, 0x82, 0xac,
-                                          0xf0, 0x90, 0x8d, 0x88, 0xc2, 0x00,
-                                          0x80));
+    let mut reader = io::Cursor::new(vec![0x24, 0xc2, 0xa2, 0xe2, 0x82, 0xac, 0xf0, 0x90, 0x8d,
+                                          0x88, 0xc2, 0x00, 0x80]);
     assert_eq!(read_var_length_int(&mut reader).unwrap(), 0x24);
     assert_eq!(read_var_length_int(&mut reader).unwrap(), 0xa2);
     assert_eq!(read_var_length_int(&mut reader).unwrap(), 0x20ac);
@@ -143,7 +142,7 @@ fn read_frame_header<R: io::Read>(input: &mut R) -> Result<FrameHeader> {
     // The first 14 bits must be 11111111111110.
     let sync_code = sync_res_block & 0b1111_1111_1111_1100;
     if sync_code != 0b1111_1111_1111_1000 {
-        return fmt_err("frame sync code missing")
+        return fmt_err("frame sync code missing");
     }
 
     // The next bit has a mandatory value of 0 at the moment of writing. The
@@ -177,7 +176,7 @@ fn read_frame_header<R: io::Read>(input: &mut R) -> Result<FrameHeader> {
         n if 0b0010 <= n && n <= 0b0101 => block_size = 576 * (1 << (n - 2) as usize),
         0b0110 => read_8bit_bs = true,
         0b0111 => read_16bit_bs = true,
-        n => block_size = 256 * (1 << (n - 8) as usize)
+        n => block_size = 256 * (1 << (n - 8) as usize),
     }
 
     // For the sample rate there is a number of pre-defined bit patterns as
@@ -189,23 +188,23 @@ fn read_frame_header<R: io::Read>(input: &mut R) -> Result<FrameHeader> {
 
     match bs_sr & 0b0000_1111 {
         0b0000 => sample_rate = None, // 0000 means 'get from streaminfo block'.
-        0b0001 => sample_rate = Some( 88_200),
+        0b0001 => sample_rate = Some(88_200),
         0b0010 => sample_rate = Some(176_400),
         0b0011 => sample_rate = Some(192_000),
-        0b0100 => sample_rate = Some(  8_000),
-        0b0101 => sample_rate = Some( 16_000),
-        0b0110 => sample_rate = Some( 22_050),
-        0b0111 => sample_rate = Some( 24_000),
-        0b1000 => sample_rate = Some( 32_000),
-        0b1001 => sample_rate = Some( 44_100),
-        0b1010 => sample_rate = Some( 48_000),
-        0b1011 => sample_rate = Some( 96_000),
+        0b0100 => sample_rate = Some(8_000),
+        0b0101 => sample_rate = Some(16_000),
+        0b0110 => sample_rate = Some(22_050),
+        0b0111 => sample_rate = Some(24_000),
+        0b1000 => sample_rate = Some(32_000),
+        0b1001 => sample_rate = Some(44_100),
+        0b1010 => sample_rate = Some(48_000),
+        0b1011 => sample_rate = Some(96_000),
         0b1100 => read_8bit_sr = true, // Read Hz from end of header.
         0b1101 => read_16bit_sr = true, // Read Hz from end of header.
         0b1110 => read_16bit_sr_ten = true, // Read tens of Hz from end of header.
         // 1111 is invalid to prevent sync-fooling.
         // Other values are impossible at this point.
-        _ => return fmt_err("invalid frame header")
+        _ => return fmt_err("invalid frame header"),
     }
 
     // Next are 4 bits channel assignment, 3 bits sample size, and 1 reserved bit.
@@ -219,7 +218,7 @@ fn read_frame_header<R: io::Read>(input: &mut R) -> Result<FrameHeader> {
         0b1001 => ChannelAssignment::RightSideStereo,
         0b1010 => ChannelAssignment::MidSideStereo,
         // Values 1011 through 1111 are reserved and thus invalid.
-        _ => return fmt_err("invalid frame header, encountered reserved value")
+        _ => return fmt_err("invalid frame header, encountered reserved value"),
     };
 
     // The next three bits indicate bits per sample.
@@ -231,7 +230,7 @@ fn read_frame_header<R: io::Read>(input: &mut R) -> Result<FrameHeader> {
         0b101 => Some(20),
         0b110 => Some(24),
         // Values 011 and 111 are reserved. Other values are impossible.
-        _ => return fmt_err("invalid frame header, encountered reserved value")
+        _ => return fmt_err("invalid frame header, encountered reserved value"),
     };
 
     // The final bit has a mandatory value of 0, it is a reserved bit.
@@ -244,7 +243,7 @@ fn read_frame_header<R: io::Read>(input: &mut R) -> Result<FrameHeader> {
             // The sample number is encoded in 8-56 bits, at most a 36-bit int.
             let sample = try!(read_var_length_int(&mut crc_input));
             BlockTime::SampleNumber(sample)
-        },
+        }
         BlockingStrategy::Fixed => {
             // The frame number is encoded in 8-48 bits, at most a 31-bit int.
             let frame = try!(read_var_length_int(&mut crc_input));
@@ -267,7 +266,9 @@ fn read_frame_header<R: io::Read>(input: &mut R) -> Result<FrameHeader> {
         // value of 0xffff would be invalid because it exceeds the max block
         // size, though this is not mentioned explicitly in the specification.
         let bs = try!(crc_input.read_be_u16());
-        if bs == 0xffff { return fmt_err("invalid block size, exceeds 65535"); }
+        if bs == 0xffff {
+            return fmt_err("invalid block size, exceeds 65535");
+        }
         block_size = bs + 1;
     }
 
@@ -301,7 +302,7 @@ fn read_frame_header<R: io::Read>(input: &mut R) -> Result<FrameHeader> {
         block_size: block_size,
         sample_rate: sample_rate,
         channel_assignment: channel_assignment,
-        bits_per_sample: bits_per_sample
+        bits_per_sample: bits_per_sample,
     };
     Ok(frame_header)
 }
@@ -309,12 +310,10 @@ fn read_frame_header<R: io::Read>(input: &mut R) -> Result<FrameHeader> {
 /// Converts a buffer with left samples and a side channel in-place to left ++ right.
 // TODO: This could take iterators, and decode and narrow in-place. Better yet,
 // this should produce an iterator that decodes.
-fn decode_left_side<Sample: sample::WideSample>
-                   (buffer: &mut [Sample])
-                    -> Result<()> {
+fn decode_left_side<Sample: sample::WideSample>(buffer: &mut [Sample]) -> Result<()> {
 
     let block_size = buffer.len() / 2;
-    for i in 0 .. block_size {
+    for i in 0..block_size {
         let left = buffer[i];
         let side = buffer[i + block_size];
 
@@ -329,21 +328,17 @@ fn decode_left_side<Sample: sample::WideSample>
 
 #[test]
 fn verify_decode_left_side() {
-    let mut buffer = vec!(2i16,    5,   83, 113, 127, -63, -45, -15,
-                             7,  38, 142,  238,   0, -152, -52, -18);
-    let result =     vec!(2i16,   5,  83,  113, 127,  -63, -45, -15,
-                            -5, -33, -59, -125, 127,   89,   7,   3);
+    let mut buffer = vec![2i16, 5, 83, 113, 127, -63, -45, -15, 7, 38, 142, 238, 0, -152, -52, -18];
+    let result = vec![2i16, 5, 83, 113, 127, -63, -45, -15, -5, -33, -59, -125, 127, 89, 7, 3];
     decode_left_side(&mut buffer).ok().unwrap();
     assert_eq!(buffer, result);
 }
 
 /// Converts a buffer with right samples and a side channel in-place to left ++ right.
-fn decode_right_side<Sample: sample::WideSample>
-                    (buffer: &mut [Sample])
-                     -> Result<()> {
+fn decode_right_side<Sample: sample::WideSample>(buffer: &mut [Sample]) -> Result<()> {
 
     let block_size = buffer.len() / 2;
-    for i in 0 .. block_size {
+    for i in 0..block_size {
         let side = buffer[i];
         let right = buffer[block_size + i];
 
@@ -358,21 +353,17 @@ fn decode_right_side<Sample: sample::WideSample>
 
 #[test]
 fn verify_decode_right_side() {
-    let mut buffer = vec!(7i16,  38, 142,  238,   0, -152, -52, -18,
-                            -5, -33, -59, -125, 127,   89,   7,  3);
-    let result =     vec!(2i16,   5,  83,  113, 127,  -63, -45, -15,
-                            -5, -33, -59, -125, 127,   89,   7,   3);
+    let mut buffer = vec![7i16, 38, 142, 238, 0, -152, -52, -18, -5, -33, -59, -125, 127, 89, 7, 3];
+    let result = vec![2i16, 5, 83, 113, 127, -63, -45, -15, -5, -33, -59, -125, 127, 89, 7, 3];
     decode_right_side(&mut buffer).expect("decoding is wrong");
     assert_eq!(buffer, result);
 }
 
 /// Converts a buffer with mid samples and a side channel in-place to left ++ right.
-fn decode_mid_side<Sample: sample::WideSample>
-                  (buffer: &mut [Sample])
-                   -> Result<()> {
+fn decode_mid_side<Sample: sample::WideSample>(buffer: &mut [Sample]) -> Result<()> {
 
     let block_size = buffer.len() / 2;
-    for i in 0 .. block_size {
+    for i in 0..block_size {
         let mid = buffer[i];
         let side = buffer[i + block_size];
 
@@ -411,16 +402,16 @@ pub struct Block<Sample> {
     /// The number of channels in the block.
     channels: u8,
     /// The decoded samples, the channels stored consecutively.
-    buffer: Vec<Sample>
+    buffer: Vec<Sample>,
 }
 
-impl <Sample: sample::Sample> Block<Sample> {
+impl<Sample: sample::Sample> Block<Sample> {
     fn new(time: u64, bs: u16, buffer: Vec<Sample>) -> Block<Sample> {
         Block {
             first_sample_number: time,
             block_size: bs,
             channels: (buffer.len() / bs as usize) as u8,
-            buffer: buffer
+            buffer: buffer,
         }
     }
 
@@ -430,7 +421,7 @@ impl <Sample: sample::Sample> Block<Sample> {
             first_sample_number: 0,
             block_size: 0,
             channels: 0,
-            buffer: Vec::with_capacity(0)
+            buffer: Vec::with_capacity(0),
         }
     }
 
@@ -456,8 +447,8 @@ impl <Sample: sample::Sample> Block<Sample> {
     ///
     /// Panics if `ch >= channels()`.
     pub fn channel(&self, ch: u8) -> &[Sample] {
-        &self.buffer[ch as usize * self.block_size as usize ..
-                    (ch as usize + 1) * self.block_size as usize]
+        &self.buffer[ch as usize * self.block_size as usize..(ch as usize + 1) *
+                                                             self.block_size as usize]
     }
 
     /// Returns a sample in this block.
@@ -470,8 +461,7 @@ impl <Sample: sample::Sample> Block<Sample> {
     /// Panics if `ch >= channels()` or if `sample >= len()` for the last
     /// channel.
     pub fn sample(&self, ch: u8, sample: u16) -> Sample {
-        return self.buffer[ch as usize * self.block_size as usize +
-                           sample as usize];
+        return self.buffer[ch as usize * self.block_size as usize + sample as usize];
     }
 
     /// Returns the underlying buffer that stores the samples in this block.
@@ -488,9 +478,7 @@ fn verify_block_sample() {
         first_sample_number: 0,
         block_size: 5,
         channels: 3,
-        buffer: vec!(2i8, 3,  5,  7, 11,
-                     13, 17, 19, 23, 29,
-                     31, 37, 41, 43, 47)
+        buffer: vec![2i8, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47],
     };
 
     assert_eq!(block.sample(0, 2), 5);
@@ -504,7 +492,7 @@ fn verify_block_sample() {
 /// no searching for a sync code is performed at the moment.
 pub struct FrameReader<R: io::Read, Sample: sample::Sample> {
     input: R,
-    wide_buffer: Vec<Sample::Wide>
+    wide_buffer: Vec<Sample::Wide>,
 }
 
 /// Either a `Block` or an `Error`.
@@ -535,16 +523,15 @@ macro_rules! ensure_buffer_len {
 }
 
 impl<R: io::Read, Sample: sample::Sample> FrameReader<R, Sample> {
-
     /// Creates a new frame reader that will yield at least one element.
     pub fn new(input: R) -> FrameReader<R, Sample> {
         // TODO: a hit for the vector size can be provided.
         FrameReader {
             input: input,
-            wide_buffer: Vec::new()
+            wide_buffer: Vec::new(),
         }
     }
- 
+
     /// Tries to decode the next frame.
     ///
     /// The buffer is moved into the returned block, so that the same buffer may
@@ -586,42 +573,40 @@ impl<R: io::Read, Sample: sample::Sample> FrameReader<R, Sample> {
 
             match header.channel_assignment {
                 ChannelAssignment::Independent(n_ch) => {
-                    for ch in 0 .. n_ch as usize {
-                        try!(subframe::decode(&mut bitstream, bps,
-                                              &mut self.wide_buffer[ch * bs ..
-                                                                   (ch + 1) * bs]));
+                    for ch in 0..n_ch as usize {
+                        try!(subframe::decode(&mut bitstream,
+                                              bps,
+                                              &mut self.wide_buffer[ch * bs..(ch + 1) * bs]));
                     }
                 }
                 ChannelAssignment::LeftSideStereo => {
                     // The side channel has one extra bit per sample.
-                    try!(subframe::decode(&mut bitstream, bps,
-                                          &mut self.wide_buffer[.. bs]));
-                    try!(subframe::decode(&mut bitstream, bps + 1,
-                                          &mut self.wide_buffer[bs .. bs * 2]));
+                    try!(subframe::decode(&mut bitstream, bps, &mut self.wide_buffer[..bs]));
+                    try!(subframe::decode(&mut bitstream,
+                                          bps + 1,
+                                          &mut self.wide_buffer[bs..bs * 2]));
 
                     // Then decode the side channel into the right channel.
-                    try!(decode_left_side(&mut self.wide_buffer[.. bs * 2]));
-                },
+                    try!(decode_left_side(&mut self.wide_buffer[..bs * 2]));
+                }
                 ChannelAssignment::RightSideStereo => {
                     // The side channel has one extra bit per sample.
-                    try!(subframe::decode(&mut bitstream, bps + 1,
-                                          &mut self.wide_buffer[.. bs]));
-                    try!(subframe::decode(&mut bitstream, bps,
-                                          &mut self.wide_buffer[bs .. bs * 2]));
+                    try!(subframe::decode(&mut bitstream, bps + 1, &mut self.wide_buffer[..bs]));
+                    try!(subframe::decode(&mut bitstream, bps, &mut self.wide_buffer[bs..bs * 2]));
 
                     // Then decode the side channel into the left channel.
-                    try!(decode_right_side(&mut self.wide_buffer[.. bs * 2]));
-                },
+                    try!(decode_right_side(&mut self.wide_buffer[..bs * 2]));
+                }
                 ChannelAssignment::MidSideStereo => {
                     // Decode mid as the first channel, then side with one
                     // extra bitp per sample.
-                    try!(subframe::decode(&mut bitstream, bps,
-                                          &mut self.wide_buffer[.. bs]));
-                    try!(subframe::decode(&mut bitstream, bps + 1,
-                                          &mut self.wide_buffer[bs .. bs * 2]));
+                    try!(subframe::decode(&mut bitstream, bps, &mut self.wide_buffer[..bs]));
+                    try!(subframe::decode(&mut bitstream,
+                                          bps + 1,
+                                          &mut self.wide_buffer[bs..bs * 2]));
 
                     // Then decode mid-side channel into left-right.
-                    try!(decode_mid_side(&mut self.wide_buffer[.. bs * 2]));
+                    try!(decode_mid_side(&mut self.wide_buffer[..bs * 2]));
                 }
             }
 
@@ -641,8 +626,8 @@ impl<R: io::Read, Sample: sample::Sample> FrameReader<R, Sample> {
             // doing the check for every sample, check once that everything is
             // in range and then iterate again to convert.
             let n = header.block_size as usize * header.channels() as usize;
-            let wide_iter = self.wide_buffer[.. n].iter();
-            let dest_iter = buffer[.. n].iter_mut();
+            let wide_iter = self.wide_buffer[..n].iter();
+            let dest_iter = buffer[..n].iter_mut();
             for (&src, dest) in wide_iter.zip(dest_iter) {
                 let narrow = Sample::from_wide(src).ok_or(Error::TooWide);
                 *dest = try!(narrow);
@@ -661,7 +646,7 @@ impl<R: io::Read, Sample: sample::Sample> FrameReader<R, Sample> {
         // encountered.
         let time = match header.block_time {
             BlockTime::FrameNumber(fnr) => header.block_size as u64 * fnr as u64,
-            BlockTime::SampleNumber(snr) => snr
+            BlockTime::SampleNumber(snr) => snr,
         };
 
         let block = Block::new(time, header.block_size, buffer);

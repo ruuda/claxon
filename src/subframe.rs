@@ -25,17 +25,16 @@ enum SubframeType {
     Constant,
     Verbatim,
     Fixed(u8),
-    Lpc(u8)
+    Lpc(u8),
 }
 
 #[derive(Clone, Copy)]
 struct SubframeHeader {
     sf_type: SubframeType,
-    wasted_bits_per_sample: u8
+    wasted_bits_per_sample: u8,
 }
 
-fn read_subframe_header<R: io::Read>(input: &mut Bitstream<R>)
-                                     -> Result<SubframeHeader> {
+fn read_subframe_header<R: io::Read>(input: &mut Bitstream<R>) -> Result<SubframeHeader> {
     // The first bit must be a 0 padding bit.
     if 0 != try!(input.read_leq_u8(1)) {
         return fmt_err("invalid subframe header");
@@ -51,8 +50,7 @@ fn read_subframe_header<R: io::Read>(input: &mut Bitstream<R>)
         // are reserved at the time of writing are a format error, the
         // `Unsupported` error type is for specified features that are not
         // implemented.
-        n if (n & 0b111_110 == 0b000_010) ||
-             (n & 0b111_100 == 0b000_100) ||
+        n if (n & 0b111_110 == 0b000_010) || (n & 0b111_100 == 0b000_100) ||
              (n & 0b110_000 == 0b010_000) => {
             return fmt_err("invalid subframe header, encountered reserved value");
         }
@@ -92,7 +90,7 @@ fn read_subframe_header<R: io::Read>(input: &mut Bitstream<R>)
 
     let subframe_header = SubframeHeader {
         sf_type: sf_type,
-        wasted_bits_per_sample: wasted_bits
+        wasted_bits_per_sample: wasted_bits,
     };
     Ok(subframe_header)
 }
@@ -199,11 +197,10 @@ fn verify_rice_to_signed() {
 /// Decodes a subframe into the provided block-size buffer.
 ///
 /// It is assumed that the length of the buffer is the block size.
-pub fn decode<R: io::Read, Sample: sample::WideSample>
-             (input: &mut Bitstream<R>,
-              bps: u8,
-              buffer: &mut [Sample])
-              -> Result<()> {
+pub fn decode<R: io::Read, Sample: sample::WideSample>(input: &mut Bitstream<R>,
+                                                       bps: u8,
+                                                       buffer: &mut [Sample])
+                                                       -> Result<()> {
 
     // The sample type should be wide enough to accomodate for all bits of the
     // stream, but this can be verified at a higher level than here. Still, it
@@ -217,7 +214,7 @@ pub fn decode<R: io::Read, Sample: sample::WideSample>
         SubframeType::Constant => try!(decode_constant(input, bps, buffer)),
         SubframeType::Verbatim => try!(decode_verbatim(input, bps, buffer)),
         SubframeType::Fixed(ord) => try!(decode_fixed(input, bps, ord, buffer)),
-        SubframeType::Lpc(ord) => try!(decode_lpc(input, bps, ord, buffer))
+        SubframeType::Lpc(ord) => try!(decode_lpc(input, bps, ord, buffer)),
     }
 
     // Finally, everything must be shifted by 'wasted bits per sample' to
@@ -235,24 +232,21 @@ pub fn decode<R: io::Read, Sample: sample::WideSample>
 #[derive(Copy, Clone)]
 enum RicePartitionType {
     Rice,
-    Rice2
+    Rice2,
 }
 
-fn decode_residual<R: io::Read, Sample: sample::WideSample>
-                  (input: &mut Bitstream<R>,
-                   bps: u8,
-                   block_size: u16,
-                   buffer: &mut [Sample])
-                   -> Result<()> {
+fn decode_residual<R: io::Read, Sample: sample::WideSample>(input: &mut Bitstream<R>,
+                                                            bps: u8,
+                                                            block_size: u16,
+                                                            buffer: &mut [Sample])
+                                                            -> Result<()> {
     // Residual starts with two bits of coding method.
     let method = try!(input.read_leq_u8(2));
     match method {
-        0b00 => decode_partitioned_rice(input, bps, RicePartitionType::Rice,
-                                        block_size, buffer),
-        0b01 => decode_partitioned_rice(input, bps, RicePartitionType::Rice2,
-                                        block_size, buffer),
+        0b00 => decode_partitioned_rice(input, bps, RicePartitionType::Rice, block_size, buffer),
+        0b01 => decode_partitioned_rice(input, bps, RicePartitionType::Rice2, block_size, buffer),
         // 10 and 11 are reserved.
-        _ => fmt_err("invalid residual, encountered reserved value")
+        _ => fmt_err("invalid residual, encountered reserved value"),
     }
 }
 
@@ -280,7 +274,9 @@ fn decode_partitioned_rice<R: io::Read, Sample: sample::WideSample>
 
     // The partition size must be at least as big as the number of warm-up
     // samples, otherwise the size of the first partition is negative.
-    if n_warm_up > n_samples { return fmt_err("invalid residual"); }
+    if n_warm_up > n_samples {
+        return fmt_err("invalid residual");
+    }
 
     let mut start = 0;
     for i in 0 .. n_partitions {
@@ -294,23 +290,22 @@ fn decode_partitioned_rice<R: io::Read, Sample: sample::WideSample>
     Ok(())
 }
 
-fn decode_rice_partition<R: io::Read, Sample: sample::WideSample>
-                        (input: &mut Bitstream<R>,
-                         bps: u8,
-                         partition_type: RicePartitionType,
-                         buffer: &mut [Sample])
-                         -> Result<()> {
+fn decode_rice_partition<R: io::Read, Sample: sample::WideSample>(input: &mut Bitstream<R>,
+                                                                  bps: u8,
+                                                                  partition_type: RicePartitionType,
+                                                                  buffer: &mut [Sample])
+                                                                  -> Result<()> {
     // The Rice partition starts with 4 or 5 bits Rice parameter, depending on
     // the partition type.
     let rice_param = try!(input.read_leq_u8(match partition_type {
         RicePartitionType::Rice => 4,
-        RicePartitionType::Rice2 => 5
+        RicePartitionType::Rice2 => 5,
     }));
 
     // All ones is an escape code that indicates unencoded binary.
     if rice_param == match partition_type {
         RicePartitionType::Rice => 0b1111,
-        RicePartitionType::Rice2 => 0b11111
+        RicePartitionType::Rice2 => 0b11111,
     } {
         // For unencoded binary, there are five bits indicating bits-per-sample.
         let rice_bps = try!(input.read_leq_u8(5));
@@ -349,8 +344,7 @@ fn decode_rice_partition<R: io::Read, Sample: sample::WideSample>
             // indicate that splitting the methods is faster. For now though,
             // simplicity is more important.
             let r_u32 = try!(input.read_leq_u32(rice_param));
-            let r = Sample::from_u32(r_u32)
-                           .ok_or(Error::FormatError("invalid Rice code"));
+            let r = Sample::from_u32(r_u32).ok_or(Error::FormatError("invalid Rice code"));
 
             *sample = rice_to_signed((q << rice_param as usize) | try!(r));
         }
@@ -359,11 +353,10 @@ fn decode_rice_partition<R: io::Read, Sample: sample::WideSample>
     Ok(())
 }
 
-fn decode_constant<R: io::Read, Sample: sample::WideSample>
-                  (input: &mut Bitstream<R>,
-                   bps: u8,
-                   buffer: &mut [Sample])
-                   -> Result<()> {
+fn decode_constant<R: io::Read, Sample: sample::WideSample>(input: &mut Bitstream<R>,
+                                                            bps: u8,
+                                                            buffer: &mut [Sample])
+                                                            -> Result<()> {
 
     // A constant block has <bits per sample> bits: the value of all samples.
     // The nofail variant is safe, because it has been verified before that the
@@ -386,11 +379,10 @@ fn decode_constant<R: io::Read, Sample: sample::WideSample>
     Ok(())
 }
 
-fn decode_verbatim<R: io::Read, Sample: sample::WideSample>
-                  (input: &mut Bitstream<R>,
-                   bps: u8,
-                   buffer: &mut [Sample])
-                   -> Result<()> {
+fn decode_verbatim<R: io::Read, Sample: sample::WideSample>(input: &mut Bitstream<R>,
+                                                            bps: u8,
+                                                            buffer: &mut [Sample])
+                                                            -> Result<()> {
 
     // This function must not be called for a sample wider than the sample type.
     // This has been verified at an earlier stage, but it is good to state the
@@ -413,9 +405,7 @@ fn decode_verbatim<R: io::Read, Sample: sample::WideSample>
     Ok(())
 }
 
-fn predict_fixed<Sample: sample::WideSample>
-                (order: u8, buffer: &mut [Sample])
-                 -> Result<()> {
+fn predict_fixed<Sample: sample::WideSample>(order: u8, buffer: &mut [Sample]) -> Result<()> {
 
     // When this is called during decoding, the order as read from the subframe
     // header has already been verified, so it is safe to assume that
@@ -445,15 +435,15 @@ fn predict_fixed<Sample: sample::WideSample>
         2 => &o2,
         3 => &o3,
         4 => &o4,
-        _ => unreachable!()
+        _ => unreachable!(),
     };
 
     let window_size = order as usize + 1;
 
     // TODO: abstract away this iterating over a window into a function?
-    for i in 0 .. buffer.len() - order as usize {
+    for i in 0..buffer.len() - order as usize {
         // Manually do the windowing, because .windows() returns immutable slices.
-        let window = &mut buffer[i .. i + window_size];
+        let window = &mut buffer[i..i + window_size];
 
         // The #coefficcients elements of the window store already decoded
         // samples, the last element of the window is the delta. Therefore,
@@ -493,31 +483,31 @@ fn verify_predict_fixed() {
     assert_eq!(&buffer, &[21877, 27482, 26574]);
 }
 
-fn decode_fixed<R: io::Read, Sample: sample::WideSample>
-               (input: &mut Bitstream<R>,
-                bps: u8,
-                order: u8,
-                buffer: &mut [Sample])
-                -> Result<()> {
+fn decode_fixed<R: io::Read, Sample: sample::WideSample>(input: &mut Bitstream<R>,
+                                                         bps: u8,
+                                                         order: u8,
+                                                         buffer: &mut [Sample])
+                                                         -> Result<()> {
     // There are order * bits per sample unencoded warm-up sample bits.
-    try!(decode_verbatim(input, bps, &mut buffer[.. order as usize]));
+    try!(decode_verbatim(input, bps, &mut buffer[..order as usize]));
 
     // Next up is the residual. We decode into the buffer directly, the
     // predictor contributions will be added in a second pass. The first
     // `order` samples have been decoded already, so continue after that.
-    try!(decode_residual(input, bps, buffer.len() as u16,
-                         &mut buffer[order as usize ..]));
+    try!(decode_residual(input,
+                         bps,
+                         buffer.len() as u16,
+                         &mut buffer[order as usize..]));
 
     try!(predict_fixed(order, buffer));
 
     Ok(())
 }
 
-fn predict_lpc<Sample: sample::WideSample>
-              (coefficients: &[i16],
-               qlp_shift: i16,
-               buffer: &mut [Sample])
-               -> Result<()> {
+fn predict_lpc<Sample: sample::WideSample>(coefficients: &[i16],
+                                           qlp_shift: i16,
+                                           buffer: &mut [Sample])
+                                           -> Result<()> {
 
     // The linear prediction is essentially an inner product of the known
     // samples with the coefficients, followed by the shift. The
@@ -530,9 +520,9 @@ fn predict_lpc<Sample: sample::WideSample>
     let window_size = coefficients.len() + 1;
     debug_assert!(buffer.len() >= window_size);
 
-    for i in 0 .. buffer.len() - coefficients.len() {
+    for i in 0..buffer.len() - coefficients.len() {
         // Manually do the windowing, because .windows() returns immutable slices.
-        let window = &mut buffer[i .. i + window_size];
+        let window = &mut buffer[i..i + window_size];
 
         // The #coefficcients elements of the window store already decoded
         // samples, the last element of the window is the delta. Therefore,
@@ -546,7 +536,7 @@ fn predict_lpc<Sample: sample::WideSample>
         // unused. This ensures that adding the delta does not overflow, if
         // the delta is also within the correct range.
         let prediction = Sample::from_i64_spare_bit(prediction)
-                                .ok_or(Error::FormatError("invalid LPC sample"));
+                             .ok_or(Error::FormatError("invalid LPC sample"));
 
         // The delta is stored, so the sample is the prediction + delta.
         let delta = window[coefficients.len()];
@@ -575,14 +565,13 @@ fn verify_predict_lpc() {
     assert_eq!(&buffer, &[-21363, -21951, -22649, -24364, -27297, -26870, -30017, -29718]);
 }
 
-fn decode_lpc<R: io::Read, Sample: sample::WideSample>
-             (input: &mut Bitstream<R>,
-              bps: u8,
-              order: u8,
-              buffer: &mut [Sample])
-              -> Result<()> {
+fn decode_lpc<R: io::Read, Sample: sample::WideSample>(input: &mut Bitstream<R>,
+                                                       bps: u8,
+                                                       order: u8,
+                                                       buffer: &mut [Sample])
+                                                       -> Result<()> {
     // There are order * bits per sample unencoded warm-up sample bits.
-    try!(decode_verbatim(input, bps, &mut buffer[.. order as usize]));
+    try!(decode_verbatim(input, bps, &mut buffer[..order as usize]));
 
     // Next are four bits quantised linear predictor coefficient precision - 1.
     let qlp_precision = try!(input.read_leq_u8(4)) + 1;
@@ -600,7 +589,7 @@ fn decode_lpc<R: io::Read, Sample: sample::WideSample>
     // Finally, the coefficients themselves.
     // TODO: get rid of the allocation by pre-allocating a vector in the decoder.
     let mut coefficients = Vec::new();
-    for _ in 0 .. order {
+    for _ in 0..order {
         // We can safely read into an u16, qlp_precision is at most 15.
         let coef_unsig = try!(input.read_leq_u16(qlp_precision));
         let coef = extend_sign_u16(coef_unsig, qlp_precision);

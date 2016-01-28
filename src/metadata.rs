@@ -24,7 +24,7 @@ use input::ReadExt;
 struct MetadataBlockHeader {
     is_last: bool,
     block_type: u8,
-    length: u32
+    length: u32,
 }
 
 /// The streaminfo metadata block, with important information about the stream.
@@ -47,7 +47,7 @@ pub struct StreamInfo {
     /// The total number of inter-channel samples in the stream.
     pub samples: Option<u64>,
     /// MD5 signature of the unencoded audio data.
-    pub md5sum: [u8; 16]
+    pub md5sum: [u8; 16],
 }
 
 /// A seek point in the seek table.
@@ -59,13 +59,13 @@ pub struct SeekPoint {
     /// target frame's header.
     pub offset: u64,
     /// Number of samples in the target frame.
-    pub samples: u16
+    pub samples: u16,
 }
 
 /// A seek table to aid seeking in the stream.
 pub struct SeekTable {
     /// The seek points, sorted in ascending order by sample number.
-    seekpoints: Vec<SeekPoint>
+    seekpoints: Vec<SeekPoint>,
 }
 
 /// A metadata about the flac stream.
@@ -75,14 +75,14 @@ pub enum MetadataBlock {
     /// A padding block (with no meaningful data).
     Padding {
         /// The number of padding bytes.
-        length: u32
+        length: u32,
     },
     /// An application block with application-specific data.
     Application {
         /// The registered application ID.
         id: u32,
         /// The contents of the application block.
-        data: Vec<u8>
+        data: Vec<u8>,
     },
     /// A seek table block.
     SeekTable(SeekTable),
@@ -93,11 +93,10 @@ pub enum MetadataBlock {
     /// A picture block.
     Picture, // TODO
     /// A block with a reserved block type, not supported by this library.
-    Reserved
+    Reserved,
 }
 
-fn read_metadata_block_header<R: io::Read>(input: &mut R)
-                                           -> Result<MetadataBlockHeader> {
+fn read_metadata_block_header<R: io::Read>(input: &mut R) -> Result<MetadataBlockHeader> {
     let byte = try!(input.read_u8());
 
     // The first bit specifies whether this is the last block, the next 7 bits
@@ -107,16 +106,18 @@ fn read_metadata_block_header<R: io::Read>(input: &mut R)
 
     // The length field is 24 bits, or 3 bytes.
     let length = try!(input.read_be_u24());
-    
+
     let header = MetadataBlockHeader {
         is_last: is_last,
         block_type: block_type,
-        length: length
+        length: length,
     };
     Ok(header)
 }
 
-fn read_metadata_block<R: io::Read>(input: &mut R, block_type: u8, length: u32)
+fn read_metadata_block<R: io::Read>(input: &mut R,
+                                    block_type: u8,
+                                    length: u32)
                                     -> Result<MetadataBlock> {
     match block_type {
         0 => {
@@ -127,39 +128,42 @@ fn read_metadata_block<R: io::Read>(input: &mut R, block_type: u8, length: u32)
             } else {
                 fmt_err("invalid streaminfo metadata block length")
             }
-        },
+        }
         1 => {
             try!(read_padding_block(input, length));
             Ok(MetadataBlock::Padding { length: length })
-        },
+        }
         2 => {
             let (id, data) = try!(read_application_block(input, length));
-            Ok(MetadataBlock::Application { id: id, data: data })
-        },
+            Ok(MetadataBlock::Application {
+                id: id,
+                data: data,
+            })
+        }
         3 => {
             // TODO: implement seektable reading. For now, pretend it is padding.
             try!(skip_block(input, length));
             Ok(MetadataBlock::Padding { length: length })
-        },
+        }
         4 => {
             // TODO: implement Vorbis comment reading. For now, pretend it is padding.
             try!(skip_block(input, length));
             Ok(MetadataBlock::Padding { length: length })
-        },
+        }
         5 => {
             // TODO: implement CUE sheet reading. For now, pretend it is padding.
             try!(skip_block(input, length));
             Ok(MetadataBlock::Padding { length: length })
-        },
+        }
         6 => {
             // TODO: implement picture reading. For now, pretend it is padding.
             try!(skip_block(input, length));
             Ok(MetadataBlock::Padding { length: length })
-        },
+        }
         127 => {
             // This code is invalid to avoid confusion with a frame sync code.
             fmt_err("invalid metadata block type")
-        },
+        }
         _ => {
             // Any other block type is 'reserved' at the moment of writing. The
             // reference implementation reads it as an 'unknown' block. That is
@@ -230,13 +234,25 @@ fn read_streaminfo_block<R: io::Read>(input: &mut R) -> Result<StreamInfo> {
     let stream_info = StreamInfo {
         min_block_size: min_block_size,
         max_block_size: max_block_size,
-        min_frame_size: if min_frame_size == 0 { None } else { Some(min_frame_size) },
-        max_frame_size: if max_frame_size == 0 { None } else { Some(max_frame_size) },
+        min_frame_size: if min_frame_size == 0 {
+            None
+        } else {
+            Some(min_frame_size)
+        },
+        max_frame_size: if max_frame_size == 0 {
+            None
+        } else {
+            Some(max_frame_size)
+        },
         sample_rate: sample_rate,
         channels: n_channels,
         bits_per_sample: bits_per_sample,
-        samples: if n_samples == 0 { None } else { Some(n_samples) },
-        md5sum: md5sum
+        samples: if n_samples == 0 {
+            None
+        } else {
+            Some(n_samples)
+        },
+        md5sum: md5sum,
     };
     Ok(stream_info)
 }
@@ -251,15 +267,14 @@ fn read_padding_block<R: io::Read>(input: &mut R, length: u32) -> Result<()> {
 }
 
 fn skip_block<R: io::Read>(input: &mut R, length: u32) -> Result<()> {
-    for _ in 0 .. length {
+    for _ in 0..length {
         try!(input.read_u8());
     }
 
     Ok(())
 }
 
-fn read_application_block<R: io::Read>(input: &mut R, length: u32)
-                                       -> Result<(u32, Vec<u8>)> {
+fn read_application_block<R: io::Read>(input: &mut R, length: u32) -> Result<(u32, Vec<u8>)> {
     let id = try!(input.read_be_u32());
 
     // Four bytes of the block have been used for the ID, the rest is payload.
@@ -277,31 +292,30 @@ fn read_application_block<R: io::Read>(input: &mut R, length: u32)
 /// data will be read thereafter, and the next value will be `None`.
 pub struct MetadataBlockReader<R: io::Read> {
     input: R,
-    done: bool
+    done: bool,
 }
 
 /// Either a `MetadataBlock` or an `Error`.
 pub type MetadataBlockResult = Result<MetadataBlock>;
 
 impl<R: io::Read> MetadataBlockReader<R> {
-
     /// Creates a metadata block reader that will yield at least one element.
     pub fn new(input: R) -> MetadataBlockReader<R> {
-        MetadataBlockReader { input: input, done: false }
+        MetadataBlockReader {
+            input: input,
+            done: false,
+        }
     }
 
     fn read_next(&mut self) -> MetadataBlockResult {
         let header = try!(read_metadata_block_header(&mut self.input));
-        let block = try!(read_metadata_block(&mut self.input,
-                                             header.block_type,
-                                             header.length));
+        let block = try!(read_metadata_block(&mut self.input, header.block_type, header.length));
         self.done = header.is_last;
         Ok(block)
     }
 }
 
 impl<R: io::Read> Iterator for MetadataBlockReader<R> {
-
     type Item = MetadataBlockResult;
 
     fn next(&mut self) -> Option<MetadataBlockResult> {
@@ -312,7 +326,9 @@ impl<R: io::Read> Iterator for MetadataBlockReader<R> {
 
             // After a failure, no more attempts to read will be made,
             // because we don't know where we are in the stream.
-            if !block.is_ok() { self.done = true; }
+            if !block.is_ok() {
+                self.done = true;
+            }
 
             Some(block)
         }

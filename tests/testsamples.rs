@@ -25,17 +25,18 @@ fn run_metaflac(fname: &path::Path) -> String {
 
     // Run metaflac on the specified file and print all streaminfo data.
     let output = Command::new("metaflac")
-                         .arg("--show-min-blocksize")
-                         .arg("--show-max-blocksize")
-                         .arg("--show-min-framesize")
-                         .arg("--show-max-framesize")
-                         .arg("--show-sample-rate")
-                         .arg("--show-channels")
-                         .arg("--show-bps")
-                         .arg("--show-total-samples")
-                         .arg("--show-md5sum")
-                         .arg(fname.to_str().expect("unsupported filename"))
-                         .output().expect("failed to run metaflac");
+                     .arg("--show-min-blocksize")
+                     .arg("--show-max-blocksize")
+                     .arg("--show-min-framesize")
+                     .arg("--show-max-framesize")
+                     .arg("--show-sample-rate")
+                     .arg("--show-channels")
+                     .arg("--show-bps")
+                     .arg("--show-total-samples")
+                     .arg("--show-md5sum")
+                     .arg(fname.to_str().expect("unsupported filename"))
+                     .output()
+                     .expect("failed to run metaflac");
     String::from_utf8(output.stdout).expect("metaflac wrote invalid UTF-8")
 }
 
@@ -44,10 +45,11 @@ fn decode_file(fname: &path::Path) {
 
     // Run the the reference flac decoder on the file.
     let success = Command::new("flac")
-                          .arg("--decode")
-                          .arg(fname.to_str().expect("unsupported filename"))
-                          .status().expect("failed to run flac")
-                          .success();
+                      .arg("--decode")
+                      .arg(fname.to_str().expect("unsupported filename"))
+                      .status()
+                      .expect("failed to run flac")
+                      .success();
     assert!(success);
 }
 
@@ -87,7 +89,7 @@ fn compare_metaflac(fname: &path::Path) {
             println!("streaminfo\n----------\n{}", streaminfo);
             panic!("metaflac disagrees on parsed streaminfo");
         }
-    };
+    }
 }
 
 fn compare_decoded_stream(fname: &path::Path) {
@@ -125,16 +127,21 @@ fn compare_decoded_stream(fname: &path::Path) {
         while sample < samples {
             let block = blocks.read_next(buffer).unwrap();
             {
-                let mut channels: Vec<_> = (0 .. n_channels)
-                                           .map(|i| block.channel(i).iter().cloned())
-                                           .collect();
-                for i in 0 .. block.len() {
-                    for ch in 0 .. n_channels as usize {
+                let mut channels: Vec<_> = (0..n_channels)
+                                               .map(|i| block.channel(i).iter().cloned())
+                                               .collect();
+                for i in 0..block.len() {
+                    for ch in 0..n_channels as usize {
                         let ref_sample = ref_samples.next().map(|r| r.ok().unwrap());
                         let try_sample = channels[ch].next();
                         if ref_sample != try_sample {
-                            println!("disagreement at sample {} of block {} in channel {}: reference is {} but decoded is {}",
-                                     i, b, ch, ref_sample.unwrap(), try_sample.unwrap());
+                            println!("disagreement at sample {} of block {} in channel {}: \
+                                      reference is {} but decoded is {}",
+                                     i,
+                                     b,
+                                     ch,
+                                     ref_sample.unwrap(),
+                                     try_sample.unwrap());
                             panic!("decoding differs from reference decoder");
                         }
                     }
