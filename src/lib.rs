@@ -102,8 +102,8 @@ impl<R: io::Read> FlacReader<R> {
     }
 
     /// Returns the streaminfo metadata.
-    pub fn streaminfo(&self) -> &StreamInfo {
-        &self.streaminfo
+    pub fn streaminfo(&self) -> StreamInfo {
+        self.streaminfo
     }
 
     /// Returns an iterator that decodes a single frame on every iteration.
