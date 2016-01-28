@@ -443,11 +443,41 @@ impl <'b, Sample: sample::Sample> Block<'b, Sample> {
     /// Returns the (zero-based) `ch`-th channel as a slice.
     ///
     /// # Panics
-    /// Panics if `ch` is larger than `channels()`.
+    ///
+    /// Panics if `ch >= channels()`.
     pub fn channel(&'b self, ch: u8) -> &'b [Sample] {
         &self.samples[ch as usize * self.block_size as usize ..
                      (ch as usize + 1) * self.block_size as usize]
     }
+
+    /// Returns the sample value for the zero-based `ch`-th channel of the
+    /// inter-channel sample with index `sample` in this block (so this is not
+    /// the global sample number).
+    ///
+    /// # Panics
+    ///
+    /// Panics if `ch >= channels()` or if `sample >= len()` for the last
+    /// channel.
+    pub fn sample(&self, ch: u8, sample: u16) -> Sample {
+        return self.samples[ch as usize * self.block_size as usize +
+                            sample as usize];
+    }
+}
+
+#[test]
+fn verify_block_sample() {
+    let block = Block {
+        first_sample_number: 0,
+        block_size: 5,
+        channels: 3,
+        samples: &[2i8, 3,  5,  7, 11,
+                   13, 17, 19, 23, 29,
+                   31, 37, 41, 43, 47]
+    };
+
+    assert_eq!(block.sample(0, 2), 5);
+    assert_eq!(block.sample(1, 3), 23);
+    assert_eq!(block.sample(2, 4), 47);
 }
 
 /// Reads frames from a stream and exposes decoded blocks as an iterator.
