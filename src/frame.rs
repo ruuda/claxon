@@ -424,6 +424,16 @@ impl <Sample: sample::Sample> Block<Sample> {
         }
     }
 
+    /// Returns a block with 0 channels and 0 samples.
+    pub fn empty() -> Block<Sample> {
+        Block {
+            first_sample_number: 0,
+            block_size: 0,
+            channels: 0,
+            buffer: Vec::with_capacity(0)
+        }
+    }
+
     /// Returns the sample number of the first sample in the block.
     pub fn time(&self) -> u64 {
         self.first_sample_number

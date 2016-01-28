@@ -22,6 +22,7 @@
 #![feature(iter_arith, zero_one)]
 
 use std::io;
+use std::mem;
 use error::fmt_err;
 use frame::FrameReader;
 use input::ReadExt;
@@ -46,6 +47,23 @@ pub struct FlacReader<R: io::Read> {
     metadata_blocks: Vec<MetadataBlock>,
     input: R
 }
+
+/// An iterator that yields samples of type `S` read from a `FlacReader`.
+///
+/// The type `S` must have at least as many bits as the bits per sample of the
+/// stream, otherwise every iteration will return an error.
+pub struct FlacSamples<'fr, R: 'fr + io::Read, S: sample::Sample> {
+    frame_reader: FrameReader<&'fr mut R, S>,
+    block: frame::Block<S>,
+    sample: u16,
+    channel: u8,
+
+    /// If reading ever failed, this flag is set, so that the iterator knows not
+    /// to return any new values.
+    has_failed: bool
+}
+
+// TODO: Add a `FlacIntoSamples`.
 
 fn read_stream_header<R: io::Read>(input: &mut R) -> Result<()> {
     // A FLAC stream starts with a 32-bit header 'fLaC' (big endian).
@@ -107,7 +125,75 @@ impl<R: io::Read> FlacReader<R> {
     }
 
     /// Returns an iterator that decodes a single frame on every iteration.
+    /// TODO: It is not an iterator.
     pub fn blocks<'r, S: sample::Sample>(&'r mut self) -> FrameReader<&'r mut R, S> {
         FrameReader::new(&mut self.input)
+    }
+
+    /// Returns an iterator over all samples.
+    ///
+    /// The channel data is is interleaved. The iterator is streaming. That is,
+    /// if you call this method once, read a few samples, and call this method
+    /// again, the second iterator will not start again from the beginning of
+    /// the file. It will continue somewhere after where the first iterator
+    /// stopped, and it might skip some samples. (This is because FLAC divides
+    /// a stream into blocks, which have to be decoded entirely. If you drop the
+    /// iterator, you lose the unread samples in that block.)
+    ///
+    /// The type `S` must have at least `streaminfo().bits_per_sample` bits,
+    /// otherwise iteration will return an error. All bit depths up to 32 bits
+    /// per sample can be decoded into an `i32`, but if you know beforehand that
+    /// you will be reading a file with 16 bits per sample, you can save memory
+    /// by decoding into an `i16`.
+    pub fn samples<'r, S: sample::Sample>(&'r mut self) -> FlacSamples<'r, R, S> {
+        FlacSamples {
+            frame_reader: frame::FrameReader::new(&mut self.input),
+            block: frame::Block::empty(),
+            sample: 0,
+            channel: 0,
+            has_failed: false
+        }
+    }
+}
+
+impl<'fr, R: 'fr + io::Read, S: sample::Sample> Iterator for FlacSamples<'fr, R, S> {
+
+    type Item = Result<S>;
+
+    fn next(&mut self) -> Option<Result<S>> {
+        // If the previous read failed, end iteration.
+        if self.has_failed { return None; }
+
+        // Iterate the samples channel interleaved, so first increment the
+        // channel.
+        self.channel += 1;
+
+        // If that was the last channel, increment the sample number.
+        if self.channel >= self.block.channels() {
+            self.channel = 0;
+            self.sample += 1;
+
+            // If that was the last sample in the block, decode the next block.
+            if self.sample >= self.block.len() {
+                self.sample = 0;
+
+                // Replace the current block with an empty one so that we may
+                // reuse the current buffer to decode again.
+                let current_block = mem::replace(&mut self.block, frame::Block::empty());
+
+                match self.frame_reader.read_next(current_block.into_buffer()) {
+                    Ok(next_block) => {
+                        self.block = next_block;
+                    },
+                    Err(error) => {
+                        self.has_failed = true;
+                        // block = frame::Block::empty();
+                        return Some(Err(error));
+                    }
+                }
+            }
+        }
+
+        Some(Ok(self.block.sample(self.channel, self.sample)))
     }
 }
