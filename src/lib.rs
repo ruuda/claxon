@@ -18,7 +18,6 @@
 //! TODO: Add some examples here.
 
 #![warn(missing_docs)]
-#![allow(dead_code)] // TODO: Remove for v0.2
 #![feature(iter_arith, zero_one)]
 
 use std::io;
@@ -44,6 +43,7 @@ pub use error::{Error, Result};
 /// TODO: Add an example.
 pub struct FlacReader<R: io::Read> {
     streaminfo: StreamInfo,
+    #[allow(dead_code)] // TODO: Expose metadata nicely.
     metadata_blocks: Vec<MetadataBlock>,
     input: R,
 }
