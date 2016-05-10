@@ -14,7 +14,6 @@
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 use std::io;
-use std::io::Read;
 
 // These tables were taken from the tables in crc.c in libflac.
 
@@ -152,6 +151,7 @@ impl<R: io::Read> io::Read for Crc16Reader<R> {
 
 #[cfg(test)]
 fn verify_crc8(test_vector: Vec<u8>, result: u8) {
+    use std::io::Read;
     let data = io::Cursor::new(test_vector);
     let mut reader = Crc8Reader::new(data);
     reader.read_to_end(&mut Vec::new()).unwrap();
@@ -160,6 +160,7 @@ fn verify_crc8(test_vector: Vec<u8>, result: u8) {
 
 #[cfg(test)]
 fn verify_crc16(test_vector: Vec<u8>, result: u16) {
+    use std::io::Read;
     let data = io::Cursor::new(test_vector);
     let mut reader = Crc16Reader::new(data);
     reader.read_to_end(&mut Vec::new()).unwrap();
