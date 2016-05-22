@@ -3,7 +3,7 @@ Claxon
 
 A FLAC decoding library in Rust.
 
-[![Build Status](https://travis-ci.org/ruud-v-a/claxon.svg?branch=master)](https://travis-ci.org/ruud-v-a/claxon)
+[![Build Status](https://travis-ci.org/ruuda/claxon.svg?branch=master)](https://travis-ci.org/ruuda/claxon)
 [![Crates.io version](http://img.shields.io/crates/v/claxon.svg)](https://crates.io/crates/claxon)
 
 Many media players crash on corrupted input (not FLAC in particular). This is

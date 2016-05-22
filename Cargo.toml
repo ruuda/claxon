@@ -7,8 +7,8 @@ description = "A FLAC decoding library"
 keywords = ["flac", "lossless", "audio", "codec"]
 license = "GPL-3.0"
 readme = "readme.md"
-homepage = "https://github.com/ruud-v-a/claxon"
-repository = "https://github.com/ruud-v-a/claxon"
+homepage = "https://github.com/ruuda/claxon"
+repository = "https://github.com/ruuda/claxon"
 
 [dependencies]
 
