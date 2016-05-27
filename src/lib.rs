@@ -20,8 +20,10 @@
 #![warn(missing_docs)]
 #![feature(iter_arith, zero_one)]
 
+use std::fs;
 use std::io;
 use std::mem;
+use std::path;
 use error::fmt_err;
 use frame::FrameReader;
 use input::ReadExt;
@@ -164,6 +166,19 @@ impl<R: io::Read> FlacReader<R> {
             channel: 0,
             has_failed: false,
         }
+    }
+}
+
+impl FlacReader<io::BufReader<fs::File>> {
+    /// Attempts to create a reader that reads from the specified file.
+    ///
+    /// This is a convenience constructor that opens a `File`, wraps it in a
+    /// `BufReader` and then constructs a `FlacReader` from it.
+    pub fn open<P: AsRef<path::Path>>(filename: P)
+                -> Result<FlacReader<io::BufReader<fs::File>>> {
+        let file = try!(fs::File::open(filename));
+        let buf_reader = io::BufReader::new(file);
+        FlacReader::new(buf_reader)
     }
 }
 
