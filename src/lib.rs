@@ -77,12 +77,13 @@ fn read_stream_header<R: io::Read>(input: &mut R) -> Result<()> {
 }
 
 impl<R: io::Read> FlacReader<R> {
-    /// Constructs a flac stream from the given input.
+    /// Attempts to create a reader that reads the FLAC format.
     ///
-    /// This will read all metadata and stop at the first audio frame.
-    pub fn new(mut input: R) -> Result<FlacReader<R>> {
+    /// The header and metadata blocks are read immediately. Audio frames will
+    /// be read on demand.
+    pub fn new(mut reader: R) -> Result<FlacReader<R>> {
         // A flac stream first of all starts with a stream header.
-        try!(read_stream_header(&mut input));
+        try!(read_stream_header(&mut reader));
 
         // Start a new scope, because the input reader must be available again
         // for the frame reader next.
@@ -90,7 +91,7 @@ impl<R: io::Read> FlacReader<R> {
             // Next are one or more metadata blocks. The flac specification
             // dictates that the streaminfo block is the first block. The metadata
             // block reader will yield at least one element, so the unwrap is safe.
-            let mut metadata_iter = MetadataBlockReader::new(&mut input);
+            let mut metadata_iter = MetadataBlockReader::new(&mut reader);
             let streaminfo_block = try!(metadata_iter.next().unwrap());
             let streaminfo = match streaminfo_block {
                 MetadataBlock::StreamInfo(info) => info,
@@ -110,22 +111,28 @@ impl<R: io::Read> FlacReader<R> {
         };
 
         // The flac reader will contain the reader that will read frames.
-        let reader = FlacReader {
+        let flac_reader = FlacReader {
             streaminfo: streaminfo,
             metadata_blocks: metadata_blocks,
-            input: input,
+            input: reader,
         };
 
-        Ok(reader)
+        Ok(flac_reader)
     }
 
     /// Returns the streaminfo metadata.
+    ///
+    /// This contains information like the sample rate and number of channels.
     pub fn streaminfo(&self) -> StreamInfo {
         self.streaminfo
     }
 
     /// Returns an iterator that decodes a single frame on every iteration.
     /// TODO: It is not an iterator.
+    ///
+    /// This is a low-level primitive that gives you control over when decoding
+    /// happens. The representation of the decoded audio is somewhat specific to
+    /// the FLAC format. For a higher-level interface, see `samples()`.
     pub fn blocks<'r, S: sample::Sample>(&'r mut self) -> FrameReader<&'r mut R, S> {
         FrameReader::new(&mut self.input)
     }
@@ -145,6 +152,10 @@ impl<R: io::Read> FlacReader<R> {
     /// per sample can be decoded into an `i32`, but if you know beforehand that
     /// you will be reading a file with 16 bits per sample, you can save memory
     /// by decoding into an `i16`.
+    ///
+    /// This is a high-level interface to the decoder. The cost of retrieving
+    /// the next sample can vary significantly, as sometimes a new block has to
+    /// be decoded. For more control over when decoding happens, use `blocks()`.
     pub fn samples<'r, S: sample::Sample>(&'r mut self) -> FlacSamples<'r, R, S> {
         FlacSamples {
             frame_reader: frame::FrameReader::new(&mut self.input),
