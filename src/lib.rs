@@ -15,7 +15,27 @@
 
 //! Claxon, a FLAC decoding library.
 //!
-//! TODO: Add some examples here.
+//! Examples
+//! ========
+//!
+//! The following example computes the root mean square (RMS) of an audio file
+//! with at most 16 bits per sample.
+//!
+//! ```
+//! use claxon;
+//!
+//! let mut reader = claxon::FlacReader::open("testsamples/pop.flac").unwrap();
+//! let mut sqr_sum = 0.0;
+//! let mut count = 0;
+//! for sample in reader.samples::<i16>() {
+//!     let s = sample.unwrap() as f64;
+//!     sqr_sum += s * s;
+//!     count += 1;
+//! }
+//! println!("RMS is {}", (sqr_sum / count as f64).sqrt());
+//! ```
+//!
+//! TODO: more examples.
 
 #![warn(missing_docs)]
 #![feature(iter_arith, zero_one)]

@@ -7,6 +7,9 @@
 /testsamples/*.ana
 /testsamples/*.wav
 
+# Except for small test samples that are included verbatim
+!/testsamples/pop.flac
+
 # Editor files
 *.swp
 *.swo
