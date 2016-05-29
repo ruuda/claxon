@@ -1,17 +1,9 @@
 // Claxon -- A FLAC decoding library in Rust
 // Copyright 2014 Ruud van Asseldonk
 //
-// This program is free software: you can redistribute it and/or modify
-// it under the terms of the GNU General Public License, version 3,
-// as published by the Free Software Foundation.
-//
-// This program is distributed in the hope that it will be useful,
-// but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU General Public License for more details.
-//
-// You should have received a copy of the GNU General Public License
-// along with this program.  If not, see <http://www.gnu.org/licenses/>.
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// A copy of the License has been included in the root of the repository.
 
 //! The `metadata` module deals with metadata at the beginning of a FLAC stream.
 
