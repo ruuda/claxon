@@ -18,18 +18,13 @@ extern crate hound;
 
 fn main() {
     use std::env;
-    use std::fs;
-    use std::io;
     use std::path;
     use claxon::FlacReader;
     use hound::{WavSpec, WavWriter};
 
     let arg = env::args().nth(1).expect("no file given");
     let fname = path::Path::new(&arg);
-    let input = fs::File::open(fname).expect("failed to open file");
-    let mut buf_reader = io::BufReader::new(input);
-    let mut reader = FlacReader::new(&mut buf_reader).expect("failed to open FLAC stream");
-    let num_samples = reader.streaminfo().samples.expect("no sample count present in streaminfo");
+    let mut reader = FlacReader::open(fname).expect("failed to open FLAC stream");
 
     let spec = WavSpec {
         // TODO: u8 for channels, is that weird? Would u32 be better?
@@ -41,17 +36,9 @@ fn main() {
     let fname_wav = fname.with_extension("wav");
     let mut output = WavWriter::create(fname_wav, spec).expect("failed to create wav file");
 
-    let mut i = 0u64;
-
     for maybe_sample in reader.samples::<i32>() {
         let sample = maybe_sample.expect("failed to read sample");
         output.write_sample(sample).expect("failed to write sample");
-
-        i += 1;
-        if i == num_samples {
-            // TODO: Make iterator stop at file end.
-            break;
-        }
     }
 
     output.finalize().expect("failed to finalize wav file");
