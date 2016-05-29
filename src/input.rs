@@ -45,7 +45,7 @@ impl<R> ReadExt for R where R: io::Read
             if progress > 0 {
                 n += progress;
             } else {
-                return Err(io::Error::new(io::ErrorKind::Other, "Failed to read enough bytes."));
+                return Err(io::Error::new(io::ErrorKind::UnexpectedEof, "Failed to read enough bytes."));
             }
         }
         Ok(())
