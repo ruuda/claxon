@@ -228,9 +228,16 @@ impl<'fr, R: 'fr + io::Read, S: sample::Sample> Iterator for FlacSamples<'fr, R,
                 // reuse the current buffer to decode again.
                 let current_block = mem::replace(&mut self.block, frame::Block::empty());
 
-                match self.frame_reader.read_next(current_block.into_buffer()) {
-                    Ok(next_block) => {
+                match self.frame_reader.read_next_or_eof(current_block.into_buffer()) {
+                    Ok(Some(next_block)) => {
                         self.block = next_block;
+                    }
+                    Ok(None) => {
+                        // The stream ended with EOF.
+                        // TODO: If a number of samples was specified in the
+                        // streaminfo metadata block, verify that we did not
+                        // read more or less samples.
+                        return None;
                     }
                     Err(error) => {
                         self.has_failed = true;

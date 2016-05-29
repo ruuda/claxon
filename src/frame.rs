@@ -130,14 +130,19 @@ fn verify_read_var_length_int() {
                Error::FormatError("invalid variable-length integer"));
 }
 
-fn read_frame_header<R: io::Read>(input: &mut R) -> Result<FrameHeader> {
+fn read_frame_header_or_eof<R: io::Read>(input: &mut R) -> Result<Option<FrameHeader>> {
     // The frame header includes a CRC-8 at the end. It can be computed
     // automatically while reading, by wrapping the input reader in a reader
     // that computes the CRC.
     let mut crc_input = Crc8Reader::new(input);
 
     // First are 14 bits frame sync code, a reserved bit, and blocking stategy.
-    let sync_res_block = try!(crc_input.read_be_u16());
+    // If instead of the two bytes we find the end of the stream, return
+    // `Nothing`, indicating EOF.
+    let sync_res_block = match try!(crc_input.read_be_u16_or_eof()) {
+        None => return Ok(None),
+        Some(x) => x,
+    };
 
     // The first 14 bits must be 11111111111110.
     let sync_code = sync_res_block & 0b1111_1111_1111_1100;
@@ -304,7 +309,7 @@ fn read_frame_header<R: io::Read>(input: &mut R) -> Result<FrameHeader> {
         channel_assignment: channel_assignment,
         bits_per_sample: bits_per_sample,
     };
-    Ok(frame_header)
+    Ok(Some(frame_header))
 }
 
 /// Converts a buffer with left samples and a side channel in-place to left ++ right.
@@ -496,7 +501,8 @@ pub struct FrameReader<R: io::Read, Sample: sample::Sample> {
 }
 
 /// Either a `Block` or an `Error`.
-pub type FrameResult<Sample> = Result<Block<Sample>>;
+// TODO: The option should not be part of FrameResult.
+pub type FrameResult<Sample> = Result<Option<Block<Sample>>>;
 
 /// A macro to expand the length of a buffer, or replace the buffer altogether,
 /// so it can hold at least `$new_len` elements. The contents of the buffer can
@@ -541,15 +547,20 @@ impl<R: io::Read, Sample: sample::Sample> FrameReader<R, Sample> {
     /// allocated automatically.
     ///
     /// TODO: I should really be consistent with 'read' and 'decode'.
-    pub fn read_next(&mut self, mut buffer: Vec<Sample>) -> FrameResult<Sample> {
+    pub fn read_next_or_eof(&mut self, mut buffer: Vec<Sample>) -> FrameResult<Sample> {
         use std::mem::size_of;
         use std::num::Zero;
 
         // The frame includes a CRC-16 at the end. It can be computed
         // automatically while reading, by wrapping the input reader in a reader
-        // that computes the CRC.
+        // that computes the CRC. If the stream ended before the the frame
+        // header (so not in the middle of the frame header), return `None`,
+        // indicating EOF.
         let mut crc_input = Crc16Reader::new(&mut self.input);
-        let header = try!(read_frame_header(&mut crc_input));
+        let header = match try!(read_frame_header_or_eof(&mut crc_input)) {
+            None => return Ok(None),
+            Some(h) => h,
+        };
 
         // We must allocate enough space for all channels in the block to be
         // decoded.
@@ -651,7 +662,7 @@ impl<R: io::Read, Sample: sample::Sample> FrameReader<R, Sample> {
 
         let block = Block::new(time, header.block_size, buffer);
 
-        Ok(block)
+        Ok(Some(block))
     }
 }
 

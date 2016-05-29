@@ -125,7 +125,7 @@ fn compare_decoded_stream(fname: &path::Path) {
         let mut buffer = Vec::new();
 
         while sample < samples {
-            let block = blocks.read_next(buffer).unwrap();
+            let block = blocks.read_next_or_eof(buffer).unwrap().unwrap();
             {
                 let mut channels: Vec<_> = (0..n_channels)
                                                .map(|i| block.channel(i).iter().cloned())
