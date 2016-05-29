@@ -20,7 +20,15 @@ pub trait ReadExt: io::Read {
     /// Reads as many bytes as `buf` is long.
     ///
     /// This may issue multiple `read` calls internally. An error is returned
-    /// if `read` read 0 bytes before the buffer is full.
+    /// if `read` read 0 bytes before the buffer is full, except when the first
+    /// call to `read` reads 0 bytes (this is the case of EOF), in which case
+    /// `None` is returned. Returns `Some(())` on success.
+    fn read_into_or_eof(&mut self, buf: &mut [u8]) -> io::Result<Option<()>>;
+
+    /// Reads as many bytes as `buf` is long.
+    ///
+    /// Same as `read_into_or_eof`, buf retuns an `UnexpectedEof` error even
+    /// when EOF is encountered immediately.
     fn read_into(&mut self, buf: &mut [u8]) -> io::Result<()>;
 
     /// Reads a single byte.
@@ -34,20 +42,39 @@ pub trait ReadExt: io::Read {
 
     /// Reads four bytes and interprets them as a big-endian 32-bit unsigned integer.
     fn read_be_u32(&mut self) -> io::Result<u32>;
+
+    /// Reads two bytes and interprets them as a big-endian 16-bit unsigned integer.
+    fn read_be_u16_or_eof(&mut self) -> io::Result<Option<u16>>;
+}
+
+#[inline]
+fn read_into_impl<R: io::Read>(input: &mut R, buf: &mut [u8], allow_eof: bool) -> io::Result<Option<()>> {
+    let mut n = 0;
+    let mut is_first = allow_eof;
+    while n < buf.len() {
+        let progress = try!(input.read(&mut buf[n..]));
+        if progress > 0 {
+            n += progress;
+        } else {
+            if is_first {
+                return Ok(None)
+            } else {
+                return Err(io::Error::new(io::ErrorKind::UnexpectedEof, "Failed to read enough bytes."))
+            }
+        }
+        is_first = false;
+    }
+    Ok(Some(()))
 }
 
 impl<R> ReadExt for R where R: io::Read
 {
+    fn read_into_or_eof(&mut self, buf: &mut [u8]) -> io::Result<Option<()>> {
+        read_into_impl(self, buf, true)
+    }
+
     fn read_into(&mut self, buf: &mut [u8]) -> io::Result<()> {
-        let mut n = 0;
-        while n < buf.len() {
-            let progress = try!(self.read(&mut buf[n..]));
-            if progress > 0 {
-                n += progress;
-            } else {
-                return Err(io::Error::new(io::ErrorKind::UnexpectedEof, "Failed to read enough bytes."));
-            }
-        }
+        try!(read_into_impl(self, buf, false));
         Ok(())
     }
 
@@ -65,6 +92,14 @@ impl<R> ReadExt for R where R: io::Read
         let mut buf = [0u8; 2];
         try!(self.read_into(&mut buf));
         Ok((buf[0] as u16) << 8 | (buf[1] as u16))
+    }
+
+    fn read_be_u16_or_eof(&mut self) -> io::Result<Option<u16>> {
+        let mut buf = [0u8; 2];
+        match try!(self.read_into_or_eof(&mut buf)) {
+            None => Ok(None),
+            Some(_) => Ok(Some((buf[0] as u16) << 8 | (buf[1] as u16))),
+        }
     }
 
     fn read_be_u24(&mut self) -> io::Result<u32> {
@@ -92,6 +127,17 @@ fn verify_read_into() {
     assert!(reader.read_into(&mut buf3).is_err());
     assert_eq!(&buf1[..], &[2u8, 3, 5]);
     assert_eq!(&buf2[..], &[7u8, 11, 13, 17, 19]);
+}
+
+#[test]
+fn verify_read_into_or_eof() {
+    let mut reader = io::Cursor::new(vec![2u8, 3, 5]);
+    let mut buf = [0u8; 3];
+    let result = reader.read_into_or_eof(&mut buf).ok().unwrap();
+    assert!(result.is_some());
+
+    let result = reader.read_into_or_eof(&mut buf).ok().unwrap();
+    assert!(result.is_none());
 }
 
 #[test]
