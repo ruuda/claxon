@@ -38,6 +38,7 @@ fn decode_file(fname: &path::Path) {
     // Run the the reference flac decoder on the file.
     let success = Command::new("flac")
                       .arg("--decode")
+                      .arg("--silent")
                       .arg(fname.to_str().expect("unsupported filename"))
                       .status()
                       .expect("failed to run flac")
