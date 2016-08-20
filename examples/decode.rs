@@ -24,6 +24,7 @@ fn main() {
         sample_rate: reader.streaminfo().sample_rate,
         // TODO: again, would u32 be better, even if the range is smaller?
         bits_per_sample: reader.streaminfo().bits_per_sample as u16,
+        sample_format: hound::SampleFormat::Int,
     };
     let fname_wav = fname.with_extension("wav");
     let mut output = WavWriter::create(fname_wav, spec).expect("failed to create wav file");

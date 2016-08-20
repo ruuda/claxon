@@ -12,4 +12,4 @@ repository = "https://github.com/ruuda/claxon"
 
 [dev-dependencies]
 
-hound = "1.1.0"
+hound = "2.0.0"
