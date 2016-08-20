@@ -541,7 +541,6 @@ impl<R: io::Read, Sample: sample::Sample> FrameReader<R, Sample> {
     /// TODO: I should really be consistent with 'read' and 'decode'.
     pub fn read_next_or_eof(&mut self, mut buffer: Vec<Sample>) -> FrameResult<Sample> {
         use std::mem::size_of;
-        use std::num::Zero;
 
         // The frame includes a CRC-16 at the end. It can be computed
         // automatically while reading, by wrapping the input reader in a reader
@@ -558,7 +557,7 @@ impl<R: io::Read, Sample: sample::Sample> FrameReader<R, Sample> {
         // decoded.
         let total_samples = header.channels() as usize * header.block_size as usize;
         ensure_buffer_len!(buffer, total_samples, Sample::zero());
-        ensure_buffer_len!(self.wide_buffer, total_samples, Sample::Wide::zero());
+        ensure_buffer_len!(self.wide_buffer, total_samples, <Sample::Wide as sample::WideSample>::zero());
 
         // TODO: if the bps is missing from the header, we must get it from
         // the streaminfo block.

@@ -16,7 +16,6 @@ use std::cmp::Eq;
 use std::fmt::Debug;
 use std::iter::Sum;
 use std::ops::{Add, BitAnd, BitOr, Mul, Neg, Shl, Shr, Sub};
-use std::num::{One, Zero};
 
 /// A trait that allows decoding into integers of various widths.
 ///
@@ -27,7 +26,7 @@ use std::num::{One, Zero};
 ///   Therefore, converting a sample to `i32` or `i64` can never fail.
 ///
 /// This trait should only be implemented for `i8`, `i16` and `i32`.
-pub trait Sample: Copy + Clone + Debug + Eq + Zero + Sum {
+pub trait Sample: Copy + Clone + Debug + Eq + Sum {
 
     /// The signed integer type that is wide enough to store differences.
     ///
@@ -39,6 +38,9 @@ pub trait Sample: Copy + Clone + Debug + Eq + Zero + Sum {
 
     /// Tries to narrow the sample, returning `None` on overflow.
     fn from_wide(wide: Self::Wide) -> Option<Self>;
+
+    /// Returns 0.
+    fn zero() -> Self;
 }
 
 /// A trait that enables efficient decoding for every bit depth.
@@ -50,7 +52,7 @@ pub trait Sample: Copy + Clone + Debug + Eq + Zero + Sum {
 /// could use `i64` everywhere and it will be wide enough, but this trait
 /// enables using the narrowest integer type that is wide enough, saving memory.
 pub trait WideSample: Copy + Clone + Debug + Eq +
-    Zero + One + Sum +
+    Sum +
     Neg<Output = Self> +
     Add<Output = Self> +
     Sub<Output = Self> +
@@ -59,6 +61,12 @@ pub trait WideSample: Copy + Clone + Debug + Eq +
     Shr<usize, Output = Self> +
     BitOr<Self, Output = Self> +
     BitAnd<Self, Output = Self> {
+
+    /// Returns 0.
+    fn zero() -> Self;
+
+    /// Returns 1.
+    fn one() -> Self;
 
     /// The maximum value of the wide sample type.
     fn max() -> Self;
@@ -98,9 +106,21 @@ macro_rules! impl_sample {
                 if wide > $narrow::MAX as $wide { return None; }
                 Some(wide as $narrow)
             }
+
+            fn zero() -> $narrow {
+                0
+            }
         }
 
         impl WideSample for $wide {
+
+            fn zero() -> $wide {
+                0
+            }
+
+            fn one() -> $wide {
+                1
+            }
 
             fn max() -> $wide {
                 use std::$wide;
