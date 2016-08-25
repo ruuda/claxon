@@ -330,10 +330,6 @@ impl<R: io::Read> Iterator for MetadataBlockReader<R> {
     fn size_hint(&self) -> (usize, Option<usize>) {
         // When done, there will be no more blocks,
         // when not done, there will be at least one more.
-        if self.done {
-            (0, Some(0))
-        } else {
-            (1, None)
-        }
+        if self.done { (0, Some(0)) } else { (1, None) }
     }
 }

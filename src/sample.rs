@@ -27,7 +27,6 @@ use std::ops::{Add, BitAnd, BitOr, Mul, Neg, Shl, Shr, Sub};
 ///
 /// This trait should only be implemented for `i8`, `i16` and `i32`.
 pub trait Sample: Copy + Clone + Debug + Eq + Sum {
-
     /// The signed integer type that is wide enough to store differences.
     ///
     /// The difference between two values of the sample type might not fit in

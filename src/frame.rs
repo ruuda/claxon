@@ -557,7 +557,8 @@ impl<R: io::Read, Sample: sample::Sample> FrameReader<R, Sample> {
         // decoded.
         let total_samples = header.channels() as usize * header.block_size as usize;
         ensure_buffer_len!(buffer, total_samples, Sample::zero());
-        ensure_buffer_len!(self.wide_buffer, total_samples, <Sample::Wide as sample::WideSample>::zero());
+        ensure_buffer_len!(self.wide_buffer, total_samples,
+                           <Sample::Wide as sample::WideSample>::zero());
 
         // TODO: if the bps is missing from the header, we must get it from
         // the streaminfo block.

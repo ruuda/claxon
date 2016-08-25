@@ -40,7 +40,10 @@ pub trait ReadExt: io::Read {
 }
 
 #[inline]
-fn read_into_impl<R: io::Read>(input: &mut R, buf: &mut [u8], allow_eof: bool) -> io::Result<Option<()>> {
+fn read_into_impl<R: io::Read>(input: &mut R,
+                               buf: &mut [u8],
+                               allow_eof: bool)
+                               -> io::Result<Option<()>> {
     let mut n = 0;
     let mut is_first = allow_eof;
     while n < buf.len() {
@@ -49,9 +52,10 @@ fn read_into_impl<R: io::Read>(input: &mut R, buf: &mut [u8], allow_eof: bool) -
             n += progress;
         } else {
             if is_first {
-                return Ok(None)
+                return Ok(None);
             } else {
-                return Err(io::Error::new(io::ErrorKind::UnexpectedEof, "Failed to read enough bytes."))
+                return Err(io::Error::new(io::ErrorKind::UnexpectedEof,
+                                          "Failed to read enough bytes."));
             }
         }
         is_first = false;
@@ -59,7 +63,8 @@ fn read_into_impl<R: io::Read>(input: &mut R, buf: &mut [u8], allow_eof: bool) -
     Ok(Some(()))
 }
 
-impl<R> ReadExt for R where R: io::Read
+impl<R> ReadExt for R
+    where R: io::Read
 {
     fn read_into_or_eof(&mut self, buf: &mut [u8]) -> io::Result<Option<()>> {
         read_into_impl(self, buf, true)
@@ -162,11 +167,7 @@ fn shift_left(x: u8, shift: usize) -> u8 {
 
     // Rust panics when shifting by the integer width, so we have to treat
     // that case separately.
-    if shift >= 8 {
-        0
-    } else {
-        x << shift
-    }
+    if shift >= 8 { 0 } else { x << shift }
 }
 
 /// Right shift that does not panic when shifting by the integer width.
@@ -175,11 +176,7 @@ fn shift_right(x: u8, shift: usize) -> u8 {
 
     // Rust panics when shifting by the integer width, so we have to treat
     // that case separately.
-    if shift >= 8 {
-        0
-    } else {
-        x >> shift
-    }
+    if shift >= 8 { 0 } else { x >> shift }
 }
 
 /// Wraps a `Reader` to facilitate reading that is not byte-aligned.

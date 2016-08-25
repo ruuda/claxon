@@ -186,8 +186,7 @@ impl FlacReader<io::BufReader<fs::File>> {
     ///
     /// This is a convenience constructor that opens a `File`, wraps it in a
     /// `BufReader` and then constructs a `FlacReader` from it.
-    pub fn open<P: AsRef<path::Path>>(filename: P)
-                -> Result<FlacReader<io::BufReader<fs::File>>> {
+    pub fn open<P: AsRef<path::Path>>(filename: P) -> Result<FlacReader<io::BufReader<fs::File>>> {
         let file = try!(fs::File::open(filename));
         let buf_reader = io::BufReader::new(file);
         FlacReader::new(buf_reader)

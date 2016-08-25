@@ -271,11 +271,12 @@ fn decode_partitioned_rice<R: io::Read, Sample: sample::WideSample>
     }
 
     let mut start = 0;
-    for i in 0 .. n_partitions {
+    for i in 0..n_partitions {
         let partition_size = n_samples - if i == 0 { n_warm_up } else { 0 };
-        try!(decode_rice_partition(input, bps, partition_type,
-                                   &mut buffer[start ..
-                                   start + partition_size as usize]));
+        try!(decode_rice_partition(input,
+                                   bps,
+                                   partition_type,
+                                   &mut buffer[start..start + partition_size as usize]));
         start = start + partition_size as usize;
     }
 
@@ -528,7 +529,7 @@ fn predict_lpc<Sample: sample::WideSample>(coefficients: &[i16],
         // unused. This ensures that adding the delta does not overflow, if
         // the delta is also within the correct range.
         let prediction = Sample::from_i64_spare_bit(prediction)
-                             .ok_or(Error::FormatError("invalid LPC sample"));
+            .ok_or(Error::FormatError("invalid LPC sample"));
 
         // The delta is stored, so the sample is the prediction + delta.
         let delta = window[coefficients.len()];
