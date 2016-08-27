@@ -5,6 +5,7 @@ A FLAC decoding library in Rust.
 
 [![Build Status][ci-img]][ci]
 [![Crates.io version][crate-img]][crate]
+[![Documentation][docs-img]][docs]
 
 Many media players crash on corrupted input (not FLAC in particular). This is
 bad, the decoder should signal an error on invalid input, it should not crash.
@@ -24,7 +25,9 @@ to your copyright notice.
 
 [ci-img]:    https://travis-ci.org/ruuda/claxon.svg?branch=master
 [ci]:        https://travis-ci.org/ruuda/claxon
-[crate-img]: http://img.shields.io/crates/v/claxon.svg
+[crate-img]: https://img.shields.io/crates/v/claxon.svg
 [crate]:     https://crates.io/crates/claxon
+[docs-img]:  https://img.shields.io/badge/docs-online-blue.svg
+[docs]:      https://docs.rs/crate/claxon
 [apache2]:   https://www.apache.org/licenses/LICENSE-2.0
 [except]:    https://www.gnu.org/licenses/gpl-faq.html#GPLIncompatibleLibs
