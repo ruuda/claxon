@@ -1,6 +1,15 @@
 Changelog
 =========
 
+0.2.1
+-----
+
+Release highlights:
+
+- Ensures compatibility with Rust 1.13. Older versions are not supported, but
+  once Rust 1.13 becomes stable, Claxon will become usable with stable Rust.
+- The example was upgraded to Hound 2.0.0.
+
 0.2.0
 -----
 
