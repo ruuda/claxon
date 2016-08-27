@@ -30,7 +30,6 @@
 //! TODO: more examples.
 
 #![warn(missing_docs)]
-#![feature(iter_arith_traits)]
 
 use std::fs;
 use std::io;
