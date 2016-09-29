@@ -9,7 +9,7 @@ license = "Apache-2.0"
 readme = "readme.md"
 homepage = "https://github.com/ruuda/claxon#readme"
 repository = "https://github.com/ruuda/claxon"
-documentation = "https://docs.rs/claxon/0.2.1/claxon"
+documentation = "https://docs.rs/claxon"
 
 [dev-dependencies]
 

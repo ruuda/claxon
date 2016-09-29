@@ -28,6 +28,6 @@ to your copyright notice.
 [crate-img]: https://img.shields.io/crates/v/claxon.svg
 [crate]:     https://crates.io/crates/claxon
 [docs-img]:  https://img.shields.io/badge/docs-online-blue.svg
-[docs]:      https://docs.rs/crate/claxon
+[docs]:      https://docs.rs/claxon
 [apache2]:   https://www.apache.org/licenses/LICENSE-2.0
 [except]:    https://www.gnu.org/licenses/gpl-faq.html#GPLIncompatibleLibs
