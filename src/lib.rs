@@ -231,7 +231,6 @@ impl<'fr, R: 'fr + io::Read, S: sample::Sample> Iterator for FlacSamples<'fr, R,
                     }
                     Err(error) => {
                         self.has_failed = true;
-                        // block = frame::Block::empty();
                         return Some(Err(error));
                     }
                 }

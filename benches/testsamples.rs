@@ -15,10 +15,9 @@ use std::io::{Cursor, Read};
 use std::path::Path;
 use test::Bencher;
 
-fn bench_decode(path: &Path, bencher: &mut Bencher) {
+fn bench_decode_i16(path: &Path, bencher: &mut Bencher) {
     // Read the file into memory. We want to measure decode speed, not IO
-    // overhead. (There is no stable form of mmap in Rust that I know of, so
-    // we read manually.)
+    // overhead.
     let mut file = File::open(path).unwrap();
     let mut data = Vec::new();
     file.read_to_end(&mut data).unwrap();
@@ -27,59 +26,86 @@ fn bench_decode(path: &Path, bencher: &mut Bencher) {
     let mut reader = claxon::FlacReader::new(cursor).unwrap();
 
     let bps = reader.streaminfo().bits_per_sample as u64;
-    let channels = reader.streaminfo().channels as u64;
-    let bytes_per_sample = channels * (bps / 8);
+    assert!(bps < 8 * 16);
 
-    // Use the more space-efficient 16-bit integers if it is sufficient,
-    // otherwise decode into 32-bit integers, which is always sufficient.
-    // TODO: If the closure gets called more often than the number of blocks
-    // in the file, the measurement is wrong. When `blocks` implements
-    // `Iterator`, we can assume values and panic on `None`.
-    match bps {
-        n if n <= 16 => {
-            let mut blocks = reader.blocks::<i16>();
-            let mut bytes = 0u64;
-            bencher.iter(|| {
-                let block = blocks.read_next_or_eof(Vec::new()).unwrap().unwrap();
-                test::black_box(block.channel(0));
-                bytes += bytes_per_sample * block.len() as u64;
-            });
-            bencher.bytes = bytes;
+    let mut samples = reader.samples::<i16>();
+    let mut bytes = 0u64;
+    bencher.iter(|| {
+        for _ in 0..1024 {
+            let sample = samples.next().unwrap().unwrap();
+            test::black_box(sample);
         }
-        _ => {
-            let mut blocks = reader.blocks::<i32>();
-            let mut bytes = 0u64;
-            bencher.iter(|| {
-                let block = blocks.read_next_or_eof(Vec::new()).unwrap().unwrap();
-                test::black_box(block.channel(0));
-                bytes += bytes_per_sample * block.len() as u64;
-            });
-            bencher.bytes = bytes;
+        bytes += 1024 * bps / 8;
+    });
+    bencher.bytes = bytes;
+}
+
+fn bench_decode_i32(path: &Path, bencher: &mut Bencher) {
+    // This function is identical to `bench_decode_i16`, except it decodes into
+    // i32s, so it can also deal with 24-bit audio.
+    let mut file = File::open(path).unwrap();
+    let mut data = Vec::new();
+    file.read_to_end(&mut data).unwrap();
+    let cursor = Cursor::new(data);
+
+    let mut reader = claxon::FlacReader::new(cursor).unwrap();
+
+    let bps = reader.streaminfo().bits_per_sample as u64;
+    assert!(bps < 8 * 32);
+
+    let mut samples = reader.samples::<i32>();
+    let mut bytes = 0u64;
+    bencher.iter(|| {
+        for _ in 0..1024 {
+            let sample = samples.next().unwrap().unwrap();
+            test::black_box(sample);
         }
-    }
+        bytes += 1024 * bps / 8;
+    });
+    bencher.bytes = bytes;
 }
 
 #[bench]
 fn bench_p0_mono_16bit(bencher: &mut Bencher) {
-    bench_decode(Path::new("testsamples/p0.flac"), bencher);
+    bench_decode_i16(Path::new("testsamples/p0.flac"), bencher);
+}
+
+#[bench]
+fn bench_p0_mono_16bit_as_i32(bencher: &mut Bencher) {
+    bench_decode_i32(Path::new("testsamples/p0.flac"), bencher);
 }
 
 #[bench]
 fn bench_p1_stereo_24bit(bencher: &mut Bencher) {
-    bench_decode(Path::new("testsamples/p1.flac"), bencher);
+    bench_decode_i32(Path::new("testsamples/p1.flac"), bencher);
 }
 
 #[bench]
 fn bench_p2_stereo_16bit(bencher: &mut Bencher) {
-    bench_decode(Path::new("testsamples/p2.flac"), bencher);
+    bench_decode_i16(Path::new("testsamples/p2.flac"), bencher);
+}
+
+#[bench]
+fn bench_p2_stereo_16bit_as_i32(bencher: &mut Bencher) {
+    bench_decode_i32(Path::new("testsamples/p2.flac"), bencher);
 }
 
 #[bench]
 fn bench_p3_stereo_16bit(bencher: &mut Bencher) {
-    bench_decode(Path::new("testsamples/p3.flac"), bencher);
+    bench_decode_i16(Path::new("testsamples/p3.flac"), bencher);
+}
+
+#[bench]
+fn bench_p3_stereo_16bit_as_i32(bencher: &mut Bencher) {
+    bench_decode_i32(Path::new("testsamples/p3.flac"), bencher);
 }
 
 #[bench]
 fn bench_p4_stereo_16bit(bencher: &mut Bencher) {
-    bench_decode(Path::new("testsamples/p4.flac"), bencher);
+    bench_decode_i16(Path::new("testsamples/p4.flac"), bencher);
+}
+
+#[bench]
+fn bench_p4_stereo_16bit_as_i32(bencher: &mut Bencher) {
+    bench_decode_i32(Path::new("testsamples/p4.flac"), bencher);
 }
