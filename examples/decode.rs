@@ -1,5 +1,5 @@
 // Claxon -- A FLAC decoding library in Rust
-// Copyright 2015 van Asseldonk
+// Copyright 2015 Ruud van Asseldonk
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
