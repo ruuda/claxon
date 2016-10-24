@@ -44,7 +44,6 @@ mod crc;
 mod input;
 mod error;
 pub mod frame;
-pub mod sample;
 pub mod subframe;
 pub mod metadata;
 
@@ -61,13 +60,10 @@ pub struct FlacReader<R: io::Read> {
     input: R,
 }
 
-/// An iterator that yields samples of type `S` read from a `FlacReader`.
-///
-/// The type `S` must have at least as many bits as the bits per sample of the
-/// stream, otherwise every iteration will return an error.
-pub struct FlacSamples<'fr, R: 'fr + io::Read, S: sample::Sample> {
-    frame_reader: FrameReader<&'fr mut R, S>,
-    block: frame::Block<S>,
+/// An iterator that yields samples read from a `FlacReader`.
+pub struct FlacSamples<'fr, R: 'fr + io::Read> {
+    frame_reader: FrameReader<&'fr mut R>,
+    block: frame::Block,
     sample: u16,
     channel: u8,
 
@@ -146,7 +142,7 @@ impl<R: io::Read> FlacReader<R> {
     /// This is a low-level primitive that gives you control over when decoding
     /// happens. The representation of the decoded audio is somewhat specific to
     /// the FLAC format. For a higher-level interface, see `samples()`.
-    pub fn blocks<'r, S: sample::Sample>(&'r mut self) -> FrameReader<&'r mut R, S> {
+    pub fn blocks<'r>(&'r mut self) -> FrameReader<&'r mut R> {
         FrameReader::new(&mut self.input)
     }
 
@@ -160,16 +156,10 @@ impl<R: io::Read> FlacReader<R> {
     /// a stream into blocks, which have to be decoded entirely. If you drop the
     /// iterator, you lose the unread samples in that block.)
     ///
-    /// The type `S` must have at least `streaminfo().bits_per_sample` bits,
-    /// otherwise iteration will return an error. All bit depths up to 32 bits
-    /// per sample can be decoded into an `i32`, but if you know beforehand that
-    /// you will be reading a file with 16 bits per sample, you can save memory
-    /// by decoding into an `i16`.
-    ///
     /// This is a high-level interface to the decoder. The cost of retrieving
     /// the next sample can vary significantly, as sometimes a new block has to
     /// be decoded. For more control over when decoding happens, use `blocks()`.
-    pub fn samples<'r, S: sample::Sample>(&'r mut self) -> FlacSamples<'r, R, S> {
+    pub fn samples<'r>(&'r mut self) -> FlacSamples<'r, R> {
         FlacSamples {
             frame_reader: frame::FrameReader::new(&mut self.input),
             block: frame::Block::empty(),
@@ -192,10 +182,10 @@ impl FlacReader<io::BufReader<fs::File>> {
     }
 }
 
-impl<'fr, R: 'fr + io::Read, S: sample::Sample> Iterator for FlacSamples<'fr, R, S> {
-    type Item = Result<S>;
+impl<'fr, R: 'fr + io::Read> Iterator for FlacSamples<'fr, R> {
+    type Item = Result<i32>;
 
-    fn next(&mut self) -> Option<Result<S>> {
+    fn next(&mut self) -> Option<Result<i32>> {
         // If the previous read failed, end iteration.
         if self.has_failed {
             return None;

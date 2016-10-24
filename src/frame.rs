@@ -10,9 +10,8 @@
 use std::io;
 use std::iter::repeat;
 use crc::{Crc8Reader, Crc16Reader};
-use error::{Error, Result, fmt_err};
+use error::{Result, fmt_err};
 use input::{Bitstream, ReadExt};
-use sample;
 use subframe;
 
 #[derive(Clone, Copy)]
@@ -307,7 +306,7 @@ fn read_frame_header_or_eof<R: io::Read>(input: &mut R) -> Result<Option<FrameHe
 /// Converts a buffer with left samples and a side channel in-place to left ++ right.
 // TODO: This could take iterators, and decode and narrow in-place. Better yet,
 // this should produce an iterator that decodes.
-fn decode_left_side<Sample: sample::WideSample>(buffer: &mut [Sample]) -> Result<()> {
+fn decode_left_side(buffer: &mut [i64]) -> Result<()> {
 
     let block_size = buffer.len() / 2;
     for i in 0..block_size {
@@ -332,7 +331,7 @@ fn verify_decode_left_side() {
 }
 
 /// Converts a buffer with right samples and a side channel in-place to left ++ right.
-fn decode_right_side<Sample: sample::WideSample>(buffer: &mut [Sample]) -> Result<()> {
+fn decode_right_side(buffer: &mut [i64]) -> Result<()> {
 
     let block_size = buffer.len() / 2;
     for i in 0..block_size {
@@ -357,21 +356,18 @@ fn verify_decode_right_side() {
 }
 
 /// Converts a buffer with mid samples and a side channel in-place to left ++ right.
-fn decode_mid_side<Sample: sample::WideSample>(buffer: &mut [Sample]) -> Result<()> {
+fn decode_mid_side(buffer: &mut [i64]) -> Result<()> {
 
     let block_size = buffer.len() / 2;
     for i in 0..block_size {
         let mid = buffer[i];
         let side = buffer[i + block_size];
 
-        // The code below uses shifts insead of multiplication/division by two,
-        // because Rust does not infer a literal `2` to be of type `Sample`.
-
         // Double mid first, and then correct for truncated rounding that
         // will have occured if side is odd.
-        let mid = (mid << 1) | (side & Sample::one());
-        let left = (mid + side) >> 1;
-        let right = (mid - side) >> 1;
+        let mid = (mid * 2) | (side & 1);
+        let left = (mid + side) / 2;
+        let right = (mid - side) / 2;
 
         buffer[i] = left;
         buffer[block_size + i] = right;
@@ -391,7 +387,7 @@ fn verify_decode_mid_side() {
 }
 
 /// A block of raw audio samples.
-pub struct Block<Sample> {
+pub struct Block {
     /// The sample number of the first sample in the this block.
     first_sample_number: u64,
     /// The number of samples in the block.
@@ -399,11 +395,11 @@ pub struct Block<Sample> {
     /// The number of channels in the block.
     channels: u8,
     /// The decoded samples, the channels stored consecutively.
-    buffer: Vec<Sample>,
+    buffer: Vec<i32>,
 }
 
-impl<Sample: sample::Sample> Block<Sample> {
-    fn new(time: u64, bs: u16, buffer: Vec<Sample>) -> Block<Sample> {
+impl Block {
+    fn new(time: u64, bs: u16, buffer: Vec<i32>) -> Block {
         Block {
             first_sample_number: time,
             block_size: bs,
@@ -413,7 +409,7 @@ impl<Sample: sample::Sample> Block<Sample> {
     }
 
     /// Returns a block with 0 channels and 0 samples.
-    pub fn empty() -> Block<Sample> {
+    pub fn empty() -> Block {
         Block {
             first_sample_number: 0,
             block_size: 0,
@@ -445,7 +441,7 @@ impl<Sample: sample::Sample> Block<Sample> {
     /// # Panics
     ///
     /// Panics if `ch >= channels()`.
-    pub fn channel(&self, ch: u8) -> &[Sample] {
+    pub fn channel(&self, ch: u8) -> &[i32] {
         &self.buffer[ch as usize * self.block_size as usize..(ch as usize + 1) *
                                                              self.block_size as usize]
     }
@@ -459,14 +455,14 @@ impl<Sample: sample::Sample> Block<Sample> {
     ///
     /// Panics if `ch >= channels()` or if `sample >= len()` for the last
     /// channel.
-    pub fn sample(&self, ch: u8, sample: u16) -> Sample {
+    pub fn sample(&self, ch: u8, sample: u16) -> i32 {
         return self.buffer[ch as usize * self.block_size as usize + sample as usize];
     }
 
     /// Returns the underlying buffer that stores the samples in this block.
     /// This allows the buffer to be reused to decode the next frame. The
     /// capacity of the buffer may be bigger than `len()` times `channels()`.
-    pub fn into_buffer(self) -> Vec<Sample> {
+    pub fn into_buffer(self) -> Vec<i32> {
         return self.buffer;
     }
 }
@@ -489,14 +485,14 @@ fn verify_block_sample() {
 ///
 /// TODO: for now, it is assumes that the reader starts at a frame header;
 /// no searching for a sync code is performed at the moment.
-pub struct FrameReader<R: io::Read, Sample: sample::Sample> {
+pub struct FrameReader<R: io::Read> {
     input: R,
-    wide_buffer: Vec<Sample::Wide>,
+    wide_buffer: Vec<i64>,
 }
 
 /// Either a `Block` or an `Error`.
 // TODO: The option should not be part of FrameResult.
-pub type FrameResult<Sample> = Result<Option<Block<Sample>>>;
+pub type FrameResult = Result<Option<Block>>;
 
 /// A macro to expand the length of a buffer, or replace the buffer altogether,
 /// so it can hold at least `$new_len` elements. The contents of the buffer can
@@ -522,9 +518,9 @@ macro_rules! ensure_buffer_len {
     }
 }
 
-impl<R: io::Read, Sample: sample::Sample> FrameReader<R, Sample> {
+impl<R: io::Read> FrameReader<R> {
     /// Creates a new frame reader that will yield at least one element.
-    pub fn new(input: R) -> FrameReader<R, Sample> {
+    pub fn new(input: R) -> FrameReader<R> {
         // TODO: a hit for the vector size can be provided.
         FrameReader {
             input: input,
@@ -541,7 +537,7 @@ impl<R: io::Read, Sample: sample::Sample> FrameReader<R, Sample> {
     /// allocated automatically.
     ///
     /// TODO: I should really be consistent with 'read' and 'decode'.
-    pub fn read_next_or_eof(&mut self, mut buffer: Vec<Sample>) -> FrameResult<Sample> {
+    pub fn read_next_or_eof(&mut self, mut buffer: Vec<i32>) -> FrameResult {
         use std::mem::size_of;
 
         // The frame includes a CRC-16 at the end. It can be computed
@@ -558,9 +554,8 @@ impl<R: io::Read, Sample: sample::Sample> FrameReader<R, Sample> {
         // We must allocate enough space for all channels in the block to be
         // decoded.
         let total_samples = header.channels() as usize * header.block_size as usize;
-        ensure_buffer_len!(buffer, total_samples, Sample::zero());
-        ensure_buffer_len!(self.wide_buffer, total_samples,
-                           <Sample::Wide as sample::WideSample>::zero());
+        ensure_buffer_len!(buffer, total_samples, 0);
+        ensure_buffer_len!(self.wide_buffer, total_samples, 0);
 
         // TODO: if the bps is missing from the header, we must get it from
         // the streaminfo block.
@@ -568,7 +563,7 @@ impl<R: io::Read, Sample: sample::Sample> FrameReader<R, Sample> {
 
         // The sample size must be wide enough to accomodate for the bits per sample.
         // TODO: Turn this into an error instead of panic? Or is it enforced elsewhere?
-        debug_assert!(bps as usize <= size_of::<Sample>() * 8);
+        debug_assert!(bps as usize <= size_of::<i32>() * 8);
 
         // In the next part of the stream, nothing is byte-aligned any more,
         // we need a bitstream. Then we can decode subframes from the bitstream.
@@ -627,15 +622,15 @@ impl<R: io::Read, Sample: sample::Sample> FrameReader<R, Sample> {
             // Narrow down the wide samples to the requested sample type.
             // TODO: This should not verify that it fits the sample type, but that
             // it fits the requested bps.
-            // TODO: This is probably a good point for optimisation: instead of
-            // doing the check for every sample, check once that everything is
-            // in range and then iterate again to convert.
+            // TODO: Would it be possible to get rid of the wide buffer
+            // entirely?
             let n = header.block_size as usize * header.channels() as usize;
             let wide_iter = self.wide_buffer[..n].iter();
             let dest_iter = buffer[..n].iter_mut();
             for (&src, dest) in wide_iter.zip(dest_iter) {
-                let narrow = Sample::from_wide(src).ok_or(Error::TooWide);
-                *dest = try!(narrow);
+                // Narrow the wide (i64) sample to i32.
+                // It is assumed that this will fit.
+                *dest = src as i32;
             }
         }
 
