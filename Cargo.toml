@@ -14,3 +14,4 @@ documentation = "https://docs.rs/claxon"
 [dev-dependencies]
 
 hound = "2.0.0"
+time = "0.1.35"

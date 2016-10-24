@@ -428,6 +428,8 @@ impl<Sample: sample::Sample> Block<Sample> {
     }
 
     /// Returns the number of inter-channel samples in the block.
+    // TODO: This is inconsistent with the samples iterator. Len should count
+    // total samples, duration should count inter-channel samples.
     pub fn len(&self) -> u16 {
         self.block_size
     }
