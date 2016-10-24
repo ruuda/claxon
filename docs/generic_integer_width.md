@@ -3,7 +3,7 @@ Generic integer width
 
 Up to version 0.2.1, Claxon sported a `Sample` trait that allowed for generic
 decoding into either `i16` or `i32` integers. If the bit depth of the source
-file if 16 bit or less (which is extremely common, as CD audio is 16 bit),
+file is 16 bit or less (which is extremely common, as CD audio is 16 bit),
 decoding into an `i16` can save a bit of memory, and hopefully peformance.
 
 However, measurements indicated that the performance win was virtually
