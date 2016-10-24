@@ -39,6 +39,21 @@ fn decode_file_i16(data: &[u8]) {
     }
 }
 
+/// Decode a file into 16-bit integers.
+///
+/// This consumes the decoded samples into a black box.
+fn decode_file_i32(data: &[u8]) {
+    let cursor = Cursor::new(data);
+    let mut reader = FlacReader::new(cursor).unwrap();
+
+    let bps = reader.streaminfo().bits_per_sample as u64;
+    assert!(bps < 8 * 16);
+
+    for sample in reader.samples::<i32>() {
+        test::black_box(sample.unwrap());
+    }
+}
+
 fn main() {
     let bits = env::args().nth(1).expect("no bit depth given");
     let fname = env::args().nth(2).expect("no file given");
@@ -48,7 +63,7 @@ fn main() {
         // TODO: Do several passes and report timing information.
         decode_file_i16(&data);
     } else if bits == "32" {
-        // TODO
+        decode_file_i32(&data);
     } else {
         panic!("expected bit depth of 16 or 32");
     }
