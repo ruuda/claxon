@@ -35,8 +35,8 @@ fn read_file<P: AsRef<Path>>(path: P) -> Vec<u8> {
 /// mono file will have twice as many samples. Bytes refers to the number of
 /// input bytes. (TODO: Do not count header bytes there.)
 fn decode_file<S: Sample>(data: &[u8],
-                          sample_times_ns: &mut Vec<i32>)
-                          -> (i64, i64) {
+                          sample_times_ns: &mut Vec<f64>)
+                          -> (f64, f64) {
     let cursor = Cursor::new(data);
     let mut reader = FlacReader::new(cursor).unwrap();
 
@@ -56,7 +56,7 @@ fn decode_file<S: Sample>(data: &[u8],
                 let now = PreciseTime::now();
                 let duration_ns = frame_epoch.to(now).num_nanoseconds().unwrap();
                 let num_samples = block.len() as i64 * block.channels() as i64;
-                sample_times_ns.push(duration_ns as i32 / num_samples as i32);
+                sample_times_ns.push(duration_ns as f64 / num_samples as f64);
                 frame_epoch = now;
 
                 // Recycle the buffer for the next frame. There should be a
@@ -72,20 +72,21 @@ fn decode_file<S: Sample>(data: &[u8],
     }
 
     let total_duration_ns = epoch.to(PreciseTime::now()).num_nanoseconds().unwrap();
-    let ns_per_sample = total_duration_ns / num_samples;
-    let bytes_per_sec = data.len() as i64 * 1000_000_000 / total_duration_ns;
+    let ns_per_sample = total_duration_ns as f64 / num_samples as f64;
+    let bytes_per_sec = data.len() as f64 * 1000_000_000.0 / total_duration_ns as f64;
     (ns_per_sample, bytes_per_sec)
 }
 
-fn print_stats(sample_times_ns: &mut Vec<i32>, stats_pair: (i64, i64)) {
+fn print_stats(sample_times_ns: &mut Vec<f64>, stats_pair: (f64, f64)) {
     let (ns_per_sample, bytes_per_sec) = stats_pair;
-    sample_times_ns.sort();
+    sample_times_ns.sort_by(|x, y| x.partial_cmp(y).unwrap());
 
     let p10 = sample_times_ns[10 * sample_times_ns.len() / 100];
     let p50 = sample_times_ns[50 * sample_times_ns.len() / 100];
     let p90 = sample_times_ns[90 * sample_times_ns.len() / 100];
 
-    println!("{} {} {} {} {}", p10, p50, p90, ns_per_sample, bytes_per_sec);
+    println!("{:>6.2} {:>6.2} {:>6.2} {:>6.2} {:>6.2}",
+             p10, p50, p90, ns_per_sample, bytes_per_sec / 1024.0 / 1024.0);
 }
 
 fn main() {
@@ -95,16 +96,18 @@ fn main() {
     let data = read_file(fname);
     let mut sample_times_ns = Vec::new();
 
-    if bits == "16" {
-        // TODO: Do several passes and report timing information.
-        let stats_pair = decode_file::<i16>(&data, &mut sample_times_ns);
-        print_stats(&mut sample_times_ns, stats_pair);
-        sample_times_ns.clear();
-    } else if bits == "32" {
-        let stats_pair = decode_file::<i32>(&data, &mut sample_times_ns);
-        print_stats(&mut sample_times_ns, stats_pair);
-        sample_times_ns.clear();
-    } else {
-        panic!("expected bit depth of 16 or 32");
+    // Do a few runs to get more robust statistics.
+    for _ in 0..5 {
+        if bits == "16" {
+            let stats_pair = decode_file::<i16>(&data, &mut sample_times_ns);
+            print_stats(&mut sample_times_ns, stats_pair);
+            sample_times_ns.clear();
+        } else if bits == "32" {
+            let stats_pair = decode_file::<i32>(&data, &mut sample_times_ns);
+            print_stats(&mut sample_times_ns, stats_pair);
+            sample_times_ns.clear();
+        } else {
+            panic!("expected bit depth of 16 or 32");
+        }
     }
 }
