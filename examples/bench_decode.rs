@@ -9,7 +9,6 @@ extern crate claxon;
 extern crate time;
 
 use claxon::FlacReader;
-use claxon::sample::Sample;
 use std::env;
 use std::fs::File;
 use std::io::{Cursor, Read};
@@ -24,7 +23,7 @@ fn read_file<P: AsRef<Path>>(path: P) -> Vec<u8> {
     data
 }
 
-/// Decode a file into 16-bit or 32-bit integers.
+/// Decode a file into 32-bit integers.
 ///
 /// For every block decoded, appends to the vector the average time spent per
 /// sample for that block in nanoseconds.
@@ -34,9 +33,7 @@ fn read_file<P: AsRef<Path>>(path: P) -> Vec<u8> {
 /// different samples; a stereo file of the same sample rate and duration as a
 /// mono file will have twice as many samples. Bytes refers to the number of
 /// input bytes. (TODO: Do not count header bytes there.)
-fn decode_file<S: Sample>(data: &[u8],
-                          sample_times_ns: &mut Vec<f64>)
-                          -> (f64, f64) {
+fn decode_file(data: &[u8], sample_times_ns: &mut Vec<f64>) -> (f64, f64) {
     let cursor = Cursor::new(data);
     let mut reader = FlacReader::new(cursor).unwrap();
 
@@ -45,7 +42,7 @@ fn decode_file<S: Sample>(data: &[u8],
     assert!(bps < 8 * 16);
 
     let mut sample_buffer = Vec::new();
-    let mut frame_reader = reader.blocks::<S>();
+    let mut frame_reader = reader.blocks();
     let mut frame_epoch = PreciseTime::now();
     let epoch = frame_epoch;
 
@@ -90,24 +87,15 @@ fn print_stats(sample_times_ns: &mut Vec<f64>, stats_pair: (f64, f64)) {
 }
 
 fn main() {
-    let bits = env::args().nth(1).expect("no bit depth given");
-    let fname = env::args().nth(2).expect("no file given");
+    let fname = env::args().nth(1).expect("no file given");
 
     let data = read_file(fname);
     let mut sample_times_ns = Vec::new();
 
     // Do a few runs to get more robust statistics.
     for _ in 0..5 {
-        if bits == "16" {
-            let stats_pair = decode_file::<i16>(&data, &mut sample_times_ns);
-            print_stats(&mut sample_times_ns, stats_pair);
-            sample_times_ns.clear();
-        } else if bits == "32" {
-            let stats_pair = decode_file::<i32>(&data, &mut sample_times_ns);
-            print_stats(&mut sample_times_ns, stats_pair);
-            sample_times_ns.clear();
-        } else {
-            panic!("expected bit depth of 16 or 32");
-        }
+        let stats_pair = decode_file(&data, &mut sample_times_ns);
+        print_stats(&mut sample_times_ns, stats_pair);
+        sample_times_ns.clear();
     }
 }

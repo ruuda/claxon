@@ -29,7 +29,7 @@ fn main() {
     let fname_wav = fname.with_extension("wav");
     let mut output = WavWriter::create(fname_wav, spec).expect("failed to create wav file");
 
-    for maybe_sample in reader.samples::<i32>() {
+    for maybe_sample in reader.samples() {
         let sample = maybe_sample.expect("failed to read sample");
         output.write_sample(sample).expect("failed to write sample");
     }

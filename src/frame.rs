@@ -106,6 +106,7 @@ fn read_var_length_int<R: io::Read>(input: &mut R) -> Result<u64> {
 
 #[test]
 fn verify_read_var_length_int() {
+    use error::Error;
 
     let mut reader = io::Cursor::new(vec![0x24, 0xc2, 0xa2, 0xe2, 0x82, 0xac, 0xf0, 0x90, 0x8d,
                                           0x88, 0xc2, 0x00, 0x80]);
@@ -324,8 +325,8 @@ fn decode_left_side(buffer: &mut [i64]) -> Result<()> {
 
 #[test]
 fn verify_decode_left_side() {
-    let mut buffer = vec![2i16, 5, 83, 113, 127, -63, -45, -15, 7, 38, 142, 238, 0, -152, -52, -18];
-    let result = vec![2i16, 5, 83, 113, 127, -63, -45, -15, -5, -33, -59, -125, 127, 89, 7, 3];
+    let mut buffer = vec![2i64, 5, 83, 113, 127, -63, -45, -15, 7, 38, 142, 238, 0, -152, -52, -18];
+    let result = vec![2i64, 5, 83, 113, 127, -63, -45, -15, -5, -33, -59, -125, 127, 89, 7, 3];
     decode_left_side(&mut buffer).ok().unwrap();
     assert_eq!(buffer, result);
 }
@@ -349,8 +350,8 @@ fn decode_right_side(buffer: &mut [i64]) -> Result<()> {
 
 #[test]
 fn verify_decode_right_side() {
-    let mut buffer = vec![7i16, 38, 142, 238, 0, -152, -52, -18, -5, -33, -59, -125, 127, 89, 7, 3];
-    let result = vec![2i16, 5, 83, 113, 127, -63, -45, -15, -5, -33, -59, -125, 127, 89, 7, 3];
+    let mut buffer = vec![7i64, 38, 142, 238, 0, -152, -52, -18, -5, -33, -59, -125, 127, 89, 7, 3];
+    let result = vec![2i64, 5, 83, 113, 127, -63, -45, -15, -5, -33, -59, -125, 127, 89, 7, 3];
     decode_right_side(&mut buffer).expect("decoding is wrong");
     assert_eq!(buffer, result);
 }
@@ -378,9 +379,9 @@ fn decode_mid_side(buffer: &mut [i64]) -> Result<()> {
 
 #[test]
 fn verify_decode_mid_side() {
-    let mut buffer = vec!(-2i16, -14,  12,   -6, 127,   13, -19,  -6,
+    let mut buffer = vec!(-2i64, -14,  12,   -6, 127,   13, -19,  -6,
                               7,  38, 142,  238,   0, -152, -52, -18);
-    let result =      vec!(2i16,   5,  83,  113, 127,  -63, -45, -15,
+    let result =      vec!(2i64,   5,  83,  113, 127,  -63, -45, -15,
                              -5, -33, -59, -125, 127,   89,   7,   3);
     decode_mid_side(&mut buffer).expect("decoding is wrong");
     assert_eq!(buffer, result);
@@ -473,7 +474,7 @@ fn verify_block_sample() {
         first_sample_number: 0,
         block_size: 5,
         channels: 3,
-        buffer: vec![2i8, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47],
+        buffer: vec![2i32, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47],
     };
 
     assert_eq!(block.sample(0, 2), 5);

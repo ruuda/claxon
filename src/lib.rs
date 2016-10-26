@@ -19,7 +19,7 @@
 //! let mut reader = claxon::FlacReader::open("testsamples/pop.flac").unwrap();
 //! let mut sqr_sum = 0.0;
 //! let mut count = 0;
-//! for sample in reader.samples::<i16>() {
+//! for sample in reader.samples() {
 //!     let s = sample.unwrap() as f64;
 //!     sqr_sum += s * s;
 //!     count += 1;

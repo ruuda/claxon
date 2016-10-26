@@ -112,7 +112,7 @@ fn compare_decoded_stream(fname: &path::Path) {
 
         let samples = try_flac_reader.streaminfo().samples.unwrap();
         let n_channels = try_flac_reader.streaminfo().channels;
-        let mut blocks = try_flac_reader.blocks::<i32>();
+        let mut blocks = try_flac_reader.blocks();
         let mut sample = 0u64;
         let mut b = 0u64;
         let mut buffer = Vec::new();
