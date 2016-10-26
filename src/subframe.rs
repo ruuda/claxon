@@ -186,10 +186,10 @@ pub fn decode<R: io::Read>(input: &mut Bitstream<R>,
                            bps: u8,
                            buffer: &mut [i64])
                            -> Result<()> {
-    // The sample type should be wide enough to accomodate for all bits of the
-    // stream, but this can be verified at a higher level than here. Still, it
-    // is a good idea to make the assumption explicit. Due to prediction delta,
-    // it must be at least one bit wider than the desired bits per sample.
+    // The sample type i64 should be wide enough to accomodate for all bits of
+    // the stream, but this can be verified at a higher level than here. Still,
+    // it is a good idea to make the assumption explicit. Due to prediction
+    // delta it must be at least one bit wider than the desired bits per sample.
     debug_assert!(64 > bps);
 
     let header = try!(read_subframe_header(input));
@@ -306,10 +306,10 @@ fn decode_rice_partition<R: io::Read>(input: &mut Bitstream<R>,
         let max_q = max_sample >> rice_param as usize;
 
         // TODO: It is possible for the rice_param to be larger than the
-        // sample width, which would be invalid. Check for that.
-        // So instead of using `Sample::max`, the important thing is that the
-        // decoded value cannot require more bits than bps + 1, because the
-        // prediction delta adds at most one bit.
+        // sample width, which would be invalid. Check for that. So instead of
+        // using `i64::MAX`, the important thing is that the decoded value
+        // cannot require more bits than bps + 1, because the prediction delta
+        // adds at most one bit.
 
         for sample in buffer.iter_mut() {
             // First part of the sample is the quotient, unary encoded.
@@ -330,6 +330,7 @@ fn decode_rice_partition<R: io::Read>(input: &mut Bitstream<R>,
             // simplicity is more important.
             let r = try!(input.read_leq_u32(rice_param)) as i64;
             *sample = rice_to_signed((q << rice_param as usize) | r);
+            // TODO: Verify that r is in range?
         }
     }
 
@@ -357,18 +358,15 @@ fn decode_verbatim<R: io::Read>(input: &mut Bitstream<R>,
 
     // This function must not be called for a sample wider than the sample type.
     // This has been verified at an earlier stage, but it is good to state the
-    // assumption explicitly.
-    debug_assert!(64 >= bps);
+    // assumption explicitly. FLAC supports up to 32-bit samples, so the
+    // mid/side delta would require 33 bits per sample. But that is not subset
+    // FLAC, and the reference decoder does not support it either.
+    // TODO: When this is assumed, it is possible to decode into the buffer
+    // immediately, there is no need for i64 samples.
+    debug_assert!(bps <= 32);
 
     // A verbatim block stores samples without encoding whatsoever.
     for s in buffer {
-        // It has been verified before that the Sample type is wide enough for
-        // the bits per sample. FLAC does not support samples wider than 32
-        // bits, so `read_leq_u32` suffices.
-        // TODO: Actually, no. FLAC supports 32-bit samples, so the mid/side
-        // delta would require 33 bits. But that is not subset FLAC, and the
-        // reference decoder does not support it either. The best thing to do,
-        // I think, would be to just not support sample widths > 31.
         let sample_u32 = try!(input.read_leq_u32(bps));
         *s = extend_sign_u32(sample_u32, bps) as i64;
     }
@@ -396,7 +394,7 @@ fn predict_fixed(order: u8, buffer: &mut [i64]) -> Result<()> {
     // Multiplying samples with at most 6 adds 3 bits. Then summing at most 5
     // of those values again adds at most 3 bits, so a sample type that is 6
     // bits wider than bps should suffice. Note that although this means that
-    // `Sample` does not overflow when the starting sample fitted in <bps + 1>
+    // i64 does not overflow when the starting sample fitted in <bps + 1>
     // bits, this does not guarantee that the value will fit in <bps + 1> bits
     // after prediction, which should be the case for valid FLAC streams.
 
@@ -416,7 +414,7 @@ fn predict_fixed(order: u8, buffer: &mut [i64]) -> Result<()> {
         // Manually do the windowing, because .windows() returns immutable slices.
         let window = &mut buffer[i..i + window_size];
 
-        // The #coefficcients elements of the window store already decoded
+        // The #coefficients elements of the window store already decoded
         // samples, the last element of the window is the delta. Therefore,
         // predict based on the first #coefficients samples.
         let prediction = coefficients.iter()
@@ -440,15 +438,14 @@ fn predict_fixed(order: u8, buffer: &mut [i64]) -> Result<()> {
 #[test]
 fn verify_predict_fixed() {
     // The following data is from an actual FLAC stream and has been verified
-    // against the reference decoder. The data is from a 16-bit stream, so the
-    // wide sample type is `i32`.
+    // against the reference decoder. The data is from a 16-bit stream.
     let mut buffer = [-729, -722, -667, -19, -16,  17, -23, -7,
                         16,  -16,   -5,   3,  -8, -13, -15, -1];
     assert!(predict_fixed(3, &mut buffer).is_ok());
     assert_eq!(&buffer, &[-729, -722, -667, -583, -486, -359, -225, -91,
                             59,  209,  354,  497,  630,  740,  812, 845]);
 
-    // The following data causes overflow when not handled with care.
+    // The following data causes overflow of i32 when not handled with care.
     let mut buffer = [21877, 27482, -6513];
     assert!(predict_fixed(2, &mut buffer).is_ok());
     assert_eq!(&buffer, &[21877, 27482, 26574]);
@@ -495,7 +492,7 @@ fn predict_lpc(coefficients: &[i16],
         // Manually do the windowing, because .windows() returns immutable slices.
         let window = &mut buffer[i..i + window_size];
 
-        // The #coefficcients elements of the window store already decoded
+        // The #coefficients elements of the window store already decoded
         // samples, the last element of the window is the delta. Therefore,
         // predict based on the first #coefficients samples.
         let prediction = coefficients.iter()
@@ -506,6 +503,9 @@ fn predict_lpc(coefficients: &[i16],
         // The result should fit in an i64 again, even with one bit unused. This
         // ensures that adding the delta does not overflow, if the delta is also
         // within the correct range.
+        // TODO: Do we have to do this check every time? Or can we just assume
+        // that the values are within range, because valid FLAC files will never
+        // violate these checks.
         if (prediction < (i64::MIN >> 1)) || (prediction > (i64::MAX >> 1)) {
             return Err(Error::FormatError("invalid LPC sample"));
         }
@@ -521,8 +521,7 @@ fn predict_lpc(coefficients: &[i16],
 #[test]
 fn verify_predict_lpc() {
     // The following data is from an actual FLAC stream and has been verified
-    // against the reference decoder. The data is from a 16-bit stream, so the
-    // wide sample type is `i32`.
+    // against the reference decoder. The data is from a 16-bit stream.
     let coefficients = [-75, 166,  121, -269, -75, -399, 1042];
     let mut buffer = [-796, -547, -285,  -32, 199,  443,  670, -2,
                        -23,   14,    6,    3,  -4,   12,   -2, 10];

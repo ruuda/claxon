@@ -7,8 +7,10 @@
 
 //! The `frame` module deals with the frames that make up a FLAC stream.
 
+use std::i32;
 use std::io;
 use std::iter::repeat;
+
 use crc::{Crc8Reader, Crc16Reader};
 use error::{Result, fmt_err};
 use input::{Bitstream, ReadExt};
@@ -110,13 +112,16 @@ fn verify_read_var_length_int() {
 
     let mut reader = io::Cursor::new(vec![0x24, 0xc2, 0xa2, 0xe2, 0x82, 0xac, 0xf0, 0x90, 0x8d,
                                           0x88, 0xc2, 0x00, 0x80]);
+
     assert_eq!(read_var_length_int(&mut reader).unwrap(), 0x24);
     assert_eq!(read_var_length_int(&mut reader).unwrap(), 0xa2);
     assert_eq!(read_var_length_int(&mut reader).unwrap(), 0x20ac);
     assert_eq!(read_var_length_int(&mut reader).unwrap(), 0x010348);
+
     // Two-byte integer with invalid continuation byte should fail.
     assert_eq!(read_var_length_int(&mut reader).err().unwrap(),
                Error::FormatError("invalid variable-length integer"));
+
     // Continuation byte can never be the first byte.
     assert_eq!(read_var_length_int(&mut reader).err().unwrap(),
                Error::FormatError("invalid variable-length integer"));
@@ -325,8 +330,8 @@ fn decode_left_side(buffer: &mut [i64]) -> Result<()> {
 
 #[test]
 fn verify_decode_left_side() {
-    let mut buffer = vec![2i64, 5, 83, 113, 127, -63, -45, -15, 7, 38, 142, 238, 0, -152, -52, -18];
-    let result = vec![2i64, 5, 83, 113, 127, -63, -45, -15, -5, -33, -59, -125, 127, 89, 7, 3];
+    let mut buffer = vec![2, 5, 83, 113, 127, -63, -45, -15, 7, 38, 142, 238, 0, -152, -52, -18];
+    let result = vec![2, 5, 83, 113, 127, -63, -45, -15, -5, -33, -59, -125, 127, 89, 7, 3];
     decode_left_side(&mut buffer).ok().unwrap();
     assert_eq!(buffer, result);
 }
@@ -350,8 +355,8 @@ fn decode_right_side(buffer: &mut [i64]) -> Result<()> {
 
 #[test]
 fn verify_decode_right_side() {
-    let mut buffer = vec![7i64, 38, 142, 238, 0, -152, -52, -18, -5, -33, -59, -125, 127, 89, 7, 3];
-    let result = vec![2i64, 5, 83, 113, 127, -63, -45, -15, -5, -33, -59, -125, 127, 89, 7, 3];
+    let mut buffer = vec![7, 38, 142, 238, 0, -152, -52, -18, -5, -33, -59, -125, 127, 89, 7, 3];
+    let result = vec![2, 5, 83, 113, 127, -63, -45, -15, -5, -33, -59, -125, 127, 89, 7, 3];
     decode_right_side(&mut buffer).expect("decoding is wrong");
     assert_eq!(buffer, result);
 }
@@ -379,10 +384,10 @@ fn decode_mid_side(buffer: &mut [i64]) -> Result<()> {
 
 #[test]
 fn verify_decode_mid_side() {
-    let mut buffer = vec!(-2i64, -14,  12,   -6, 127,   13, -19,  -6,
-                              7,  38, 142,  238,   0, -152, -52, -18);
-    let result =      vec!(2i64,   5,  83,  113, 127,  -63, -45, -15,
-                             -5, -33, -59, -125, 127,   89,   7,   3);
+    let mut buffer = vec!(-2, -14,  12,   -6, 127,   13, -19,  -6,
+                           7,  38, 142,  238,   0, -152, -52, -18);
+    let result =      vec!(2,   5,  83,  113, 127,  -63, -45, -15,
+                          -5, -33, -59, -125, 127,   89,   7,   3);
     decode_mid_side(&mut buffer).expect("decoding is wrong");
     assert_eq!(buffer, result);
 }
@@ -474,7 +479,7 @@ fn verify_block_sample() {
         first_sample_number: 0,
         block_size: 5,
         channels: 3,
-        buffer: vec![2i32, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47],
+        buffer: vec![2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47],
     };
 
     assert_eq!(block.sample(0, 2), 5);
@@ -529,7 +534,7 @@ impl<R: io::Read> FrameReader<R> {
         }
     }
 
-    /// Tries to decode the next frame.
+    /// Decodes the next frame or returns an error if the data was invalid.
     ///
     /// The buffer is moved into the returned block, so that the same buffer may
     /// be reused to decode multiple blocks, avoiding a heap allocation every
@@ -539,8 +544,6 @@ impl<R: io::Read> FrameReader<R> {
     ///
     /// TODO: I should really be consistent with 'read' and 'decode'.
     pub fn read_next_or_eof(&mut self, mut buffer: Vec<i32>) -> FrameResult {
-        use std::mem::size_of;
-
         // The frame includes a CRC-16 at the end. It can be computed
         // automatically while reading, by wrapping the input reader in a reader
         // that computes the CRC. If the stream ended before the the frame
@@ -562,9 +565,10 @@ impl<R: io::Read> FrameReader<R> {
         // the streaminfo block.
         let bps = header.bits_per_sample.unwrap();
 
-        // The sample size must be wide enough to accomodate for the bits per sample.
-        // TODO: Turn this into an error instead of panic? Or is it enforced elsewhere?
-        debug_assert!(bps as usize <= size_of::<i32>() * 8);
+        // The number of bits per sample must not exceed 32, for we decode into
+        // an i32. TODO: Turn this into an error instead of panic? Or is it
+        // enforced elsewhere?
+        debug_assert!(bps as usize <= 32);
 
         // In the next part of the stream, nothing is byte-aligned any more,
         // we need a bitstream. Then we can decode subframes from the bitstream.
@@ -620,17 +624,23 @@ impl<R: io::Read> FrameReader<R> {
         }
 
         {
-            // Narrow down the wide samples to the requested sample type.
-            // TODO: This should not verify that it fits the sample type, but that
-            // it fits the requested bps.
+            // Narrow down the wide samples i32 samples.
             // TODO: Would it be possible to get rid of the wide buffer
-            // entirely?
+            // entirely in some cases?
             let n = header.block_size as usize * header.channels() as usize;
             let wide_iter = self.wide_buffer[..n].iter();
             let dest_iter = buffer[..n].iter_mut();
             for (&src, dest) in wide_iter.zip(dest_iter) {
-                // Narrow the wide (i64) sample to i32.
-                // It is assumed that this will fit.
+                // Narrow the wide (i64) sample to i32. For a valid FLAC file
+                // this will always fit. If it does not, then that is more
+                // likely due to a programming error than due to an invalid
+                // file, so use a debug assertion rather than a (release)
+                // runtime check. Even if it is possible for a corrupt file to
+                // cause a number out of bounds here, and that was not caught by
+                // checksum verification, then it still does not crash the
+                // decoder, it only causes incorrect samples.
+                debug_assert!(src >= i32::MIN as i64);
+                debug_assert!(src <= i32::MAX as i64);
                 *dest = src as i32;
             }
         }
