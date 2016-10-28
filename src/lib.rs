@@ -168,6 +168,11 @@ impl<R: io::Read> FlacReader<R> {
             has_failed: false,
         }
     }
+
+    /// Destroys the FLAC reader and returns the underlying reader.
+    pub fn into_inner(self) -> R {
+        self.input
+    }
 }
 
 impl FlacReader<io::BufReader<fs::File>> {
