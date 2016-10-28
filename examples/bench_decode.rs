@@ -34,6 +34,16 @@ fn read_file<P: AsRef<Path>>(path: P) -> Vec<u8> {
 /// mono file will have twice as many samples. Bytes refers to the number of
 /// input bytes. (TODO: Do not count header bytes there.)
 fn decode_file(data: &[u8], sample_times_ns: &mut Vec<f64>) -> (f64, f64) {
+    // To get the real number of data bytes (excluding metadata -- which can be
+    // quite big due to album art), construct a new reader around a cursor, but
+    // extract the cursor immediately afterwards. This will read the metadata
+    // but not yet any audio data. The position of the cursor is then the amount
+    // of metadata bytes.
+    let data_bytes = data.len() - FlacReader::new(Cursor::new(data))
+        .unwrap()
+        .into_inner()
+        .position() as usize;
+
     let cursor = Cursor::new(data);
     let mut reader = FlacReader::new(cursor).unwrap();
 
@@ -70,7 +80,7 @@ fn decode_file(data: &[u8], sample_times_ns: &mut Vec<f64>) -> (f64, f64) {
 
     let total_duration_ns = epoch.to(PreciseTime::now()).num_nanoseconds().unwrap();
     let ns_per_sample = total_duration_ns as f64 / num_samples as f64;
-    let bytes_per_sec = data.len() as f64 * 1000_000_000.0 / total_duration_ns as f64;
+    let bytes_per_sec = data_bytes as f64 * 1000_000_000.0 / total_duration_ns as f64;
     (ns_per_sample, bytes_per_sec)
 }
 
