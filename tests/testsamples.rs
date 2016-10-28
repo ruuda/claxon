@@ -10,9 +10,9 @@ extern crate hound;
 
 use std::fs;
 use std::io;
-use std::path;
+use std::path::Path;
 
-fn run_metaflac(fname: &path::Path) -> String {
+fn run_metaflac<P: AsRef<Path>>(fname: P) -> String {
     use std::process::Command;
 
     // Run metaflac on the specified file and print all streaminfo data.
@@ -26,20 +26,20 @@ fn run_metaflac(fname: &path::Path) -> String {
                      .arg("--show-bps")
                      .arg("--show-total-samples")
                      .arg("--show-md5sum")
-                     .arg(fname.to_str().expect("unsupported filename"))
+                     .arg(fname.as_ref().to_str().expect("unsupported filename"))
                      .output()
                      .expect("failed to run metaflac");
     String::from_utf8(output.stdout).expect("metaflac wrote invalid UTF-8")
 }
 
-fn decode_file(fname: &path::Path) {
+fn decode_file<P: AsRef<Path>>(fname: P) {
     use std::process::Command;
 
     // Run the the reference flac decoder on the file.
     let success = Command::new("flac")
                       .arg("--decode")
                       .arg("--silent")
-                      .arg(fname.to_str().expect("unsupported filename"))
+                      .arg(fname.as_ref().to_str().expect("unsupported filename"))
                       .status()
                       .expect("failed to run flac")
                       .success();
@@ -51,7 +51,7 @@ fn print_hex(seq: &[u8]) -> String {
     vec.concat()
 }
 
-fn read_streaminfo(fname: &path::Path) -> String {
+fn read_streaminfo<P: AsRef<Path>>(fname: P) -> String {
     // Use a buffered reader, this speeds up the test by 120%.
     let file = fs::File::open(fname).unwrap();
     let reader = io::BufReader::new(file);
@@ -71,9 +71,9 @@ fn read_streaminfo(fname: &path::Path) -> String {
             print_hex(&streaminfo.md5sum)) // TODO implement LowerHex for &[u8] and submit a PR.
 }
 
-fn compare_metaflac(fname: &path::Path) {
-    let metaflac = run_metaflac(fname);
-    let streaminfo = read_streaminfo(fname);
+fn compare_metaflac<P: AsRef<Path>>(fname: P) {
+    let metaflac = run_metaflac(&fname);
+    let streaminfo = read_streaminfo(&fname);
     let mut mf_lines = metaflac.lines();
     let mut si_lines = streaminfo.lines();
     while let (Some(mf), Some(si)) = (mf_lines.next(), si_lines.next()) {
@@ -85,15 +85,15 @@ fn compare_metaflac(fname: &path::Path) {
     }
 }
 
-fn compare_decoded_stream(fname: &path::Path) {
-    let ref_fname = fname.with_extension("wav");
+fn compare_decoded_stream<P: AsRef<Path>>(fname: P) {
+    let ref_fname = fname.as_ref().with_extension("wav");
     if !ref_fname.exists() {
         // TODO: actually, we might only want to run the test for files that
         // do exist already. It is fine to run streaminfo or decode-only tests
         // on thousands of files, but decoding thousands of files to wav before
         // running the tests will take a lot of space. For now, while the
         // number of samples is closer to 10 than to 100, this is fine.
-        decode_file(fname);
+        decode_file(&fname);
     }
 
     // If the reference file does exist after decoding, we can compare it to
@@ -153,50 +153,75 @@ fn compare_decoded_stream(fname: &path::Path) {
 
 #[test]
 fn verify_streaminfo_p0() {
-    compare_metaflac(path::Path::new("testsamples/p0.flac"));
+    compare_metaflac("testsamples/p0.flac");
 }
 
 #[test]
 fn verify_streaminfo_p1() {
-    compare_metaflac(path::Path::new("testsamples/p1.flac"));
+    compare_metaflac("testsamples/p1.flac");
 }
 
 #[test]
 fn verify_streaminfo_p2() {
-    compare_metaflac(path::Path::new("testsamples/p2.flac"));
+    compare_metaflac("testsamples/p2.flac");
 }
 
 #[test]
 fn verify_streaminfo_p3() {
-    compare_metaflac(path::Path::new("testsamples/p3.flac"));
+    compare_metaflac("testsamples/p3.flac");
 }
 
 #[test]
 fn verify_streaminfo_p4() {
-    compare_metaflac(path::Path::new("testsamples/p4.flac"));
+    compare_metaflac("testsamples/p4.flac");
 }
 
 #[test]
 fn verify_decoded_stream_p0() {
-    compare_decoded_stream(path::Path::new("testsamples/p0.flac"));
+    compare_decoded_stream("testsamples/p0.flac");
 }
 
 #[test]
 fn verify_decoded_stream_p1() {
-    compare_decoded_stream(path::Path::new("testsamples/p1.flac"));
+    compare_decoded_stream("testsamples/p1.flac");
 }
 
 #[test]
 fn verify_decoded_stream_p2() {
-    compare_decoded_stream(path::Path::new("testsamples/p2.flac"));
+    compare_decoded_stream("testsamples/p2.flac");
 }
 
 #[test]
 fn verify_decoded_stream_p3() {
-    compare_decoded_stream(path::Path::new("testsamples/p3.flac"));
+    compare_decoded_stream("testsamples/p3.flac");
 }
 
 #[test]
 fn verify_decoded_stream_p4() {
-    compare_decoded_stream(path::Path::new("testsamples/p4.flac"));
+    compare_decoded_stream("testsamples/p4.flac");
+}
+
+#[test]
+fn verify_decoded_stream_b0() {
+    compare_decoded_stream("testsamples/b0_daft_punk_one_more_time.flac");
+}
+
+#[test]
+fn verify_decoded_stream_b1() {
+    compare_decoded_stream("testsamples/b1_deadmau5_i_remember.flac");
+}
+
+#[test]
+fn verify_decoded_stream_b2() {
+    compare_decoded_stream("testsamples/b2_massive_attack_unfinished_sympathy.flac");
+}
+
+#[test]
+fn verify_decoded_stream_b3() {
+    compare_decoded_stream("testsamples/b3_muse_starlight.flac");
+}
+
+#[test]
+fn verify_decoded_stream_b4() {
+    compare_decoded_stream("testsamples/b4_u2_sunday_bloody_sunday.flac");
 }
