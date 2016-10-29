@@ -210,6 +210,7 @@ impl<R: io::Read> Bitstream<R> {
     }
 
     /// Reads at most eight bits.
+    #[inline(always)]
     pub fn read_leq_u8(&mut self, bits: u32) -> io::Result<u8> {
         // Of course we can read no more than 8 bits, but we do not want the
         // performance overhead of the assertion, so only do it in debug mode.
@@ -256,6 +257,7 @@ impl<R: io::Read> Bitstream<R> {
     }
 
     /// Reads at most 16 bits.
+    #[inline(always)]
     pub fn read_leq_u16(&mut self, bits: u32) -> io::Result<u16> {
         // As with read_leq_u8, this only makes sense if we read <= 16 bits.
         debug_assert!(bits <= 16);
@@ -275,6 +277,7 @@ impl<R: io::Read> Bitstream<R> {
     }
 
     /// Reads at most 32 bits.
+    #[inline(always)]
     pub fn read_leq_u32(&mut self, bits: u32) -> io::Result<u32> {
         // As with read_leq_u8, this only makes sense if we read <= 32 bits.
         debug_assert!(bits <= 32);
