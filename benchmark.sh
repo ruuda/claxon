@@ -17,8 +17,8 @@ if ! grep -q "performance" /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor
   echo performance | sudo tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor > /dev/null
 fi
 
-# Optimize for Skylake CPUs specifically.
-export RUSTFLAGS="-C target-cpu=skylake"
+# Optimize for Skylake CPUs specifically, and include debugging symbols.
+export RUSTFLAGS="-C target-cpu=skylake -g"
 
 # Compile the benchmarking program.
 cargo build --verbose --release --example bench_decode
@@ -39,3 +39,6 @@ taskset -c 1 target/release/examples/bench_decode testsamples/b3_muse_starlight.
 
 echo "Benchmarking sample file 4 ..."
 taskset -c 1 target/release/examples/bench_decode testsamples/b4_u2_sunday_bloody_sunday.flac > "${fname}_b4.dat"
+
+# Merge the output files.
+cat "${fname}_b*.dat" > "${fname}_all.dat"
