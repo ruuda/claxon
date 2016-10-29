@@ -241,6 +241,7 @@ impl<R: io::Read> Bitstream<R> {
     ///
     /// Because the reader buffers a byte internally, reading unary can be done
     /// more efficiently than by just reading bit by bit.
+    #[inline(always)]
     pub fn read_unary(&mut self) -> io::Result<u32> {
         // Start initially with the number of zeros that are in the buffer byte
         // already (counting from the most significant bit).
