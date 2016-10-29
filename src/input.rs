@@ -168,7 +168,7 @@ fn shift_left(x: u8, shift: u32) -> u8 {
 
     // Rust panics when shifting by the integer width, so we have to treat
     // that case separately.
-    if shift >= 8 { 0 } else { x.wrapping_shl(shift as u32) }
+    if shift >= 8 { 0 } else { x << shift }
 }
 
 /// Right shift that does not panic when shifting by the integer width.
@@ -178,7 +178,7 @@ fn shift_right(x: u8, shift: u32) -> u8 {
 
     // Rust panics when shifting by the integer width, so we have to treat
     // that case separately.
-    if shift >= 8 { 0 } else { x.wrapping_shr(shift as u32) }
+    if shift >= 8 { 0 } else { x >> shift }
 }
 
 /// Wraps a `Reader` to facilitate reading that is not byte-aligned.
@@ -249,6 +249,7 @@ impl<R: io::Read> Bitstream<R> {
 
         // If the number of zeros plus the one following it was not more than
         // the bytes left, then there is no need to look further.
+        // TODO: Likely hint for the optimizer?
         if n < self.bits_left {
             // Note: this shift never shifts by more than 7 places, because
             // bits_left is always at most 7 in between read calls, and the
@@ -299,7 +300,7 @@ impl<R: io::Read> Bitstream<R> {
             // Those start at the most significant bit, so we need to shift so
             // that it does not overlap with what we have already.
             let lsb = (self.data & Bitstream::<R>::mask_u8(bits - self.bits_left))
-                .wrapping_shr(self.bits_left);
+                >> self.bits_left;
 
             // Shift out the bits that we have consumed.
             self.data = shift_left(self.data, bits - self.bits_left);
@@ -310,7 +311,7 @@ impl<R: io::Read> Bitstream<R> {
             let result = self.data & Bitstream::<R>::mask_u8(bits);
 
             // Shift out the bits that we have consumed.
-            self.data = self.data.wrapping_shl(bits);
+            self.data = self.data << bits;
             self.bits_left = self.bits_left - bits;
 
             result
@@ -343,7 +344,7 @@ impl<R: io::Read> Bitstream<R> {
             // First read the 8 most significant bits, then read what is left.
             let msb = try!(self.read_leq_u8(8)) as u16;
             let lsb = try!(self.read_leq_u8(bits - 8)) as u16;
-            Ok(msb.wrapping_shl(bits - 8) | lsb)
+            Ok((msb << (bits - 8)) | lsb)
         }
     }
 
@@ -363,7 +364,7 @@ impl<R: io::Read> Bitstream<R> {
             // First read the 16 most significant bits, then read what is left.
             let msb = try!(self.read_leq_u16(16)) as u32;
             let lsb = try!(self.read_leq_u16(bits - 16)) as u32;
-            Ok(msb.wrapping_shl(bits - 16) | lsb)
+            Ok((msb << (bits - 16)) | lsb)
         }
     }
 }
