@@ -163,7 +163,7 @@ fn verify_read_be_u32() {
 
 /// Left shift that does not panic when shifting by the integer width.
 #[inline(always)]
-fn shift_left(x: u8, shift: u8) -> u8 {
+fn shift_left(x: u8, shift: u32) -> u8 {
     debug_assert!(shift <= 8);
 
     // Rust panics when shifting by the integer width, so we have to treat
@@ -173,7 +173,7 @@ fn shift_left(x: u8, shift: u8) -> u8 {
 
 /// Right shift that does not panic when shifting by the integer width.
 #[inline(always)]
-fn shift_right(x: u8, shift: u8) -> u8 {
+fn shift_right(x: u8, shift: u32) -> u8 {
     debug_assert!(shift <= 8);
 
     // Rust panics when shifting by the integer width, so we have to treat
@@ -188,7 +188,7 @@ pub struct Bitstream<R: io::Read> {
     /// Data read from the reader, but not yet fully consumed.
     data: u8,
     /// The number of bits of `data` that have not been consumed.
-    bits_left: u8,
+    bits_left: u32,
 }
 
 impl<R: io::Read> Bitstream<R> {
@@ -202,14 +202,15 @@ impl<R: io::Read> Bitstream<R> {
     }
 
     /// Generates a bitmask with 1s in the `bits` most significant bits.
-    fn mask_u8(bits: u8) -> u8 {
+    #[inline(always)]
+    fn mask_u8(bits: u32) -> u8 {
         debug_assert!(bits <= 8);
 
         shift_left(0xff, 8 - bits)
     }
 
     /// Reads at most eight bits.
-    pub fn read_leq_u8(&mut self, bits: u8) -> io::Result<u8> {
+    pub fn read_leq_u8(&mut self, bits: u32) -> io::Result<u8> {
         // Of course we can read no more than 8 bits, but we do not want the
         // performance overhead of the assertion, so only do it in debug mode.
         debug_assert!(bits <= 8);
@@ -225,8 +226,8 @@ impl<R: io::Read> Bitstream<R> {
             // From the next byte, we take the additional bits that we need.
             // Those start at the most significant bit, so we need to shift so
             // that it does not overlap with what we have already.
-            let lsb = (self.data & Bitstream::<R>::mask_u8(bits - self.bits_left)) >>
-                      self.bits_left as usize;
+            let lsb = (self.data & Bitstream::<R>::mask_u8(bits - self.bits_left))
+                .wrapping_shr(self.bits_left);
 
             // Shift out the bits that we have consumed.
             self.data = shift_left(self.data, bits - self.bits_left);
@@ -237,7 +238,7 @@ impl<R: io::Read> Bitstream<R> {
             let result = self.data & Bitstream::<R>::mask_u8(bits);
 
             // Shift out the bits that we have consumed.
-            self.data = self.data << bits as usize;
+            self.data = self.data.wrapping_shl(bits);
             self.bits_left = self.bits_left - bits;
 
             result
@@ -255,7 +256,7 @@ impl<R: io::Read> Bitstream<R> {
     }
 
     /// Reads at most 16 bits.
-    pub fn read_leq_u16(&mut self, bits: u8) -> io::Result<u16> {
+    pub fn read_leq_u16(&mut self, bits: u32) -> io::Result<u16> {
         // As with read_leq_u8, this only makes sense if we read <= 16 bits.
         debug_assert!(bits <= 16);
 
@@ -269,12 +270,12 @@ impl<R: io::Read> Bitstream<R> {
             // First read the 8 most significant bits, then read what is left.
             let msb = try!(self.read_leq_u8(8)) as u16;
             let lsb = try!(self.read_leq_u8(bits - 8)) as u16;
-            Ok((msb << (bits - 8) as usize) | lsb)
+            Ok(msb.wrapping_shl(bits - 8) | lsb)
         }
     }
 
     /// Reads at most 32 bits.
-    pub fn read_leq_u32(&mut self, bits: u8) -> io::Result<u32> {
+    pub fn read_leq_u32(&mut self, bits: u32) -> io::Result<u32> {
         // As with read_leq_u8, this only makes sense if we read <= 32 bits.
         debug_assert!(bits <= 32);
 
@@ -288,7 +289,7 @@ impl<R: io::Read> Bitstream<R> {
             // First read the 16 most significant bits, then read what is left.
             let msb = try!(self.read_leq_u16(16)) as u32;
             let lsb = try!(self.read_leq_u16(bits - 16)) as u32;
-            Ok((msb << (bits - 16) as usize) | lsb)
+            Ok(msb.wrapping_shl(bits - 16) | lsb)
         }
     }
 }

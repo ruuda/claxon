@@ -23,7 +23,7 @@ enum SubframeType {
 #[derive(Clone, Copy)]
 struct SubframeHeader {
     sf_type: SubframeType,
-    wasted_bits_per_sample: u8,
+    wasted_bits_per_sample: u32,
 }
 
 fn read_subframe_header<R: io::Read>(input: &mut Bitstream<R>) -> Result<SubframeHeader> {
@@ -89,7 +89,7 @@ fn read_subframe_header<R: io::Read>(input: &mut Bitstream<R>) -> Result<Subfram
 
 /// Given a signed two's complement integer in the `bits` least significant
 /// bits of `val`, extends the sign bit to a valid 16-bit signed integer.
-fn extend_sign_u16(val: u16, bits: u8) -> i16 {
+fn extend_sign_u16(val: u16, bits: u32) -> i16 {
     // For 32-bit integers, shifting by 32 bits causes different behaviour in
     // release and debug builds. While `(1_i16 << 16) == 0` both in debug and
     // release mode on my machine, I do not want to rely on it.
@@ -116,7 +116,7 @@ fn verify_extend_sign_u16() {
 // TODO: Extract this into a separate module.
 /// Given a signed two's complement integer in the `bits` least significant
 /// bits of `val`, extends the sign bit to a valid 32-bit signed integer.
-pub fn extend_sign_u32(val: u32, bits: u8) -> i32 {
+pub fn extend_sign_u32(val: u32, bits: u32) -> i32 {
     // Shifting a 32-bit integer by more than 31 bits will panic, so we must
     // treat that case separately.
     if bits >= 32 {
@@ -183,7 +183,7 @@ fn verify_rice_to_signed() {
 ///
 /// It is assumed that the length of the buffer is the block size.
 pub fn decode<R: io::Read>(input: &mut Bitstream<R>,
-                           bps: u8,
+                           bps: u32,
                            buffer: &mut [i64])
                            -> Result<()> {
     // The sample type i64 should be wide enough to accomodate for all bits of
@@ -197,8 +197,8 @@ pub fn decode<R: io::Read>(input: &mut Bitstream<R>,
     match header.sf_type {
         SubframeType::Constant => try!(decode_constant(input, bps, buffer)),
         SubframeType::Verbatim => try!(decode_verbatim(input, bps, buffer)),
-        SubframeType::Fixed(ord) => try!(decode_fixed(input, bps, ord, buffer)),
-        SubframeType::Lpc(ord) => try!(decode_lpc(input, bps, ord, buffer)),
+        SubframeType::Fixed(ord) => try!(decode_fixed(input, bps, ord as u32, buffer)),
+        SubframeType::Lpc(ord) => try!(decode_lpc(input, bps, ord as u32, buffer)),
     }
 
     // Finally, everything must be shifted by 'wasted bits per sample' to
@@ -220,7 +220,7 @@ enum RicePartitionType {
 }
 
 fn decode_residual<R: io::Read>(input: &mut Bitstream<R>,
-                                bps: u8,
+                                bps: u32,
                                 block_size: u16,
                                 buffer: &mut [i64])
                                 -> Result<()> {
@@ -236,7 +236,7 @@ fn decode_residual<R: io::Read>(input: &mut Bitstream<R>,
 
 fn decode_partitioned_rice<R: io::Read>
                           (input: &mut Bitstream<R>,
-                           bps: u8,
+                           bps: u32,
                            partition_type: RicePartitionType,
                            block_size: u16,
                            buffer: &mut [i64])
@@ -276,7 +276,7 @@ fn decode_partitioned_rice<R: io::Read>
 }
 
 fn decode_rice_partition<R: io::Read>(input: &mut Bitstream<R>,
-                                      bps: u8,
+                                      bps: u32,
                                       partition_type: RicePartitionType,
                                       buffer: &mut [i64])
                                       -> Result<()> {
@@ -285,7 +285,7 @@ fn decode_rice_partition<R: io::Read>(input: &mut Bitstream<R>,
     let rice_param = try!(input.read_leq_u8(match partition_type {
         RicePartitionType::Rice => 4,
         RicePartitionType::Rice2 => 5,
-    }));
+    })) as u32;
 
     // All ones is an escape code that indicates unencoded binary.
     if rice_param == match partition_type {
@@ -293,7 +293,7 @@ fn decode_rice_partition<R: io::Read>(input: &mut Bitstream<R>,
         RicePartitionType::Rice2 => 0b11111,
     } {
         // For unencoded binary, there are five bits indicating bits-per-sample.
-        let rice_bps = try!(input.read_leq_u8(5));
+        let rice_bps = try!(input.read_leq_u8(5)) as u32;
 
         // There cannot be more bits per sample than the sample type.
         if bps < rice_bps {
@@ -338,7 +338,7 @@ fn decode_rice_partition<R: io::Read>(input: &mut Bitstream<R>,
 }
 
 fn decode_constant<R: io::Read>(input: &mut Bitstream<R>,
-                                bps: u8,
+                                bps: u32,
                                 buffer: &mut [i64])
                                 -> Result<()> {
     let sample_u32 = try!(input.read_leq_u32(bps));
@@ -352,7 +352,7 @@ fn decode_constant<R: io::Read>(input: &mut Bitstream<R>,
 }
 
 fn decode_verbatim<R: io::Read>(input: &mut Bitstream<R>,
-                                bps: u8,
+                                bps: u32,
                                 buffer: &mut [i64])
                                 -> Result<()> {
 
@@ -374,7 +374,7 @@ fn decode_verbatim<R: io::Read>(input: &mut Bitstream<R>,
     Ok(())
 }
 
-fn predict_fixed(order: u8, buffer: &mut [i64]) -> Result<()> {
+fn predict_fixed(order: u32, buffer: &mut [i64]) -> Result<()> {
 
     // When this is called during decoding, the order as read from the subframe
     // header has already been verified, so it is safe to assume that
@@ -452,8 +452,8 @@ fn verify_predict_fixed() {
 }
 
 fn decode_fixed<R: io::Read>(input: &mut Bitstream<R>,
-                             bps: u8,
-                             order: u8,
+                             bps: u32,
+                             order: u32,
                              buffer: &mut [i64])
                              -> Result<()> {
     // There are order * bits per sample unencoded warm-up sample bits.
@@ -537,15 +537,15 @@ fn verify_predict_lpc() {
 }
 
 fn decode_lpc<R: io::Read>(input: &mut Bitstream<R>,
-                           bps: u8,
-                           order: u8,
+                           bps: u32,
+                           order: u32,
                            buffer: &mut [i64])
                            -> Result<()> {
     // There are order * bits per sample unencoded warm-up sample bits.
     try!(decode_verbatim(input, bps, &mut buffer[..order as usize]));
 
     // Next are four bits quantised linear predictor coefficient precision - 1.
-    let qlp_precision = try!(input.read_leq_u8(4)) + 1;
+    let qlp_precision = try!(input.read_leq_u8(4)) as u32 + 1;
 
     // The bit pattern 1111 is invalid.
     if qlp_precision - 1 == 0b1111 {

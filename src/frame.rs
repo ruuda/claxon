@@ -46,7 +46,7 @@ struct FrameHeader {
     pub block_size: u16,
     pub sample_rate: Option<u32>,
     pub channel_assignment: ChannelAssignment,
-    pub bits_per_sample: Option<u8>,
+    pub bits_per_sample: Option<u32>,
 }
 
 impl FrameHeader {
