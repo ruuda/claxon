@@ -73,11 +73,7 @@ fn read_subframe_header<R: io::Read>(input: &mut Bitstream<R>) -> Result<Subfram
     let wasted_bits = if !wastes_bits {
         0
     } else {
-        let mut wbits = 1;
-        while try!(input.read_bit()) == false {
-            wbits += 1;
-        }
-        wbits
+        1 + try!(input.read_unary())
     };
 
     let subframe_header = SubframeHeader {
@@ -302,26 +298,20 @@ fn decode_rice_partition<R: io::Read>(input: &mut Bitstream<R>,
 
         panic!("unencoded binary is not yet implemented"); // TODO
     } else {
-        let max_sample = i64::MAX;
-        let max_q = max_sample >> rice_param as usize;
-
-        // TODO: It is possible for the rice_param to be larger than the
-        // sample width, which would be invalid. Check for that. So instead of
-        // using `i64::MAX`, the important thing is that the decoded value
-        // cannot require more bits than bps + 1, because the prediction delta
-        // adds at most one bit.
-
         for sample in buffer.iter_mut() {
             // First part of the sample is the quotient, unary encoded.
-            // This means that there are q zeroes, and then a one. There
-            // should not be more than max_q consecutive zeroes.
-            let mut q = 0;
-            while try!(input.read_bit()) == false {
-                if q == max_q {
-                    return fmt_err("invalid Rice code");
-                }
-                q = q + 1;
-            }
+            // This means that there are q zeros, and then a one.
+            //
+            // The reference decoder supports sample widths up to 24 bits, so
+            // with the additional bytes for difference in channels and for
+            // prediction, a sample fits in 26 bits. The Rice parameter could be
+            // as little as 1, so the quotient can potentially be very large.
+            // However, in practice it is not. For one test file (with 16 bit
+            // samples), the distribution was as follows: q = 0: 45%,
+            // q = 1: 29%, q = 2: 15%, q = 3: 6%, q = 4: 3%, q = 5: 1%, ...
+            // Values of q as large as 75 still occur though.
+
+            let q = try!(input.read_unary()) as i64;
 
             // TODO: for RICE_PARTITION, an u16 would be sufficient, because
             // `rice_param` is at most 14. Monomorphisation is beneficial,

@@ -209,6 +209,76 @@ impl<R: io::Read> Bitstream<R> {
         shift_left(0xff, 8 - bits)
     }
 
+    /// Reads a single bit.
+    ///
+    /// Reading a single bit can be done more efficiently than reading
+    /// more than one bit, because a bit never straddles a byte boundary.
+    #[inline(always)]
+    pub fn read_bit(&mut self) -> io::Result<bool> {
+
+        // If no bits are left, we will need to read the next byte.
+        let result = if self.bits_left == 0 {
+            let fresh_byte = try!(self.reader.read_u8());
+
+            // What remains later are the 7 least significant bits.
+            self.data = fresh_byte << 1;
+            self.bits_left = 7;
+
+            // What we report is the most significant bit of the fresh byte.
+            fresh_byte & 0b1000_0000
+        } else {
+            // Consume the most significant bit of the buffer byte.
+            let bit = self.data & 0b1000_0000;
+            self.data = self.data << 1;
+            self.bits_left = self.bits_left - 1;
+            bit
+        };
+
+        Ok(result != 0)
+    }
+
+    /// Reads bits until a 1 is read, and returns the number of zeros read.
+    ///
+    /// Because the reader buffers a byte internally, reading unary can be done
+    /// more efficiently than by just reading bit by bit.
+    pub fn read_unary(&mut self) -> io::Result<u32> {
+        // Start initially with the number of zeros that are in the buffer byte
+        // already (counting from the most significant bit).
+        let mut n = self.data.leading_zeros();
+
+        // If the number of zeros plus the one following it was not more than
+        // the bytes left, then there is no need to look further.
+        if n < self.bits_left {
+            // Note: this shift never shifts by more than 7 places, because
+            // bits_left is always at most 7 in between read calls, and the
+            // least significant bit of the buffer byte is 0 in that case. So
+            // we count either 8 zeros, or less than 7. In the former case we
+            // would not have taken this branch, in the latter the shift below
+            // is safe.
+            self.data = self.data << (n + 1);
+            self.bits_left = self.bits_left - (n + 1);
+        } else {
+            // We inspected more bits than available, so our count is incorrect,
+            // and we need to look at the next byte.
+            n = self.bits_left;
+
+            // Continue reading bytes until we encounter a one.
+            loop {
+                let fresh_byte = try!(self.reader.read_u8());
+                let zeros = fresh_byte.leading_zeros();
+                n = n + zeros;
+                if zeros < 8 {
+                    // We consumed the zeros, plus the one following it.
+                    self.bits_left = 8 - (zeros + 1);
+                    self.data = shift_left(fresh_byte, zeros + 1);
+                    break;
+                }
+            }
+        }
+
+        Ok(n)
+    }
+
     /// Reads at most eight bits.
     #[inline(always)]
     pub fn read_leq_u8(&mut self, bits: u32) -> io::Result<u8> {
@@ -251,37 +321,9 @@ impl<R: io::Read> Bitstream<R> {
         // The least significant bits should be zero.
         debug_assert_eq!(self.data & !Bitstream::<R>::mask_u8(self.bits_left), 0u8);
 
-        // The resulting data is padded with zeroes in the least significant
+        // The resulting data is padded with zeros in the least significant
         // bits, but we want to pad in the most significant bits, so shift.
         Ok(shift_right(result, 8 - bits))
-    }
-
-    /// Reads a single bit.
-    ///
-    /// Reading a single bit can be done more efficiently than reading
-    /// more than one bit, because a bit never straddles a byte boundary.
-    #[inline(always)]
-    pub fn read_bit(&mut self) -> io::Result<bool> {
-
-        // If no bits are left, we will need to read the next byte.
-        let result = if self.bits_left == 0 {
-            let fresh_byte = try!(self.reader.read_u8());
-
-            // What remains later are the 7 least significant bits.
-            self.data = fresh_byte << 1;
-            self.bits_left = 7;
-
-            // What we report is the most significant bit of the fresh byte.
-            fresh_byte & 0b1000_0000
-        } else {
-            // Consume the most significant bit of the buffer byte.
-            let bit = self.data & 0b1000_0000;
-            self.data = self.data << 1;
-            self.bits_left = self.bits_left - 1;
-            bit
-        };
-
-        Ok(result != 0)
     }
 
     /// Reads at most 16 bits.
@@ -348,6 +390,29 @@ fn verify_read_bit() {
     assert_eq!(bits.read_bit().unwrap(), false);
     assert_eq!(bits.read_bit().unwrap(), true);
 
+    assert!(bits.read_bit().is_err());
+}
+
+#[test]
+fn verify_read_unary() {
+    let data = io::Cursor::new(vec![
+        0b1010_0100, 0b1000_0000, 0b0010_0000, 0b0000_0000, 0b0000_1010]);
+    let mut bits = Bitstream::new(data);
+
+    assert_eq!(bits.read_unary().unwrap(), 0);
+    assert_eq!(bits.read_unary().unwrap(), 1);
+    assert_eq!(bits.read_unary().unwrap(), 2);
+
+    // The ending one is after the first byte boundary.
+    assert_eq!(bits.read_unary().unwrap(), 2);
+
+    assert_eq!(bits.read_unary().unwrap(), 9);
+
+    // This one skips a full byte of zeros.
+    assert_eq!(bits.read_unary().unwrap(), 17);
+
+    // Verify that the ending position is still correct.
+    assert_eq!(bits.read_leq_u8(3).unwrap(), 0b010);
     assert!(bits.read_bit().is_err());
 }
 
