@@ -256,6 +256,34 @@ impl<R: io::Read> Bitstream<R> {
         Ok(shift_right(result, 8 - bits))
     }
 
+    /// Reads a single bit.
+    ///
+    /// Reading a single bit can be done more efficiently than reading
+    /// more than one bit, because a bit never straddles a byte boundary.
+    #[inline(always)]
+    pub fn read_bit(&mut self) -> io::Result<bool> {
+
+        // If no bits are left, we will need to read the next byte.
+        let result = if self.bits_left == 0 {
+            let fresh_byte = try!(self.reader.read_u8());
+
+            // What remains later are the 7 least significant bits.
+            self.data = fresh_byte << 1;
+            self.bits_left = 7;
+
+            // What we report is the most significant bit of the fresh byte.
+            fresh_byte & 0b1000_0000
+        } else {
+            // Consume the most significant bit of the buffer byte.
+            let bit = self.data & 0b1000_0000;
+            self.data = self.data << 1;
+            self.bits_left = self.bits_left - 1;
+            bit
+        };
+
+        Ok(result != 0)
+    }
+
     /// Reads at most 16 bits.
     #[inline(always)]
     pub fn read_leq_u16(&mut self, bits: u32) -> io::Result<u16> {
@@ -295,6 +323,32 @@ impl<R: io::Read> Bitstream<R> {
             Ok(msb.wrapping_shl(bits - 16) | lsb)
         }
     }
+}
+
+#[test]
+fn verify_read_bit() {
+    let data = io::Cursor::new(vec![0b1010_0100, 0b1110_0001]);
+    let mut bits = Bitstream::new(data);
+
+    assert_eq!(bits.read_bit().unwrap(), true);
+    assert_eq!(bits.read_bit().unwrap(), false);
+    assert_eq!(bits.read_bit().unwrap(), true);
+    // Mix in reading more bits as well, to ensure that they are compatible.
+    assert_eq!(bits.read_leq_u8(1).unwrap(), 0);
+    assert_eq!(bits.read_bit().unwrap(), false);
+    assert_eq!(bits.read_bit().unwrap(), true);
+    assert_eq!(bits.read_bit().unwrap(), false);
+    assert_eq!(bits.read_bit().unwrap(), false);
+
+    assert_eq!(bits.read_bit().unwrap(), true);
+    assert_eq!(bits.read_bit().unwrap(), true);
+    assert_eq!(bits.read_bit().unwrap(), true);
+    assert_eq!(bits.read_leq_u8(2).unwrap(), 0);
+    assert_eq!(bits.read_bit().unwrap(), false);
+    assert_eq!(bits.read_bit().unwrap(), false);
+    assert_eq!(bits.read_bit().unwrap(), true);
+
+    assert!(bits.read_bit().is_err());
 }
 
 #[test]

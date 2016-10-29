@@ -28,7 +28,7 @@ struct SubframeHeader {
 
 fn read_subframe_header<R: io::Read>(input: &mut Bitstream<R>) -> Result<SubframeHeader> {
     // The first bit must be a 0 padding bit.
-    if 0 != try!(input.read_leq_u8(1)) {
+    if try!(input.read_bit()) {
         return fmt_err("invalid subframe header");
     }
 
@@ -67,14 +67,14 @@ fn read_subframe_header<R: io::Read>(input: &mut Bitstream<R>) -> Result<Subfram
     };
 
     // Next bits indicates whether there are wasted bits per sample.
-    let wastes_bits = 1 == try!(input.read_leq_u8(1));
+    let wastes_bits = try!(input.read_bit());
 
     // If so, k - 1 zero bits follow, where k is the number of wasted bits.
     let wasted_bits = if !wastes_bits {
         0
     } else {
         let mut wbits = 1;
-        while 1 != try!(input.read_leq_u8(1)) {
+        while try!(input.read_bit()) == false {
             wbits += 1;
         }
         wbits
@@ -316,7 +316,7 @@ fn decode_rice_partition<R: io::Read>(input: &mut Bitstream<R>,
             // This means that there are q zeroes, and then a one. There
             // should not be more than max_q consecutive zeroes.
             let mut q = 0;
-            while try!(input.read_leq_u8(1)) == 0 {
+            while try!(input.read_bit()) == false {
                 if q == max_q {
                     return fmt_err("invalid Rice code");
                 }
