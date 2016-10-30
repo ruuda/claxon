@@ -5,8 +5,6 @@
 // you may not use this file except in compliance with the License.
 // A copy of the License has been included in the root of the repository.
 
-#![feature(core_intrinsics)]
-
 //! Claxon, a FLAC decoding library.
 //!
 //! Examples
