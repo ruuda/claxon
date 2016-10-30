@@ -327,6 +327,52 @@ impl<R: io::Read> Bitstream<R> {
         Ok(shift_right(result, 8 - bits))
     }
 
+    /// Read 10 bits.
+    pub fn read_u10(&mut self) -> io::Result<u32> {
+        // The most significant bits of the current byte are valid. Shift them
+        // by 2 so they become the most significant bits of the 10 bit number.
+        let mask_msb = 0xffffffff << (10 - self.bits_left);
+        let msb = ((self.data as u32) << 2) & mask_msb;
+
+        // Continue reading the next bits, because no matter how many bits were
+        // still left, there were less than 10.
+        let bits_to_read = 10 - self.bits_left;
+        let fresh_byte = try!(self.reader.read_u8()) as u32;
+        let lsb = if bits_to_read >= 8 {
+            fresh_byte << (bits_to_read - 8)
+        } else {
+            fresh_byte >> (8 - bits_to_read)
+        };
+        let combined = msb | lsb;
+
+        let result = if bits_to_read <= 8 {
+            // We have all 10 bits already, update the internal state. If no
+            // bits were left we might shift by 8 which is invalid, but in that
+            // case the value is not used, so a masked shift is appropriate.
+            self.bits_left = 8 - bits_to_read;
+            self.data = fresh_byte.wrapping_shl(8 - self.bits_left) as u8;
+            combined
+        } else {
+            // We need to read one more byte to get the final bits.
+            let fresher_byte = try!(self.reader.read_u8()) as u32;
+            let lsb = fresher_byte >> (16 - bits_to_read);
+
+            // Update the reader state. The shift here is safe because we
+            // shift by 1 or 2, never 8.
+            self.bits_left = 16 - bits_to_read;
+            self.data = (fresher_byte << (8 - self.bits_left)) as u8;
+
+            combined | lsb
+        };
+
+        Ok(result)
+    }
+
+    pub fn read_leq_u16(&mut self, bits: u32) -> io::Result<u16> {
+        println!("{}", bits);
+        self.read_leq_u16_impl(bits)
+    }
+
     /// Reads at most 16 bits.
     #[inline(always)]
     pub fn read_leq_u16(&mut self, bits: u32) -> io::Result<u16> {
@@ -447,6 +493,19 @@ fn verify_read_leq_u8() {
     assert_eq!(bits.read_leq_u8(1).unwrap(), 1);
     assert_eq!(bits.read_leq_u8(1).unwrap(), 1);
     assert_eq!(bits.read_leq_u8(2).unwrap(), 0b00);
+}
+
+#[test]
+fn verify_read_u10() {
+    let data = io::Cursor::new(vec![0b1010_0101, 0b1110_0001, 0b1101_0010, 0b0101_0101, 0b1111_0000]);
+    let mut bits = Bitstream::new(data);
+
+    assert_eq!(bits.read_u10().unwrap(), 0b1010_0101_11);
+    assert_eq!(bits.read_u10().unwrap(), 0b10_0001_1101);
+    assert_eq!(bits.read_leq_u8(3).unwrap(), 0b001);
+    assert_eq!(bits.read_u10().unwrap(), 0b0_0101_0101_1);
+    assert_eq!(bits.read_leq_u8(7).unwrap(), 0b111_0000);
+    assert!(bits.read_u10().is_err());
 }
 
 #[test]
