@@ -158,17 +158,12 @@ fn verify_extend_sign_u32() {
 /// number.
 #[inline(always)]
 fn rice_to_signed(val: i64) -> i64 {
-    // Alternative branchless version:
-    // let pos = val / 2;
-    // let neg = -(val / 2) - 1;
-    // let is_neg = val & 1;
-    // neg * is_neg + pos * (1 - is_neg)
-
-    if val & 1 == 1 {
-        -1 - val / 2
-    } else {
-        val / 2
-    }
+    // Note that branching is avoided here for performance,
+    // the values are masked instead.
+    let pos = val / 2;
+    let neg = -1 - pos;
+    let is_neg = val & 1;
+    neg * is_neg + pos * (1 - is_neg)
 }
 
 #[test]
