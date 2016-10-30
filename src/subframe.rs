@@ -288,6 +288,12 @@ fn decode_rice_partition<R: io::Read>(input: &mut Bitstream<R>,
         panic!("unencoded binary is not yet implemented");
     }
 
+    if rice_param == 10 {
+        return decode_rice_partition_param_10(input, buffer);
+    }
+
+    // TODO: Add monomorphized versions for other widths too.
+
     for sample in buffer.iter_mut() {
         // First part of the sample is the quotient, unary encoded.
         // This means that there are q zeros, and then a one.
@@ -307,6 +313,40 @@ fn decode_rice_partition<R: io::Read>(input: &mut Bitstream<R>,
         *sample = rice_to_signed((q << rice_param) | r);
     }
 
+    Ok(())
+}
+
+// Some data about the freqency of various Rice parameters for a Rice partition,
+// measured from real-world FLAC files:
+//
+// param  percentage
+// -----  ----------
+//     0   0.035
+//     1   0.002
+//     2   0.001
+//     3   0.526
+//     4   3.535
+//     5   2.634
+//     6   4.386
+//     7  15.045
+//     8  18.813
+//     9  17.789
+//    10  20.893
+//    11  12.812
+//    12   3.424
+//    13   0.103
+//    14   0.005
+
+/// Decodes the samples in a Rice partition with parameter 10.
+#[inline(always)]
+fn decode_rice_partition_param_10<R: io::Read>(input: &mut Bitstream<R>,
+                                               buffer: &mut [i64])
+                                               -> Result<()> {
+    for sample in buffer.iter_mut() {
+        let q = try!(input.read_unary()) as i64;
+        let r = try!(input.read_u10()) as i64;
+        *sample = rice_to_signed((q << 10) | r);
+    }
     Ok(())
 }
 

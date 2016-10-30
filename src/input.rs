@@ -328,6 +328,7 @@ impl<R: io::Read> Bitstream<R> {
     }
 
     /// Read 10 bits.
+    #[inline(always)]
     pub fn read_u10(&mut self) -> io::Result<u32> {
         // The most significant bits of the current byte are valid. Shift them
         // by 2 so they become the most significant bits of the 10 bit number.
@@ -366,11 +367,6 @@ impl<R: io::Read> Bitstream<R> {
         };
 
         Ok(result)
-    }
-
-    pub fn read_leq_u16(&mut self, bits: u32) -> io::Result<u16> {
-        println!("{}", bits);
-        self.read_leq_u16_impl(bits)
     }
 
     /// Reads at most 16 bits.
