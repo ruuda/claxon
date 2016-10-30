@@ -156,13 +156,18 @@ fn verify_extend_sign_u32() {
 ///
 /// This function takes the unsigned value and converts it into a signed
 /// number.
+#[inline(always)]
 fn rice_to_signed(val: i64) -> i64 {
-    // I believe this is the most concise way to express the decoding.
-    let half = val / 2;
+    // Alternative branchless version:
+    // let pos = val / 2;
+    // let neg = -(val / 2) - 1;
+    // let is_neg = val & 1;
+    // neg * is_neg + pos * (1 - is_neg)
+
     if val & 1 == 1 {
-        -half - 1
+        -1 - val / 2
     } else {
-        half
+        val / 2
     }
 }
 
