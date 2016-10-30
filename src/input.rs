@@ -327,17 +327,19 @@ impl<R: io::Read> Bitstream<R> {
         Ok(shift_right(result, 8 - bits))
     }
 
-    /// Read 10 bits.
+    /// Read n bits, where 8 < n <= 16.
     #[inline(always)]
-    pub fn read_u10(&mut self) -> io::Result<u32> {
+    pub fn read_gt_u8_leq_u16(&mut self, bits: u32) -> io::Result<u32> {
+        debug_assert!((8 < bits) && (bits <= 16));
+
         // The most significant bits of the current byte are valid. Shift them
         // by 2 so they become the most significant bits of the 10 bit number.
-        let mask_msb = 0xffffffff << (10 - self.bits_left);
-        let msb = ((self.data as u32) << 2) & mask_msb;
+        let mask_msb = 0xffffffff << (bits - self.bits_left);
+        let msb = ((self.data as u32) << (bits - 8)) & mask_msb;
 
         // Continue reading the next bits, because no matter how many bits were
         // still left, there were less than 10.
-        let bits_to_read = 10 - self.bits_left;
+        let bits_to_read = bits - self.bits_left;
         let fresh_byte = try!(self.reader.read_u8()) as u32;
         let lsb = if bits_to_read >= 8 {
             fresh_byte << (bits_to_read - 8)
@@ -347,8 +349,8 @@ impl<R: io::Read> Bitstream<R> {
         let combined = msb | lsb;
 
         let result = if bits_to_read <= 8 {
-            // We have all 10 bits already, update the internal state. If no
-            // bits were left we might shift by 8 which is invalid, but in that
+            // We have all bits already, update the internal state. If no
+            // bits are left we might shift by 8 which is invalid, but in that
             // case the value is not used, so a masked shift is appropriate.
             self.bits_left = 8 - bits_to_read;
             self.data = fresh_byte.wrapping_shl(8 - self.bits_left) as u8;
@@ -358,10 +360,10 @@ impl<R: io::Read> Bitstream<R> {
             let fresher_byte = try!(self.reader.read_u8()) as u32;
             let lsb = fresher_byte >> (16 - bits_to_read);
 
-            // Update the reader state. The shift here is safe because we
-            // shift by 1 or 2, never 8.
+            // Update the reader state. The wrapping shift is appropriate for
+            // the same reason as above.
             self.bits_left = 16 - bits_to_read;
-            self.data = (fresher_byte << (8 - self.bits_left)) as u8;
+            self.data = fresher_byte.wrapping_shl(8 - self.bits_left) as u8;
 
             combined | lsb
         };
@@ -492,16 +494,16 @@ fn verify_read_leq_u8() {
 }
 
 #[test]
-fn verify_read_u10() {
+fn verify_read_gt_u8_get_u16() {
     let data = io::Cursor::new(vec![0b1010_0101, 0b1110_0001, 0b1101_0010, 0b0101_0101, 0b1111_0000]);
     let mut bits = Bitstream::new(data);
 
-    assert_eq!(bits.read_u10().unwrap(), 0b1010_0101_11);
-    assert_eq!(bits.read_u10().unwrap(), 0b10_0001_1101);
+    assert_eq!(bits.read_gt_u8_leq_u16(10).unwrap(), 0b1010_0101_11);
+    assert_eq!(bits.read_gt_u8_leq_u16(10).unwrap(), 0b10_0001_1101);
     assert_eq!(bits.read_leq_u8(3).unwrap(), 0b001);
-    assert_eq!(bits.read_u10().unwrap(), 0b0_0101_0101_1);
+    assert_eq!(bits.read_gt_u8_leq_u16(10).unwrap(), 0b0_0101_0101_1);
     assert_eq!(bits.read_leq_u8(7).unwrap(), 0b111_0000);
-    assert!(bits.read_u10().is_err());
+    assert!(bits.read_gt_u8_leq_u16(10).is_err());
 }
 
 #[test]
