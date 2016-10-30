@@ -181,6 +181,13 @@ fn shift_right(x: u8, shift: u32) -> u8 {
     if shift >= 8 { 0 } else { x >> shift }
 }
 
+/// Hint to the optimizer that a value is likely to be true.
+#[inline(always)]
+fn likely(p: bool) -> bool {
+    use std::intrinsics::likely;
+    unsafe { likely(p) }
+}
+
 /// Wraps a `Reader` to facilitate reading that is not byte-aligned.
 pub struct Bitstream<R: io::Read> {
     /// The source where bits are read from.
@@ -249,8 +256,7 @@ impl<R: io::Read> Bitstream<R> {
 
         // If the number of zeros plus the one following it was not more than
         // the bytes left, then there is no need to look further.
-        // TODO: Likely hint for the optimizer?
-        if n < self.bits_left {
+        if likely(n < self.bits_left) {
             // Note: this shift never shifts by more than 7 places, because
             // bits_left is always at most 7 in between read calls, and the
             // least significant bit of the buffer byte is 0 in that case. So
@@ -269,7 +275,7 @@ impl<R: io::Read> Bitstream<R> {
                 let fresh_byte = try!(self.reader.read_u8());
                 let zeros = fresh_byte.leading_zeros();
                 n = n + zeros;
-                if zeros < 8 {
+                if likely(zeros < 8) {
                     // We consumed the zeros, plus the one following it.
                     self.bits_left = 8 - (zeros + 1);
                     self.data = shift_left(fresh_byte, zeros + 1);
