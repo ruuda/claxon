@@ -272,6 +272,10 @@ fn decode_residual<R: io::Read>(input: &mut Bitstream<R>,
     Ok(())
 }
 
+// Performance note: all Rice partitions in real-world FLAC files are Rice
+// partitions, not Rice2 partitions. Therefore it makes sense to inline this
+// function into decode_residual.
+#[inline(always)]
 fn decode_rice_partition<R: io::Read>(input: &mut Bitstream<R>,
                                       buffer: &mut [i64])
                                       -> Result<()> {
@@ -306,6 +310,10 @@ fn decode_rice_partition<R: io::Read>(input: &mut Bitstream<R>,
     Ok(())
 }
 
+// Performance note: a Rice2 partition is extremely uncommon, I haven’t seen a
+// single one in any real-world FLAC file. So do not inline it, in order not to
+// pollute the caller with dead code.
+#[inline(never)]
 fn decode_rice2_partition<R: io::Read>(input: &mut Bitstream<R>,
                                        buffer: &mut [i64])
                                        -> Result<()> {
