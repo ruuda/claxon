@@ -216,31 +216,18 @@ enum RicePartitionType {
 }
 
 fn decode_residual<R: io::Read>(input: &mut Bitstream<R>,
-                                bps: u32,
                                 block_size: u16,
                                 buffer: &mut [i64])
                                 -> Result<()> {
     // Residual starts with two bits of coding method.
-    let method = try!(input.read_leq_u8(2));
-    match method {
-        0b00 => decode_partitioned_rice(input, bps, RicePartitionType::Rice, block_size, buffer),
-        0b01 => decode_partitioned_rice(input, bps, RicePartitionType::Rice2, block_size, buffer),
+    let partition_type = match try!(input.read_leq_u8(2)) {
+        0b00 => RicePartitionType::Rice,
+        0b01 => RicePartitionType::Rice2,
         // 10 and 11 are reserved.
-        _ => fmt_err("invalid residual, encountered reserved value"),
-    }
-}
+        _ => return fmt_err("invalid residual, encountered reserved value"),
+    };
 
-fn decode_partitioned_rice<R: io::Read>
-                          (input: &mut Bitstream<R>,
-                           bps: u32,
-                           partition_type: RicePartitionType,
-                           block_size: u16,
-                           buffer: &mut [i64])
-                           -> Result<()> {
-    // The block size, and therefore the buffer, cannot exceed 2^16 - 1.
-    debug_assert!(buffer.len() <= 0xffff);
-
-    // First are 4 bits partition order.
+    // Next are 4 bits partition order.
     let order = try!(input.read_leq_u8(4));
 
     // There are 2^order partitions. Note: the specification states a 4-bit
@@ -248,8 +235,8 @@ fn decode_partitioned_rice<R: io::Read>
     // partitions, but the block size is a 16-bit number, so there are at
     // most 2^16 - 1 samples in the block. No values have been marked as
     // invalid by the specification though.
-    let n_partitions = 1u32 << order as usize;
-    let n_samples = block_size >> order as usize;
+    let n_partitions = 1u32 << order;
+    let n_samples = block_size >> order;
     let n_warm_up = block_size - buffer.len() as u16;
 
     // The partition size must be at least as big as the number of warm-up
@@ -258,70 +245,87 @@ fn decode_partitioned_rice<R: io::Read>
         return fmt_err("invalid residual");
     }
 
-    let mut start = 0;
-    for i in 0..n_partitions {
-        let partition_size = n_samples - if i == 0 { n_warm_up } else { 0 };
-        try!(decode_rice_partition(input,
-                                   bps,
-                                   partition_type,
-                                   &mut buffer[start..start + partition_size as usize]));
-        start = start + partition_size as usize;
+    // Finally decode the partitions themselves.
+    match partition_type {
+        RicePartitionType::Rice => {
+            let mut start = 0;
+            let mut len = n_samples - n_warm_up;
+            for _ in 0..n_partitions {
+                let slice = &mut buffer[start..start + len as usize];
+                try!(decode_rice_partition(input, slice));
+                start = start + len as usize;
+                len = n_samples;
+            }
+        }
+        RicePartitionType::Rice2 => {
+            let mut start = 0;
+            let mut len = n_samples - n_warm_up;
+            for _ in 0..n_partitions {
+                let slice = &mut buffer[start..start + len as usize];
+                try!(decode_rice2_partition(input, slice));
+                start = start + len as usize;
+                len = n_samples;
+            }
+        }
     }
 
     Ok(())
 }
 
 fn decode_rice_partition<R: io::Read>(input: &mut Bitstream<R>,
-                                      bps: u32,
-                                      partition_type: RicePartitionType,
                                       buffer: &mut [i64])
                                       -> Result<()> {
-    // The Rice partition starts with 4 or 5 bits Rice parameter, depending on
-    // the partition type.
-    let rice_param = try!(input.read_leq_u8(match partition_type {
-        RicePartitionType::Rice => 4,
-        RicePartitionType::Rice2 => 5,
-    })) as u32;
+    // A Rice partition (not Rice2), starts with a 4-bit Rice parameter.
+    let rice_param = try!(input.read_leq_u8(4)) as u32;
 
     // All ones is an escape code that indicates unencoded binary.
-    if rice_param == match partition_type {
-        RicePartitionType::Rice => 0b1111,
-        RicePartitionType::Rice2 => 0b11111,
-    } {
-        // For unencoded binary, there are five bits indicating bits-per-sample.
-        let rice_bps = try!(input.read_leq_u8(5)) as u32;
+    if rice_param == 0b1111 {
+        // TODO: Return "unsupported" result instead.
+        panic!("unencoded binary is not yet implemented");
+    }
 
-        // There cannot be more bits per sample than the sample type.
-        if bps < rice_bps {
-            return fmt_err("invalid Rice partition, too many bits per sample");
-        }
+    for sample in buffer.iter_mut() {
+        // First part of the sample is the quotient, unary encoded.
+        // This means that there are q zeros, and then a one.
+        //
+        // The reference decoder supports sample widths up to 24 bits, so with
+        // the additional bytes for difference in channels and for prediction, a
+        // sample fits in 26 bits. The Rice parameter could be as little as 1,
+        // so the quotient can potentially be very large. However, in practice
+        // it is not. For one test file (with 16 bit samples), the distribution
+        // was as follows: q = 0: 45%, q = 1: 29%, q = 2: 15%, q = 3: 6%, q = 4:
+        // 3%, q = 5: 1%, ... Values of q as large as 75 still occur though.
+        let q = try!(input.read_unary()) as i64;
 
-        panic!("unencoded binary is not yet implemented"); // TODO
-    } else {
-        for sample in buffer.iter_mut() {
-            // First part of the sample is the quotient, unary encoded.
-            // This means that there are q zeros, and then a one.
-            //
-            // The reference decoder supports sample widths up to 24 bits, so
-            // with the additional bytes for difference in channels and for
-            // prediction, a sample fits in 26 bits. The Rice parameter could be
-            // as little as 1, so the quotient can potentially be very large.
-            // However, in practice it is not. For one test file (with 16 bit
-            // samples), the distribution was as follows: q = 0: 45%,
-            // q = 1: 29%, q = 2: 15%, q = 3: 6%, q = 4: 3%, q = 5: 1%, ...
-            // Values of q as large as 75 still occur though.
+        // Next is the remainder, in rice_param bits. Because at this
+        // point rice_param is at most 14, we can safely read into a u16.
+        let r = try!(input.read_leq_u16(rice_param)) as i64;
+        *sample = rice_to_signed((q << rice_param) | r);
+    }
 
-            let q = try!(input.read_unary()) as i64;
+    Ok(())
+}
 
-            // TODO: for RICE_PARTITION, an u16 would be sufficient, because
-            // `rice_param` is at most 14. Monomorphisation is beneficial,
-            // because RICE2_PARTITION is extremely rare and benchmarks
-            // indicate that splitting the methods is faster. For now though,
-            // simplicity is more important.
-            let r = try!(input.read_leq_u32(rice_param)) as i64;
-            *sample = rice_to_signed((q << rice_param as usize) | r);
-            // TODO: Verify that r is in range?
-        }
+fn decode_rice2_partition<R: io::Read>(input: &mut Bitstream<R>,
+                                       buffer: &mut [i64])
+                                       -> Result<()> {
+    // A Rice2 partition, starts with a 5-bit Rice parameter.
+    let rice_param = try!(input.read_leq_u8(5)) as u32;
+
+    // All ones is an escape code that indicates unencoded binary.
+    if rice_param == 0b11111 {
+        // TODO: Return "unsupported" result instead.
+        panic!("unencoded binary is not yet implemented");
+    }
+
+    for sample in buffer.iter_mut() {
+        // First part of the sample is the quotient, unary encoded.
+        let q = try!(input.read_unary()) as i64;
+
+        // Next is the remainder, in rice_param bits. Because at this
+        // point rice_param is at most 30, we can safely read into a u32.
+        let r = try!(input.read_leq_u32(rice_param)) as i64;
+        *sample = rice_to_signed((q << rice_param) | r);
     }
 
     Ok(())
@@ -453,7 +457,6 @@ fn decode_fixed<R: io::Read>(input: &mut Bitstream<R>,
     // predictor contributions will be added in a second pass. The first
     // `order` samples have been decoded already, so continue after that.
     try!(decode_residual(input,
-                         bps,
                          buffer.len() as u16,
                          &mut buffer[order as usize..]));
 
@@ -564,7 +567,6 @@ fn decode_lpc<R: io::Read>(input: &mut Bitstream<R>,
     // predictor contributions will be added in a second pass. The first
     // `order` samples have been decoded already, so continue after that.
     try!(decode_residual(input,
-                         bps,
                          buffer.len() as u16,
                          &mut buffer[order as usize..]));
 
