@@ -157,12 +157,19 @@ fn verify_extend_sign_u32() {
 /// This function takes the unsigned value and converts it into a signed
 /// number.
 #[inline(always)]
-fn rice_to_signed(val: i64) -> i64 {
-    if val & 1 == 1 {
-        -1 - val / 2
-    } else {
-        val / 2
-    }
+fn rice_to_signed(val: u64) -> i64 {
+    // The following bit-level hackery compiles to only four instructions on
+    // x64. It is equivalent to the following code:
+    //
+    //   if val & 1 == 1 {
+    //       -1 - (val / 2) as i64
+    //   } else {
+    //       (val / 2) as i64
+    //   }
+    //
+    let half = (val >> 1) as i64;
+    let extended_bit_0 = ((val << 63) as i64) >> 63;
+    half ^ extended_bit_0
 }
 
 #[test]
@@ -304,14 +311,14 @@ fn decode_rice_partition<R: io::Read>(input: &mut Bitstream<R>,
 
     if rice_param <= 8 {
         for sample in buffer.iter_mut() {
-            let q = try!(input.read_unary()) as i64;
-            let r = try!(input.read_leq_u8(rice_param)) as i64;
+            let q = try!(input.read_unary()) as u64;
+            let r = try!(input.read_leq_u8(rice_param)) as u64;
             *sample = rice_to_signed((q << rice_param) | r);
         }
     } else {
         for sample in buffer.iter_mut() {
-            let q = try!(input.read_unary()) as i64;
-            let r = try!(input.read_gt_u8_leq_u16(rice_param)) as i64;
+            let q = try!(input.read_unary()) as u64;
+            let r = try!(input.read_gt_u8_leq_u16(rice_param)) as u64;
             *sample = rice_to_signed((q << rice_param) | r);
         }
     }
@@ -337,11 +344,11 @@ fn decode_rice2_partition<R: io::Read>(input: &mut Bitstream<R>,
 
     for sample in buffer.iter_mut() {
         // First part of the sample is the quotient, unary encoded.
-        let q = try!(input.read_unary()) as i64;
+        let q = try!(input.read_unary()) as u64;
 
         // Next is the remainder, in rice_param bits. Because at this
         // point rice_param is at most 30, we can safely read into a u32.
-        let r = try!(input.read_leq_u32(rice_param)) as i64;
+        let r = try!(input.read_leq_u32(rice_param)) as u64;
         *sample = rice_to_signed((q << rice_param) | r);
     }
 
