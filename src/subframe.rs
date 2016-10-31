@@ -7,6 +7,7 @@
 
 //! The `subframe` module deals with subframes that make up a frame of the FLAC stream.
 
+use std::cmp;
 use std::i64;
 use std::io;
 use error::{Error, Result, fmt_err};
@@ -489,47 +490,68 @@ fn decode_fixed<R: io::Read>(input: &mut Bitstream<R>,
     Ok(())
 }
 
-fn predict_lpc(coefficients: &[i16],
+fn predict_lpc(raw_coefficients: &[i16],
                qlp_shift: i16,
                buffer: &mut [i64])
                -> Result<()> {
+    // The decoded residuals are 25 bits at most (assuming subset FLAC of at
+    // most 24 bits per sample, but there is the delta encoding for channels).
+    // The coefficients are 16 bits at most, so their product is 41 bits. In
+    // practice the predictor order does not exceed 12, so adding 12 numbers of
+    // 41 bits each requires at most 53 bits. Therefore, do all intermediate
+    // computations as i64.
+
+    // The spec allocates 5 bits for (order - 1), so the order could be as much
+    // as 32. However, I have never observed an order larger than 12, in
+    // practice, and this function is optimized under that assumption. If there
+    // ever is a need for higher orders, it a fallback predictor could be added
+    // easily.
+    if raw_coefficients.len() > 12 {
+        return Err(Error::Unsupported("LPC order > 12 is not supported"));
+    }
+
+    // In the code below, a predictor order of 12 is assumed. This aids
+    // optimization and vectorization by making some counts available at compile
+    // time. If the actual order is less than 12, simply set the early
+    // coefficients to 0.
+    let order = raw_coefficients.len();
+    let coefficients = {
+        let mut buf = [0i64; 12];
+        let mut i = 12 - order;
+        for c in raw_coefficients {
+            buf[i] = *c as i64;
+            i = i + 1;
+        }
+        buf
+    };
 
     // The linear prediction is essentially an inner product of the known
-    // samples with the coefficients, followed by the shift. The
-    // coefficients are 16-bit at most, and there are at most 32 (2^5)
-    // coefficients, so multiplying and summing fits in an i64 for sample
-    // widths up to 43 bits.
-    // TODO: But it is never verified that the samples do actually fit in 43
-    // bits. Is that required, or is it guaranteed in some other way?
+    // samples with the coefficients, followed by a shift. To be able to do an
+    // inner product of 12 elements at a time, we must first have 12 samples.
+    // If the predictor order is less, first predict the few samples after the
+    // warm-up samples.
+    let left = cmp::min(12, buffer.len()) - order;
+    for i in 0..left {
+        let prediction = raw_coefficients.iter()
+                                         .zip(&buffer[i..order + i])
+                                         .map(|(&c, &s)| c as i64 * s)
+                                         .sum::<i64>() >> qlp_shift;
+        let delta = buffer[order + i];
+        buffer[order + i] = prediction + delta;
+    }
 
-    let window_size = coefficients.len() + 1;
-    debug_assert!(buffer.len() >= window_size);
+    if buffer.len() <= 12 { return Ok(()) }
 
-    for i in 0..buffer.len() - coefficients.len() {
-        // Manually do the windowing, because .windows() returns immutable slices.
-        let window = &mut buffer[i..i + window_size];
-
-        // The #coefficients elements of the window store already decoded
-        // samples, the last element of the window is the delta. Therefore,
-        // predict based on the first #coefficients samples.
+    // At this point, buffer[0..12] has been predicted. For the rest of the
+    // buffer we can do inner products of 12 samples. This allows the compiler
+    // to do vectorization of the inner products more easily.
+    for i in 12..buffer.len() {
         let prediction = coefficients.iter()
-                                     .zip(window.iter())
-                                     .map(|(&c, &s)| c as i64 * s)
+                                     .zip(&buffer[i - 12..i])
+                                     .map(|(&c, &s)| c * s)
                                      .sum::<i64>() >> qlp_shift;
-
-        // The result should fit in an i64 again, even with one bit unused. This
-        // ensures that adding the delta does not overflow, if the delta is also
-        // within the correct range.
-        // TODO: Do we have to do this check every time? Or can we just assume
-        // that the values are within range, because valid FLAC files will never
-        // violate these checks.
-        if (prediction < (i64::MIN >> 1)) || (prediction > (i64::MAX >> 1)) {
-            return Err(Error::FormatError("invalid LPC sample"));
-        }
-
-        // The delta is stored, so the sample is the prediction + delta.
-        let delta = window[coefficients.len()];
-        window[coefficients.len()] = prediction + delta;
+        let delta = buffer[i];
+        buffer[i] = prediction + delta;
     }
 
     Ok(())
