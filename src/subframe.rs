@@ -85,17 +85,12 @@ fn read_subframe_header<R: io::Read>(input: &mut Bitstream<R>) -> Result<Subfram
 
 /// Given a signed two's complement integer in the `bits` least significant
 /// bits of `val`, extends the sign bit to a valid 16-bit signed integer.
+#[inline(always)]
 fn extend_sign_u16(val: u16, bits: u32) -> i16 {
-    // For 32-bit integers, shifting by 32 bits causes different behaviour in
-    // release and debug builds. While `(1_i16 << 16) == 0` both in debug and
-    // release mode on my machine, I do not want to rely on it.
-    if bits >= 16 {
-        val as i16
-    } else if val < (1 << (bits - 1)) {
-        val as i16
-    } else {
-        (val as i16).wrapping_sub(1 << bits)
-    }
+    // First shift the value so the desired sign bit is the actual sign bit,
+    // then convert to a signed integer, and then do an arithmetic shift back,
+    // which will extend the sign bit.
+    return ((val << (16 - bits)) as i16) >> (16 - bits);
 }
 
 #[test]
@@ -109,19 +104,14 @@ fn verify_extend_sign_u16() {
     assert_eq!(-1, extend_sign_u16(0x7fff, 15));
 }
 
-// TODO: Extract this into a separate module.
 /// Given a signed two's complement integer in the `bits` least significant
 /// bits of `val`, extends the sign bit to a valid 32-bit signed integer.
+#[inline(always)]
 pub fn extend_sign_u32(val: u32, bits: u32) -> i32 {
-    // Shifting a 32-bit integer by more than 31 bits will panic, so we must
-    // treat that case separately.
-    if bits >= 32 {
-        val as i32
-    } else if val < (1 << (bits - 1)) {
-        val as i32
-    } else {
-        (val as i32).wrapping_sub(1 << bits)
-    }
+    // First shift the value so the desired sign bit is the actual sign bit,
+    // then convert to a signed integer, and then do an arithmetic shift back,
+    // which will extend the sign bit.
+    ((val << (32 - bits)) as i32) >> (32 - bits)
 }
 
 #[test]
