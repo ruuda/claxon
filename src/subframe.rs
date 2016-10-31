@@ -8,7 +8,6 @@
 //! The `subframe` module deals with subframes that make up a frame of the FLAC stream.
 
 use std::cmp;
-use std::i64;
 use std::io;
 use error::{Error, Result, fmt_err};
 use input::Bitstream;
@@ -158,18 +157,18 @@ fn verify_extend_sign_u32() {
 /// This function takes the unsigned value and converts it into a signed
 /// number.
 #[inline(always)]
-fn rice_to_signed(val: u64) -> i64 {
+fn rice_to_signed(val: u32) -> i32 {
     // The following bit-level hackery compiles to only four instructions on
     // x64. It is equivalent to the following code:
     //
     //   if val & 1 == 1 {
-    //       -1 - (val / 2) as i64
+    //       -1 - (val / 2) as i32
     //   } else {
-    //       (val / 2) as i64
+    //       (val / 2) as i32
     //   }
     //
-    let half = (val >> 1) as i64;
-    let extended_bit_0 = ((val << 63) as i64) >> 63;
+    let half = (val >> 1) as i32;
+    let extended_bit_0 = ((val << 31) as i32) >> 31;
     half ^ extended_bit_0
 }
 
@@ -187,13 +186,15 @@ fn verify_rice_to_signed() {
 /// It is assumed that the length of the buffer is the block size.
 pub fn decode<R: io::Read>(input: &mut Bitstream<R>,
                            bps: u32,
-                           buffer: &mut [i64])
+                           buffer: &mut [i32])
                            -> Result<()> {
-    // The sample type i64 should be wide enough to accomodate for all bits of
+    // The sample type i32 should be wide enough to accomodate for all bits of
     // the stream, but this can be verified at a higher level than here. Still,
-    // it is a good idea to make the assumption explicit. Due to prediction
-    // delta it must be at least one bit wider than the desired bits per sample.
-    debug_assert!(64 > bps);
+    // it is a good idea to make the assumption explicit. FLAC supports up to
+    // sample widths of 32 in theory, so with the delta between channels that
+    // requires 33 bits, but the reference decoder supports only subset FLAC of
+    // 24 bits per sample at most, so restricting ourselves to i32 is fine.
+    debug_assert!(32 >= bps);
 
     let header = try!(read_subframe_header(input));
 
@@ -224,7 +225,7 @@ enum RicePartitionType {
 
 fn decode_residual<R: io::Read>(input: &mut Bitstream<R>,
                                 block_size: u16,
-                                buffer: &mut [i64])
+                                buffer: &mut [i32])
                                 -> Result<()> {
     // Residual starts with two bits of coding method.
     let partition_type = match try!(input.read_leq_u8(2)) {
@@ -284,7 +285,7 @@ fn decode_residual<R: io::Read>(input: &mut Bitstream<R>,
 // function into decode_residual.
 #[inline(always)]
 fn decode_rice_partition<R: io::Read>(input: &mut Bitstream<R>,
-                                      buffer: &mut [i64])
+                                      buffer: &mut [i32])
                                       -> Result<()> {
     // A Rice partition (not Rice2), starts with a 4-bit Rice parameter.
     let rice_param = try!(input.read_leq_u8(4)) as u32;
@@ -312,14 +313,14 @@ fn decode_rice_partition<R: io::Read>(input: &mut Bitstream<R>,
 
     if rice_param <= 8 {
         for sample in buffer.iter_mut() {
-            let q = try!(input.read_unary()) as u64;
-            let r = try!(input.read_leq_u8(rice_param)) as u64;
+            let q = try!(input.read_unary());
+            let r = try!(input.read_leq_u8(rice_param)) as u32;
             *sample = rice_to_signed((q << rice_param) | r);
         }
     } else {
         for sample in buffer.iter_mut() {
-            let q = try!(input.read_unary()) as u64;
-            let r = try!(input.read_gt_u8_leq_u16(rice_param)) as u64;
+            let q = try!(input.read_unary());
+            let r = try!(input.read_gt_u8_leq_u16(rice_param));
             *sample = rice_to_signed((q << rice_param) | r);
         }
     }
@@ -332,7 +333,7 @@ fn decode_rice_partition<R: io::Read>(input: &mut Bitstream<R>,
 // pollute the caller with dead code.
 #[inline(never)]
 fn decode_rice2_partition<R: io::Read>(input: &mut Bitstream<R>,
-                                       buffer: &mut [i64])
+                                       buffer: &mut [i32])
                                        -> Result<()> {
     // A Rice2 partition, starts with a 5-bit Rice parameter.
     let rice_param = try!(input.read_leq_u8(5)) as u32;
@@ -345,11 +346,11 @@ fn decode_rice2_partition<R: io::Read>(input: &mut Bitstream<R>,
 
     for sample in buffer.iter_mut() {
         // First part of the sample is the quotient, unary encoded.
-        let q = try!(input.read_unary()) as u64;
+        let q = try!(input.read_unary());
 
         // Next is the remainder, in rice_param bits. Because at this
         // point rice_param is at most 30, we can safely read into a u32.
-        let r = try!(input.read_leq_u32(rice_param)) as u64;
+        let r = try!(input.read_leq_u32(rice_param));
         *sample = rice_to_signed((q << rice_param) | r);
     }
 
@@ -358,10 +359,10 @@ fn decode_rice2_partition<R: io::Read>(input: &mut Bitstream<R>,
 
 fn decode_constant<R: io::Read>(input: &mut Bitstream<R>,
                                 bps: u32,
-                                buffer: &mut [i64])
+                                buffer: &mut [i32])
                                 -> Result<()> {
     let sample_u32 = try!(input.read_leq_u32(bps));
-    let sample = extend_sign_u32(sample_u32, bps) as i64;
+    let sample = extend_sign_u32(sample_u32, bps);
 
     for s in buffer {
         *s = sample;
@@ -372,7 +373,7 @@ fn decode_constant<R: io::Read>(input: &mut Bitstream<R>,
 
 fn decode_verbatim<R: io::Read>(input: &mut Bitstream<R>,
                                 bps: u32,
-                                buffer: &mut [i64])
+                                buffer: &mut [i32])
                                 -> Result<()> {
 
     // This function must not be called for a sample wider than the sample type.
@@ -380,21 +381,17 @@ fn decode_verbatim<R: io::Read>(input: &mut Bitstream<R>,
     // assumption explicitly. FLAC supports up to 32-bit samples, so the
     // mid/side delta would require 33 bits per sample. But that is not subset
     // FLAC, and the reference decoder does not support it either.
-    // TODO: When this is assumed, it is possible to decode into the buffer
-    // immediately, there is no need for i64 samples.
     debug_assert!(bps <= 32);
 
     // A verbatim block stores samples without encoding whatsoever.
     for s in buffer {
-        let sample_u32 = try!(input.read_leq_u32(bps));
-        *s = extend_sign_u32(sample_u32, bps) as i64;
+        *s = extend_sign_u32(try!(input.read_leq_u32(bps)), bps);
     }
 
     Ok(())
 }
 
-fn predict_fixed(order: u32, buffer: &mut [i64]) -> Result<()> {
-
+fn predict_fixed(order: u32, buffer: &mut [i32]) -> Result<()> {
     // When this is called during decoding, the order as read from the subframe
     // header has already been verified, so it is safe to assume that
     // 0 <= order <= 4. Still, it is good to state that assumption explicitly.
@@ -411,13 +408,11 @@ fn predict_fixed(order: u32, buffer: &mut [i64]) -> Result<()> {
     let o4 = [-1, 4, -6, 4];
 
     // Multiplying samples with at most 6 adds 3 bits. Then summing at most 5
-    // of those values again adds at most 3 bits, so a sample type that is 6
-    // bits wider than bps should suffice. Note that although this means that
-    // i64 does not overflow when the starting sample fitted in <bps + 1>
-    // bits, this does not guarantee that the value will fit in <bps + 1> bits
-    // after prediction, which should be the case for valid FLAC streams.
+    // of those values again adds at most 4 bits, so a sample type that is 7
+    // bits wider than bps should suffice. Subset FLAC supports at most 24 bits
+    // per sample, 25 for the channel delta, so using an i32 is safe here.
 
-    let coefficients: &[i8] = match order {
+    let coefficients: &[i32] = match order {
         0 => &o0,
         1 => &o1,
         2 => &o2,
@@ -437,18 +432,13 @@ fn predict_fixed(order: u32, buffer: &mut [i64]) -> Result<()> {
         // samples, the last element of the window is the delta. Therefore,
         // predict based on the first #coefficients samples.
         let prediction = coefficients.iter()
-                                     .map(|&c| c as i64)
                                      .zip(window.iter())
-                                     .map(|(c, &s)| c * s)
-                                     .sum::<i64>();
+                                     .map(|(&c, &s)| c * s)
+                                     .sum::<i32>();
 
         // The delta is stored, so the sample is the prediction + delta.
         let delta = window[coefficients.len()];
         window[coefficients.len()] = prediction + delta;
-
-        // TODO: Verify that the value fits in bps here? It will have to be
-        // verified somewhere either way. Probably before decoding left/side,
-        // to ensure that those do not overflow.
     }
 
     Ok(())
@@ -473,7 +463,7 @@ fn verify_predict_fixed() {
 fn decode_fixed<R: io::Read>(input: &mut Bitstream<R>,
                              bps: u32,
                              order: u32,
-                             buffer: &mut [i64])
+                             buffer: &mut [i32])
                              -> Result<()> {
     // There are order * bits per sample unencoded warm-up sample bits.
     try!(decode_verbatim(input, bps, &mut buffer[..order as usize]));
@@ -492,7 +482,7 @@ fn decode_fixed<R: io::Read>(input: &mut Bitstream<R>,
 
 fn predict_lpc(raw_coefficients: &[i16],
                qlp_shift: i16,
-               buffer: &mut [i64])
+               buffer: &mut [i32])
                -> Result<()> {
     // The decoded residuals are 25 bits at most (assuming subset FLAC of at
     // most 24 bits per sample, but there is the delta encoding for channels).
@@ -534,10 +524,10 @@ fn predict_lpc(raw_coefficients: &[i16],
     for i in 0..left {
         let prediction = raw_coefficients.iter()
                                          .zip(&buffer[i..order + i])
-                                         .map(|(&c, &s)| c as i64 * s)
+                                         .map(|(&c, &s)| c as i64 * s as i64)
                                          .sum::<i64>() >> qlp_shift;
-        let delta = buffer[order + i];
-        buffer[order + i] = prediction + delta;
+        let delta = buffer[order + i] as i64;
+        buffer[order + i] = (prediction + delta) as i32;
     }
 
     if buffer.len() <= 12 { return Ok(()) }
@@ -548,10 +538,10 @@ fn predict_lpc(raw_coefficients: &[i16],
     for i in 12..buffer.len() {
         let prediction = coefficients.iter()
                                      .zip(&buffer[i - 12..i])
-                                     .map(|(&c, &s)| c * s)
+                                     .map(|(&c, &s)| c * s as i64)
                                      .sum::<i64>() >> qlp_shift;
-        let delta = buffer[i];
-        buffer[i] = prediction + delta;
+        let delta = buffer[i] as i64;
+        buffer[i] = (prediction + delta) as i32;
     }
 
     Ok(())
@@ -578,7 +568,7 @@ fn verify_predict_lpc() {
 fn decode_lpc<R: io::Read>(input: &mut Bitstream<R>,
                            bps: u32,
                            order: u32,
-                           buffer: &mut [i64])
+                           buffer: &mut [i32])
                            -> Result<()> {
     // There are order * bits per sample unencoded warm-up sample bits.
     try!(decode_verbatim(input, bps, &mut buffer[..order as usize]));

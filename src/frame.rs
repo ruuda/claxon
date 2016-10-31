@@ -310,10 +310,7 @@ fn read_frame_header_or_eof<R: io::Read>(input: &mut R) -> Result<Option<FrameHe
 }
 
 /// Converts a buffer with left samples and a side channel in-place to left ++ right.
-// TODO: This could take iterators, and decode and narrow in-place. Better yet,
-// this should produce an iterator that decodes.
-fn decode_left_side(buffer: &mut [i64]) -> Result<()> {
-
+fn decode_left_side(buffer: &mut [i32]) {
     let block_size = buffer.len() / 2;
     for i in 0..block_size {
         let left = buffer[i];
@@ -324,20 +321,18 @@ fn decode_left_side(buffer: &mut [i64]) -> Result<()> {
         let right = left - side;
         buffer[block_size + i] = right;
     }
-
-    Ok(())
 }
 
 #[test]
 fn verify_decode_left_side() {
     let mut buffer = vec![2, 5, 83, 113, 127, -63, -45, -15, 7, 38, 142, 238, 0, -152, -52, -18];
     let result = vec![2, 5, 83, 113, 127, -63, -45, -15, -5, -33, -59, -125, 127, 89, 7, 3];
-    decode_left_side(&mut buffer).ok().unwrap();
+    decode_left_side(&mut buffer);
     assert_eq!(buffer, result);
 }
 
 /// Converts a buffer with right samples and a side channel in-place to left ++ right.
-fn decode_right_side(buffer: &mut [i64]) -> Result<()> {
+fn decode_right_side(buffer: &mut [i32]) {
 
     let block_size = buffer.len() / 2;
     for i in 0..block_size {
@@ -349,21 +344,18 @@ fn decode_right_side(buffer: &mut [i64]) -> Result<()> {
         let left = side + right;
         buffer[i] = left;
     }
-
-    Ok(())
 }
 
 #[test]
 fn verify_decode_right_side() {
     let mut buffer = vec![7, 38, 142, 238, 0, -152, -52, -18, -5, -33, -59, -125, 127, 89, 7, 3];
     let result = vec![2, 5, 83, 113, 127, -63, -45, -15, -5, -33, -59, -125, 127, 89, 7, 3];
-    decode_right_side(&mut buffer).expect("decoding is wrong");
+    decode_right_side(&mut buffer);
     assert_eq!(buffer, result);
 }
 
 /// Converts a buffer with mid samples and a side channel in-place to left ++ right.
-fn decode_mid_side(buffer: &mut [i64]) -> Result<()> {
-
+fn decode_mid_side(buffer: &mut [i32]) {
     let block_size = buffer.len() / 2;
     for i in 0..block_size {
         let mid = buffer[i];
@@ -378,8 +370,6 @@ fn decode_mid_side(buffer: &mut [i64]) -> Result<()> {
         buffer[i] = left;
         buffer[block_size + i] = right;
     }
-
-    Ok(())
 }
 
 #[test]
@@ -388,7 +378,7 @@ fn verify_decode_mid_side() {
                            7,  38, 142,  238,   0, -152, -52, -18);
     let result =      vec!(2,   5,  83,  113, 127,  -63, -45, -15,
                           -5, -33, -59, -125, 127,   89,   7,   3);
-    decode_mid_side(&mut buffer).expect("decoding is wrong");
+    decode_mid_side(&mut buffer);
     assert_eq!(buffer, result);
 }
 
@@ -493,7 +483,6 @@ fn verify_block_sample() {
 /// no searching for a sync code is performed at the moment.
 pub struct FrameReader<R: io::Read> {
     input: R,
-    wide_buffer: Vec<i64>,
 }
 
 /// Either a `Block` or an `Error`.
@@ -501,27 +490,22 @@ pub struct FrameReader<R: io::Read> {
 pub type FrameResult = Result<Option<Block>>;
 
 /// A macro to expand the length of a buffer, or replace the buffer altogether,
-/// so it can hold at least `$new_len` elements. The contents of the buffer can
+/// so it can hold at least `new_len` elements. The contents of the buffer can
 /// be anything, it is assumed they will be overwritten anyway.
-///
-/// The reason that this is a macro, not a method, is that the method would
-/// require a mutable borrow, of which there can only be one. The macro can be
-/// invoked even if a (different) part of the `FrameReader` is mutably borrowed.
-macro_rules! ensure_buffer_len {
-    ($buffer: expr, $new_len: expr, $zero: expr) => {
-        if $buffer.len() < $new_len {
-            // Previous data will be overwritten, so instead of resizing the
-            // vector if it is too small, we might as well allocate a new one.
-            if $buffer.capacity() < $new_len {
-                $buffer = Vec::with_capacity($new_len);
-            }
-            let len = $buffer.len();
-            // TODO: Can this be optimized by using unsafe code?
-            $buffer.extend(repeat($zero).take($new_len - len));
-        } else {
-            $buffer.truncate($new_len);
+fn ensure_buffer_len(mut buffer: Vec<i32>, new_len: usize) -> Vec<i32> {
+    if buffer.len() < new_len {
+        // Previous data will be overwritten, so instead of resizing the
+        // vector if it is too small, we might as well allocate a new one.
+        if buffer.capacity() < new_len {
+            buffer = Vec::with_capacity(new_len);
         }
+        let len = buffer.len();
+        // TODO: Can this be optimized by using unsafe code?
+        buffer.extend(repeat(0).take(new_len - len));
+    } else {
+        buffer.truncate(new_len);
     }
+    buffer
 }
 
 impl<R: io::Read> FrameReader<R> {
@@ -530,7 +514,6 @@ impl<R: io::Read> FrameReader<R> {
         // TODO: a hit for the vector size can be provided.
         FrameReader {
             input: input,
-            wide_buffer: Vec::new(),
         }
     }
 
@@ -558,8 +541,7 @@ impl<R: io::Read> FrameReader<R> {
         // We must allocate enough space for all channels in the block to be
         // decoded.
         let total_samples = header.channels() as usize * header.block_size as usize;
-        ensure_buffer_len!(buffer, total_samples, 0);
-        ensure_buffer_len!(self.wide_buffer, total_samples, 0);
+        buffer = ensure_buffer_len(buffer, total_samples);
 
         // TODO: if the bps is missing from the header, we must get it from
         // the streaminfo block.
@@ -581,37 +563,37 @@ impl<R: io::Read> FrameReader<R> {
                     for ch in 0..n_ch as usize {
                         try!(subframe::decode(&mut bitstream,
                                               bps,
-                                              &mut self.wide_buffer[ch * bs..(ch + 1) * bs]));
+                                              &mut buffer[ch * bs..(ch + 1) * bs]));
                     }
                 }
                 ChannelAssignment::LeftSideStereo => {
                     // The side channel has one extra bit per sample.
-                    try!(subframe::decode(&mut bitstream, bps, &mut self.wide_buffer[..bs]));
+                    try!(subframe::decode(&mut bitstream, bps, &mut buffer[..bs]));
                     try!(subframe::decode(&mut bitstream,
                                           bps + 1,
-                                          &mut self.wide_buffer[bs..bs * 2]));
+                                          &mut buffer[bs..bs * 2]));
 
                     // Then decode the side channel into the right channel.
-                    try!(decode_left_side(&mut self.wide_buffer[..bs * 2]));
+                    decode_left_side(&mut buffer[..bs * 2]);
                 }
                 ChannelAssignment::RightSideStereo => {
                     // The side channel has one extra bit per sample.
-                    try!(subframe::decode(&mut bitstream, bps + 1, &mut self.wide_buffer[..bs]));
-                    try!(subframe::decode(&mut bitstream, bps, &mut self.wide_buffer[bs..bs * 2]));
+                    try!(subframe::decode(&mut bitstream, bps + 1, &mut buffer[..bs]));
+                    try!(subframe::decode(&mut bitstream, bps, &mut buffer[bs..bs * 2]));
 
                     // Then decode the side channel into the left channel.
-                    try!(decode_right_side(&mut self.wide_buffer[..bs * 2]));
+                    decode_right_side(&mut buffer[..bs * 2]);
                 }
                 ChannelAssignment::MidSideStereo => {
                     // Decode mid as the first channel, then side with one
                     // extra bitp per sample.
-                    try!(subframe::decode(&mut bitstream, bps, &mut self.wide_buffer[..bs]));
+                    try!(subframe::decode(&mut bitstream, bps, &mut buffer[..bs]));
                     try!(subframe::decode(&mut bitstream,
                                           bps + 1,
-                                          &mut self.wide_buffer[bs..bs * 2]));
+                                          &mut buffer[bs..bs * 2]));
 
                     // Then decode mid-side channel into left-right.
-                    try!(decode_mid_side(&mut self.wide_buffer[..bs * 2]));
+                    decode_mid_side(&mut buffer[..bs * 2]);
                 }
             }
 
@@ -621,28 +603,6 @@ impl<R: io::Read> FrameReader<R> {
             // enforce this here.
             // TODO: It could be enforced by having a read_to_byte_aligned
             // method on the bit reader; it'd be a simple comparison.
-        }
-
-        {
-            // Narrow down the wide samples i32 samples.
-            // TODO: Would it be possible to get rid of the wide buffer
-            // entirely in some cases?
-            let n = header.block_size as usize * header.channels() as usize;
-            let wide_iter = self.wide_buffer[..n].iter();
-            let dest_iter = buffer[..n].iter_mut();
-            for (&src, dest) in wide_iter.zip(dest_iter) {
-                // Narrow the wide (i64) sample to i32. For a valid FLAC file
-                // this will always fit. If it does not, then that is more
-                // likely due to a programming error than due to an invalid
-                // file, so use a debug assertion rather than a (release)
-                // runtime check. Even if it is possible for a corrupt file to
-                // cause a number out of bounds here, and that was not caught by
-                // checksum verification, then it still does not crash the
-                // decoder, it only causes incorrect samples.
-                debug_assert!(src >= i32::MIN as i64);
-                debug_assert!(src <= i32::MAX as i64);
-                *dest = src as i32;
-            }
         }
 
         // The frame footer is a 16-bit CRC.
