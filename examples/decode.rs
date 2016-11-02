@@ -8,7 +8,7 @@
 extern crate claxon;
 extern crate hound;
 
-use claxon::FlacReader;
+use claxon::{Block, FlacReader};
 use hound::{WavSpec, WavWriter};
 use std::env;
 use std::fs::File;
@@ -41,9 +41,24 @@ fn main() {
     let fname_wav = fname.with_extension("wav");
     let mut output = WavWriter::create(fname_wav, spec).expect("failed to create wav file");
 
-    for maybe_sample in reader.samples() {
-        let sample = maybe_sample.expect("failed to read sample");
-        output.write_sample(sample).expect("failed to write sample");
+    let mut frame_reader = reader.blocks();
+    let mut block = Block::empty();
+    loop {
+        // Read a single frame. Recycle the buffer from the previous frame to
+        // avoid allocations as much as possible.
+        match frame_reader.read_next_or_eof(block.into_buffer()) {
+            Ok(Some(next_block)) => block = next_block,
+            Ok(None) => break, // EOF.
+            Err(error) => panic!("{}", error),
+        }
+
+        // Write the samples in the block to the wav file, channels interleaved.
+        for s in 0..block.duration() {
+            for ch in 0..block.channels() {
+                output.write_sample(block.sample(ch, s))
+                      .expect("failed to write to wav file");
+            }
+        }
     }
 
     output.finalize().expect("failed to finalize wav file");
