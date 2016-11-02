@@ -123,7 +123,7 @@ fn compare_decoded_stream<P: AsRef<Path>>(fname: P) {
                 let mut channels: Vec<_> = (0..n_channels)
                                                .map(|i| block.channel(i).iter().cloned())
                                                .collect();
-                for i in 0..block.len() {
+                for i in 0..block.duration() {
                     for ch in 0..n_channels as usize {
                         let ref_sample = ref_samples.next().map(|r| r.ok().unwrap());
                         let try_sample = channels[ch].next();
@@ -139,7 +139,7 @@ fn compare_decoded_stream<P: AsRef<Path>>(fname: P) {
                         }
                     }
                 }
-                sample = sample + block.len() as u64;
+                sample = sample + block.duration() as u64;
             }
             b = b + 1;
             buffer = block.into_buffer();

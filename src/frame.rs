@@ -387,19 +387,19 @@ pub struct Block {
     /// The sample number of the first sample in the this block.
     first_sample_number: u64,
     /// The number of samples in the block.
-    block_size: u16,
+    block_size: u32,
     /// The number of channels in the block.
-    channels: u8,
+    channels: u32,
     /// The decoded samples, the channels stored consecutively.
     buffer: Vec<i32>,
 }
 
 impl Block {
-    fn new(time: u64, bs: u16, buffer: Vec<i32>) -> Block {
+    fn new(time: u64, bs: u32, buffer: Vec<i32>) -> Block {
         Block {
             first_sample_number: time,
             block_size: bs,
-            channels: (buffer.len() / bs as usize) as u8,
+            channels: buffer.len() as u32 / bs,
             buffer: buffer,
         }
     }
@@ -419,18 +419,32 @@ impl Block {
         self.first_sample_number
     }
 
-    /// Returns the number of inter-channel samples in the block.
-    // TODO: This is inconsistent with the samples iterator. Len should count
-    // total samples, duration should count inter-channel samples.
+    /// Returns the total number of samples in this block.
+    ///
+    /// Samples in different channels are counted as distinct samples.
     #[inline(always)]
-    pub fn len(&self) -> u16 {
+    pub fn len(&self) -> u32 {
+        // Note: this cannot overflow, because the block size fits in 16 bits,
+        // and the number of channels is at most 8.
+        self.block_size * self.channels
+    }
+
+    /// Returns the number of inter-channel samples in the block.
+    ///
+    /// The duration is independent of the number of channels. The returned
+    /// value is also referred to as the *block size*. To get the duration of
+    /// the block in seconds, divide this number by the sample rate in the
+    /// streaminfo.
+    #[inline(always)]
+    pub fn duration(&self) -> u32 {
         self.block_size
     }
 
     /// Returns the number of channels in the block.
-    // TODO: should a frame know this? #channels must be constant throughout the stream anyway ...
+    // TODO: Should a frame know this? #channels must be constant throughout the stream anyway ...
+    // TODO: Rename to `num_channels` for clarity.
     #[inline(always)]
-    pub fn channels(&self) -> u8 {
+    pub fn channels(&self) -> u32 {
         self.channels
     }
 
@@ -439,12 +453,15 @@ impl Block {
     /// # Panics
     ///
     /// Panics if `ch >= channels()`.
-    pub fn channel(&self, ch: u8) -> &[i32] {
-        &self.buffer[ch as usize * self.block_size as usize..(ch as usize + 1) *
-                                                             self.block_size as usize]
+    #[inline(always)]
+    pub fn channel(&self, ch: u32) -> &[i32] {
+        let bsz = self.block_size as usize;
+        let ch_usz = ch as usize;
+        &self.buffer[ch_usz * bsz..(ch_usz + 1) * bsz]
     }
 
     /// Returns a sample in this block.
+    ///
     /// The value returned is for the zero-based `ch`-th channel of the
     /// inter-channel sample with index `sample` in this block (so this is not
     /// the global sample number).
@@ -454,11 +471,13 @@ impl Block {
     /// Panics if `ch >= channels()` or if `sample >= len()` for the last
     /// channel.
     #[inline(always)]
-    pub fn sample(&self, ch: u8, sample: u16) -> i32 {
-        return self.buffer[ch as usize * self.block_size as usize + sample as usize];
+    pub fn sample(&self, ch: u32, sample: u32) -> i32 {
+        let bsz = self.block_size as usize;
+        return self.buffer[ch as usize * bsz + sample as usize];
     }
 
     /// Returns the underlying buffer that stores the samples in this block.
+    ///
     /// This allows the buffer to be reused to decode the next frame. The
     /// capacity of the buffer may be bigger than `len()` times `channels()`.
     pub fn into_buffer(self) -> Vec<i32> {
@@ -623,7 +642,7 @@ impl<R: io::Read> FrameReader<R> {
             BlockTime::SampleNumber(snr) => snr,
         };
 
-        let block = Block::new(time, header.block_size, buffer);
+        let block = Block::new(time, header.block_size as u32, buffer);
 
         Ok(Some(block))
     }

@@ -48,6 +48,7 @@ pub mod subframe;
 pub mod metadata;
 
 pub use error::{Error, Result};
+pub use frame::Block;
 
 /// A FLAC decoder that can decode the stream from the underlying reader.
 ///
@@ -63,9 +64,9 @@ pub struct FlacReader<R: io::Read> {
 /// An iterator that yields samples read from a `FlacReader`.
 pub struct FlacSamples<'fr, R: 'fr + io::Read> {
     frame_reader: FrameReader<&'fr mut R>,
-    block: frame::Block,
-    sample: u16,
-    channel: u8,
+    block: Block,
+    sample: u32,
+    channel: u32,
 
     /// If reading ever failed, this flag is set, so that the iterator knows not
     /// to return any new values.
@@ -148,6 +149,17 @@ impl<R: io::Read> FlacReader<R> {
 
     /// Returns an iterator over all samples.
     ///
+    /// This is a user-friendly interface that trades performance for ease of
+    /// use. If performance is an issue, consider using `blocks()` instead.
+    ///
+    /// This is a high-level interface to the decoder. The cost of retrieving
+    /// the next sample can vary significantly, as sometimes a new block has to
+    /// be decoded. Additionally, there is a cost to every iteration returning a
+    /// `Result`. When a block has been decoded, iterating the samples in that
+    /// block can never fail, but a match on every sample is required
+    /// nonetheless. For more control over when decoding happens, and less error
+    /// handling overhead, use `blocks()`.
+    ///
     /// The channel data is is interleaved. The iterator is streaming. That is,
     /// if you call this method once, read a few samples, and call this method
     /// again, the second iterator will not start again from the beginning of
@@ -155,14 +167,10 @@ impl<R: io::Read> FlacReader<R> {
     /// stopped, and it might skip some samples. (This is because FLAC divides
     /// a stream into blocks, which have to be decoded entirely. If you drop the
     /// iterator, you lose the unread samples in that block.)
-    ///
-    /// This is a high-level interface to the decoder. The cost of retrieving
-    /// the next sample can vary significantly, as sometimes a new block has to
-    /// be decoded. For more control over when decoding happens, use `blocks()`.
     pub fn samples<'r>(&'r mut self) -> FlacSamples<'r, R> {
         FlacSamples {
             frame_reader: frame::FrameReader::new(&mut self.input),
-            block: frame::Block::empty(),
+            block: Block::empty(),
             sample: 0,
             channel: 0,
             has_failed: false,
@@ -211,7 +219,7 @@ impl<'fr, R: 'fr + io::Read> Iterator for FlacSamples<'fr, R> {
 
                 // Replace the current block with an empty one so that we may
                 // reuse the current buffer to decode again.
-                let current_block = mem::replace(&mut self.block, frame::Block::empty());
+                let current_block = mem::replace(&mut self.block, Block::empty());
 
                 match self.frame_reader.read_next_or_eof(current_block.into_buffer()) {
                     Ok(Some(next_block)) => {

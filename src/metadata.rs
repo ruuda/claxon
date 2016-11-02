@@ -33,9 +33,9 @@ pub struct StreamInfo {
     /// The sample rate in Hz.
     pub sample_rate: u32,
     /// The number of channels.
-    pub channels: u8,
+    pub channels: u32,
     /// The number of bits per sample.
-    pub bits_per_sample: u8,
+    pub bits_per_sample: u32,
     /// The total number of inter-channel samples in the stream.
     pub samples: Option<u64>,
     /// MD5 signature of the unencoded audio data.
@@ -238,8 +238,8 @@ fn read_streaminfo_block<R: io::Read>(input: &mut R) -> Result<StreamInfo> {
             Some(max_frame_size)
         },
         sample_rate: sample_rate,
-        channels: n_channels,
-        bits_per_sample: bits_per_sample,
+        channels: n_channels as u32,
+        bits_per_sample: bits_per_sample as u32,
         samples: if n_samples == 0 {
             None
         } else {
