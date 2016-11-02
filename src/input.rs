@@ -75,6 +75,7 @@ impl<R> ReadExt for R
         Ok(())
     }
 
+    #[inline(always)]
     fn read_u8(&mut self) -> io::Result<u8> {
         // Read a single byte.
         let mut buf = [0u8; 1];
