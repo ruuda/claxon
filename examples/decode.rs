@@ -39,27 +39,32 @@ fn main() {
         sample_format: hound::SampleFormat::Int,
     };
     let fname_wav = fname.with_extension("wav");
-    let mut output = WavWriter::create(fname_wav, spec).expect("failed to create wav file");
+    let mut wav_writer = WavWriter::create(fname_wav, spec).expect("failed to create wav file");
+    {
+        // TODO: Write fallback for other sample widths.
+        assert!(reader.streaminfo().bits_per_sample == 16);
+        let mut sample_writer = wav_writer.get_i16_writer();
 
-    let mut frame_reader = reader.blocks();
-    let mut block = Block::empty();
-    loop {
-        // Read a single frame. Recycle the buffer from the previous frame to
-        // avoid allocations as much as possible.
-        match frame_reader.read_next_or_eof(block.into_buffer()) {
-            Ok(Some(next_block)) => block = next_block,
-            Ok(None) => break, // EOF.
-            Err(error) => panic!("{}", error),
-        }
+        let mut frame_reader = reader.blocks();
+        let mut block = Block::empty();
+        loop {
+            // Read a single frame. Recycle the buffer from the previous frame to
+            // avoid allocations as much as possible.
+            match frame_reader.read_next_or_eof(block.into_buffer()) {
+                Ok(Some(next_block)) => block = next_block,
+                Ok(None) => break, // EOF.
+                Err(error) => panic!("{}", error),
+            }
 
-        // Write the samples in the block to the wav file, channels interleaved.
-        for s in 0..block.duration() {
-            for ch in 0..block.channels() {
-                output.write_sample(block.sample(ch, s))
-                      .expect("failed to write to wav file");
+            // Write the samples in the block to the wav file, channels interleaved.
+            for s in 0..block.duration() {
+                for ch in 0..block.channels() {
+                    sample_writer.write_sample(block.sample(ch, s))
+                                 .expect("failed to write to wav file");
+                }
             }
         }
     }
 
-    output.finalize().expect("failed to finalize wav file");
+    wav_writer.finalize().expect("failed to finalize wav file");
 }
