@@ -422,12 +422,14 @@ impl Block {
     /// Returns the number of inter-channel samples in the block.
     // TODO: This is inconsistent with the samples iterator. Len should count
     // total samples, duration should count inter-channel samples.
+    #[inline(always)]
     pub fn len(&self) -> u16 {
         self.block_size
     }
 
     /// Returns the number of channels in the block.
     // TODO: should a frame know this? #channels must be constant throughout the stream anyway ...
+    #[inline(always)]
     pub fn channels(&self) -> u8 {
         self.channels
     }
@@ -451,6 +453,7 @@ impl Block {
     ///
     /// Panics if `ch >= channels()` or if `sample >= len()` for the last
     /// channel.
+    #[inline(always)]
     pub fn sample(&self, ch: u8, sample: u16) -> i32 {
         return self.buffer[ch as usize * self.block_size as usize + sample as usize];
     }
