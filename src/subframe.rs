@@ -560,6 +560,9 @@ fn decode_lpc<R: io::Read>(input: &mut Bitstream<R>,
                            order: u32,
                            buffer: &mut [i32])
                            -> Result<()> {
+    // The order minus one fits in 5 bits, so the order is at most 32.
+    debug_assert!(order <= 32);
+
     // There are order * bits per sample unencoded warm-up sample bits.
     try!(decode_verbatim(input, bps, &mut buffer[..order as usize]));
 
@@ -576,18 +579,15 @@ fn decode_lpc<R: io::Read>(input: &mut Bitstream<R>,
     let qlp_shift_unsig = try!(input.read_leq_u16(5));
     let qlp_shift = extend_sign_u16(qlp_shift_unsig, 5);
 
-    // Finally, the coefficients themselves.
-    // TODO: get rid of the allocation by pre-allocating a vector in the decoder.
-    let mut coefficients = Vec::new();
-    for _ in 0..order {
-        // We can safely read into an u16, qlp_precision is at most 15.
+    // Finally, the coefficients themselves. The order is at most 32, so all
+    // coefficients can be kept on the stack. Store them in reverse, because
+    // that how they are used in prediction.
+    let mut coefficients = [0; 32];
+    for coef in coefficients[..order as usize].iter_mut().rev() {
+        // We can safely read into a u16, qlp_precision is at most 15.
         let coef_unsig = try!(input.read_leq_u16(qlp_precision));
-        let coef = extend_sign_u16(coef_unsig, qlp_precision);
-        coefficients.push(coef);
+        *coef = extend_sign_u16(coef_unsig, qlp_precision);
     }
-
-    // Coefficients are used in reverse order for prediction.
-    coefficients.reverse();
 
     // Next up is the residual. We decode it into the buffer directly, the
     // predictor contributions will be added in a second pass. The first
@@ -596,7 +596,7 @@ fn decode_lpc<R: io::Read>(input: &mut Bitstream<R>,
                          buffer.len() as u16,
                          &mut buffer[order as usize..]));
 
-    try!(predict_lpc(&coefficients, qlp_shift, buffer));
+    try!(predict_lpc(&coefficients[..order as usize], qlp_shift, buffer));
 
     Ok(())
 }
