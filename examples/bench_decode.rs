@@ -62,8 +62,7 @@ fn decode_file(data: &[u8], sample_times_ns: &mut Vec<f64>) -> (f64, f64) {
                 // Update timing information.
                 let now = PreciseTime::now();
                 let duration_ns = frame_epoch.to(now).num_nanoseconds().unwrap();
-                let num_samples = block.len() as i64 * block.channels() as i64;
-                sample_times_ns.push(duration_ns as f64 / num_samples as f64);
+                sample_times_ns.push(duration_ns as f64 / block.len() as f64);
                 frame_epoch = now;
 
                 // Recycle the buffer for the next frame. There should be a
