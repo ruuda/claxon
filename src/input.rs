@@ -5,118 +5,178 @@
 // you may not use this file except in compliance with the License.
 // A copy of the License has been included in the root of the repository.
 
+use std::cmp;
 use std::io;
 
+/// Similar to `std::io::BufRead`, but more performant.
+///
+/// There is no simple way to wrap a standard `BufRead` such that it can compute
+/// checksums on consume. This is really something that needs a less restrictive
+/// interface. Apart from enabling checksum computations, this buffered reader
+/// has some convenience functions.
+pub struct BufferedReader<R: io::Read> {
+    /// The wrapped reader.
+    inner: R,
+
+    /// The buffer that holds data read from the inner reader.
+    buf: Box<[u8]>,
+
+    /// The index of the first byte in the buffer which has not been consumed.
+    pos: u32,
+
+    /// The number of bytes of the buffer which have meaningful content.
+    num_valid: u32,
+}
+
+impl<R: io::Read> BufferedReader<R> {
+
+    /// Wrap the reader in a new buffered reader.
+    pub fn new(inner: R) -> BufferedReader<R> {
+        let buf = vec![0; 1024].into_boxed_slice();
+        BufferedReader {
+            inner: inner,
+            buf: buf,
+            pos: 0,
+            num_valid: 0,
+        }
+    }
+
+    /// Destroys the buffered reader, returning the wrapped reader.
+    ///
+    /// Anything in the buffer will be lost.
+    pub fn into_inner(self) -> R {
+        self.inner
+    }
+}
+
+
 /// Provides convenience methods to make input less cumbersome.
-pub trait ReadExt: io::Read {
-    /// Reads as many bytes as `buf` is long.
-    ///
-    /// This may issue multiple `read` calls internally. An error is returned
-    /// if `read` read 0 bytes before the buffer is full, except when the first
-    /// call to `read` reads 0 bytes (this is the case of EOF), in which case
-    /// `None` is returned. Returns `Some(())` on success.
-    fn read_into_or_eof(&mut self, buf: &mut [u8]) -> io::Result<Option<()>>;
-
-    /// Reads as many bytes as `buf` is long.
-    ///
-    /// Same as `read_into_or_eof`, buf retuns an `UnexpectedEof` error even
-    /// when EOF is encountered immediately.
-    fn read_into(&mut self, buf: &mut [u8]) -> io::Result<()>;
-
-    /// Reads a single byte.
+pub trait ReadBytes {
+    /// Reads a single byte, failing on EOF.
     fn read_u8(&mut self) -> io::Result<u8>;
 
-    /// Reads two bytes and interprets them as a big-endian 16-bit unsigned integer.
-    fn read_be_u16(&mut self) -> io::Result<u16>;
+    /// Reads a single byte, not failing on EOF.
+    fn read_u8_or_eof(&mut self) -> io::Result<Option<u8>>;
 
-    /// Reads three bytes and interprets them as a big-endian 24-bit unsigned integer.
-    fn read_be_u24(&mut self) -> io::Result<u32>;
-
-    /// Reads four bytes and interprets them as a big-endian 32-bit unsigned integer.
-    fn read_be_u32(&mut self) -> io::Result<u32>;
+    /// Reads until the provided buffer is full.
+    fn read_into(&mut self, buffer: &mut [u8]) -> io::Result<()>;
 
     /// Reads two bytes and interprets them as a big-endian 16-bit unsigned integer.
-    fn read_be_u16_or_eof(&mut self) -> io::Result<Option<u16>>;
-}
+    fn read_be_u16(&mut self) -> io::Result<u16> {
+        let b0 = try!(self.read_u8()) as u16;
+        let b1 = try!(self.read_u8()) as u16;
+        Ok(b0 << 8 | b1)
+    }
 
-#[inline]
-fn read_into_impl<R: io::Read>(input: &mut R,
-                               buf: &mut [u8],
-                               allow_eof: bool)
-                               -> io::Result<Option<()>> {
-    let mut n = 0;
-    let mut is_first = allow_eof;
-    while n < buf.len() {
-        let progress = try!(input.read(&mut buf[n..]));
-        if progress > 0 {
-            n += progress;
-        } else {
-            if is_first {
-                return Ok(None);
-            } else {
-                return Err(io::Error::new(io::ErrorKind::UnexpectedEof,
-                                          "Failed to read enough bytes."));
+    /// Reads two bytes and interprets them as a big-endian 16-bit unsigned integer.
+    fn read_be_u16_or_eof(&mut self) -> io::Result<Option<u16>> {
+        if let Some(b0) = try!(self.read_u8_or_eof()) {
+            if let Some(b1) = try!(self.read_u8_or_eof()) {
+                return Ok(Some((b0 as u16) << 8 | (b1 as u16)));
             }
         }
-        is_first = false;
+        Ok(None)
     }
-    Ok(Some(()))
+
+    /// Reads three bytes and interprets them as a big-endian 24-bit unsigned integer.
+    fn read_be_u24(&mut self) -> io::Result<u32> {
+        let b0 = try!(self.read_u8()) as u32;
+        let b1 = try!(self.read_u8()) as u32;
+        let b2 = try!(self.read_u8()) as u32;
+        Ok(b0 << 16 | b1 << 8 | b2)
+    }
+
+    /// Reads four bytes and interprets them as a big-endian 32-bit unsigned integer.
+    fn read_be_u32(&mut self) -> io::Result<u32> {
+        let b0 = try!(self.read_u8()) as u32;
+        let b1 = try!(self.read_u8()) as u32;
+        let b2 = try!(self.read_u8()) as u32;
+        let b3 = try!(self.read_u8()) as u32;
+        Ok(b0 << 24 | b1 << 16 | b2 << 8 | b3)
+    }
 }
 
-impl<R> ReadExt for R
-    where R: io::Read
+impl<R: io::Read> ReadBytes for BufferedReader<R>
 {
-    fn read_into_or_eof(&mut self, buf: &mut [u8]) -> io::Result<Option<()>> {
-        read_into_impl(self, buf, true)
+    #[inline(always)]
+    fn read_u8(&mut self) -> io::Result<u8> {
+        if self.pos == self.num_valid {
+            // The buffer was depleted, replenish it first.
+            self.pos = 0;
+            self.num_valid = try!(self.inner.read(&mut self.buf)) as u32;
+
+            if self.num_valid == 0 {
+                return Err(io::Error::new(io::ErrorKind::UnexpectedEof,
+                                          "Expected one more byte."))
+            }
+        }
+
+        // TODO: Verify that the bounds check is omitted.
+        let byte = self.buf[self.pos as usize];
+        self.pos += 1;
+        Ok(byte)
     }
 
-    fn read_into(&mut self, buf: &mut [u8]) -> io::Result<()> {
-        try!(read_into_impl(self, buf, false));
+    fn read_u8_or_eof(&mut self) -> io::Result<Option<u8>> {
+        if self.pos == self.num_valid {
+            // The buffer was depleted, try to replenish it first.
+            self.pos = 0;
+            self.num_valid = try!(self.inner.read(&mut self.buf)) as u32;
+
+            if self.num_valid == 0 {
+                return Ok(None);
+            }
+        }
+
+        Ok(Some(try!(self.read_u8())))
+    }
+
+    fn read_into(&mut self, buffer: &mut [u8]) -> io::Result<()> {
+        let mut bytes_left = buffer.len();
+
+        while bytes_left > 0 {
+            let from = buffer.len() - bytes_left;
+            let count = cmp::min(bytes_left, (self.num_valid - self.pos) as usize);
+            buffer[from..from + count].copy_from_slice(
+                &self.buf[self.pos as usize..self.pos as usize + count]);
+            bytes_left -= count;
+            self.pos += count as u32;
+
+            if bytes_left > 0 {
+                // Replenish the buffer if there is more to be read.
+                self.pos = 0;
+                self.num_valid = try!(self.inner.read(&mut self.buf)) as u32;
+                if self.num_valid == 0 {
+                    return Err(io::Error::new(io::ErrorKind::UnexpectedEof,
+                                              "Expected more bytes."))
+                }
+            }
+        }
+
         Ok(())
     }
+}
+
+impl<'r, R: ReadBytes> ReadBytes for &'r mut R {
 
     #[inline(always)]
     fn read_u8(&mut self) -> io::Result<u8> {
-        // Read a single byte.
-        let mut buf = [0u8; 1];
-        if try!(self.read(&mut buf)) != 1 {
-            Err(io::Error::new(io::ErrorKind::Other, "Failed to read byte."))
-        } else {
-            Ok(buf[0])
-        }
+        (*self).read_u8()
     }
 
-    fn read_be_u16(&mut self) -> io::Result<u16> {
-        let mut buf = [0u8; 2];
-        try!(self.read_into(&mut buf));
-        Ok((buf[0] as u16) << 8 | (buf[1] as u16))
+    fn read_u8_or_eof(&mut self) -> io::Result<Option<u8>> {
+        (*self).read_u8_or_eof()
     }
 
-    fn read_be_u16_or_eof(&mut self) -> io::Result<Option<u16>> {
-        let mut buf = [0u8; 2];
-        match try!(self.read_into_or_eof(&mut buf)) {
-            None => Ok(None),
-            Some(_) => Ok(Some((buf[0] as u16) << 8 | (buf[1] as u16))),
-        }
-    }
-
-    fn read_be_u24(&mut self) -> io::Result<u32> {
-        let mut buf = [0u8; 3];
-        try!(self.read_into(&mut buf));
-        Ok((buf[0] as u32) << 16 | (buf[1] as u32) << 8 | (buf[2] as u32))
-    }
-
-    fn read_be_u32(&mut self) -> io::Result<u32> {
-        let mut buf = [0u8; 4];
-        try!(self.read_into(&mut buf));
-        Ok((buf[0] as u32) << 24 | (buf[1] as u32) << 16 | (buf[2] as u32) << 8 |
-           (buf[3] as u32) << 0)
+    fn read_into(&mut self, buffer: &mut [u8]) -> io::Result<()> {
+        (*self).read_into(buffer)
     }
 }
 
+
 #[test]
 fn verify_read_into() {
-    let mut reader = io::Cursor::new(vec![2u8, 3, 5, 7, 11, 13, 17, 19, 23]);
+    let mut reader = BufferedReader::new(io::Cursor::new(vec![2u8, 3, 5, 7, 11, 13, 17, 19, 23]));
     let mut buf1 = [0u8; 3];
     let mut buf2 = [0u8; 5];
     let mut buf3 = [0u8; 2];
@@ -128,19 +188,20 @@ fn verify_read_into() {
 }
 
 #[test]
-fn verify_read_into_or_eof() {
-    let mut reader = io::Cursor::new(vec![2u8, 3, 5]);
-    let mut buf = [0u8; 3];
-    let result = reader.read_into_or_eof(&mut buf).ok().unwrap();
-    assert!(result.is_some());
-
-    let result = reader.read_into_or_eof(&mut buf).ok().unwrap();
-    assert!(result.is_none());
+fn verify_read_u8() {
+    let mut reader = BufferedReader::new(io::Cursor::new(vec![0u8, 2, 129, 89, 122]));
+    assert_eq!(reader.read_u8().unwrap(), 0);
+    assert_eq!(reader.read_u8().unwrap(), 2);
+    assert_eq!(reader.read_u8().unwrap(), 129);
+    assert_eq!(reader.read_u8().unwrap(), 89);
+    assert_eq!(reader.read_u8_or_eof().unwrap(), Some(122));
+    assert_eq!(reader.read_u8_or_eof().unwrap(), None);
+    assert!(reader.read_u8().is_err());
 }
 
 #[test]
 fn verify_read_be_u16() {
-    let mut reader = io::Cursor::new(vec![0u8, 2, 129, 89, 122]);
+    let mut reader = BufferedReader::new(io::Cursor::new(vec![0u8, 2, 129, 89, 122]));
     assert_eq!(reader.read_be_u16().ok(), Some(2));
     assert_eq!(reader.read_be_u16().ok(), Some(33113));
     assert!(reader.read_be_u16().is_err());
@@ -148,7 +209,7 @@ fn verify_read_be_u16() {
 
 #[test]
 fn verify_read_be_u24() {
-    let mut reader = io::Cursor::new(vec![0u8, 0, 2, 0x8f, 0xff, 0xf3, 122]);
+    let mut reader = BufferedReader::new(io::Cursor::new(vec![0u8, 0, 2, 0x8f, 0xff, 0xf3, 122]));
     assert_eq!(reader.read_be_u24().ok(), Some(2));
     assert_eq!(reader.read_be_u24().ok(), Some(9_437_171));
     assert!(reader.read_be_u24().is_err());
@@ -156,7 +217,7 @@ fn verify_read_be_u24() {
 
 #[test]
 fn verify_read_be_u32() {
-    let mut reader = io::Cursor::new(vec![0u8, 0, 0, 2, 0x80, 0x01, 0xff, 0xe9, 0]);
+    let mut reader = BufferedReader::new(io::Cursor::new(vec![0u8, 0, 0, 2, 0x80, 0x01, 0xff, 0xe9, 0]));
     assert_eq!(reader.read_be_u32().ok(), Some(2));
     assert_eq!(reader.read_be_u32().ok(), Some(2_147_614_697));
     assert!(reader.read_be_u32().is_err());
@@ -183,7 +244,7 @@ fn shift_right(x: u8, shift: u32) -> u8 {
 }
 
 /// Wraps a `Reader` to facilitate reading that is not byte-aligned.
-pub struct Bitstream<R: io::Read> {
+pub struct Bitstream<R: ReadBytes> {
     /// The source where bits are read from.
     reader: R,
     /// Data read from the reader, but not yet fully consumed.
@@ -192,7 +253,7 @@ pub struct Bitstream<R: io::Read> {
     bits_left: u32,
 }
 
-impl<R: io::Read> Bitstream<R> {
+impl<R: ReadBytes> Bitstream<R> {
     /// Wraps the reader with a reader that facilitates reading individual bits.
     pub fn new(reader: R) -> Bitstream<R> {
         Bitstream {
@@ -416,7 +477,7 @@ impl<R: io::Read> Bitstream<R> {
 #[test]
 fn verify_read_bit() {
     let data = io::Cursor::new(vec![0b1010_0100, 0b1110_0001]);
-    let mut bits = Bitstream::new(data);
+    let mut bits = Bitstream::new(BufferedReader::new(data));
 
     assert_eq!(bits.read_bit().unwrap(), true);
     assert_eq!(bits.read_bit().unwrap(), false);
@@ -443,7 +504,7 @@ fn verify_read_bit() {
 fn verify_read_unary() {
     let data = io::Cursor::new(vec![
         0b1010_0100, 0b1000_0000, 0b0010_0000, 0b0000_0000, 0b0000_1010]);
-    let mut bits = Bitstream::new(data);
+    let mut bits = Bitstream::new(BufferedReader::new(data));
 
     assert_eq!(bits.read_unary().unwrap(), 0);
     assert_eq!(bits.read_unary().unwrap(), 1);
@@ -472,7 +533,7 @@ fn verify_read_leq_u8() {
                                     0b0011_1111,
                                     0b1010_1010,
                                     0b0000_1100]);
-    let mut bits = Bitstream::new(data);
+    let mut bits = Bitstream::new(BufferedReader::new(data));
 
     assert_eq!(bits.read_leq_u8(0).unwrap(), 0);
     assert_eq!(bits.read_leq_u8(1).unwrap(), 1);
@@ -497,7 +558,7 @@ fn verify_read_leq_u8() {
 #[test]
 fn verify_read_gt_u8_get_u16() {
     let data = io::Cursor::new(vec![0b1010_0101, 0b1110_0001, 0b1101_0010, 0b0101_0101, 0b1111_0000]);
-    let mut bits = Bitstream::new(data);
+    let mut bits = Bitstream::new(BufferedReader::new(data));
 
     assert_eq!(bits.read_gt_u8_leq_u16(10).unwrap(), 0b1010_0101_11);
     assert_eq!(bits.read_gt_u8_leq_u16(10).unwrap(), 0b10_0001_1101);
@@ -510,7 +571,7 @@ fn verify_read_gt_u8_get_u16() {
 #[test]
 fn verify_read_leq_u16() {
     let data = io::Cursor::new(vec![0b1010_0101, 0b1110_0001, 0b1101_0010, 0b0101_0101]);
-    let mut bits = Bitstream::new(data);
+    let mut bits = Bitstream::new(BufferedReader::new(data));
 
     assert_eq!(bits.read_leq_u16(0).unwrap(), 0);
     assert_eq!(bits.read_leq_u16(1).unwrap(), 1);
@@ -521,7 +582,7 @@ fn verify_read_leq_u16() {
 #[test]
 fn verify_read_leq_u32() {
     let data = io::Cursor::new(vec![0b1010_0101, 0b1110_0001, 0b1101_0010, 0b0101_0101]);
-    let mut bits = Bitstream::new(data);
+    let mut bits = Bitstream::new(BufferedReader::new(data));
 
     assert_eq!(bits.read_leq_u32(1).unwrap(), 1);
     assert_eq!(bits.read_leq_u32(17).unwrap(), 0b010_0101_1110_0001_11);
@@ -533,7 +594,7 @@ fn verify_read_mixed() {
     // These test data are warm-up samples from an actual stream.
     let data = io::Cursor::new(vec![0x03, 0xc7, 0xbf, 0xe5, 0x9b, 0x74, 0x1e, 0x3a, 0xdd, 0x7d,
                                     0xc5, 0x5e, 0xf6, 0xbf, 0x78, 0x1b, 0xbd]);
-    let mut bits = Bitstream::new(data);
+    let mut bits = Bitstream::new(BufferedReader::new(data));
 
     assert_eq!(bits.read_leq_u8(6).unwrap(), 0);
     assert_eq!(bits.read_leq_u8(1).unwrap(), 1);

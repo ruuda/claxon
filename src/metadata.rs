@@ -7,10 +7,9 @@
 
 //! The `metadata` module deals with metadata at the beginning of a FLAC stream.
 
-use std::io;
 use std::iter;
 use error::{Result, fmt_err};
-use input::ReadExt;
+use input::ReadBytes;
 
 #[derive(Clone, Copy)]
 struct MetadataBlockHeader {
@@ -89,7 +88,7 @@ pub enum MetadataBlock {
     Reserved,
 }
 
-fn read_metadata_block_header<R: io::Read>(input: &mut R) -> Result<MetadataBlockHeader> {
+fn read_metadata_block_header<R: ReadBytes>(input: &mut R) -> Result<MetadataBlockHeader> {
     let byte = try!(input.read_u8());
 
     // The first bit specifies whether this is the last block, the next 7 bits
@@ -108,10 +107,10 @@ fn read_metadata_block_header<R: io::Read>(input: &mut R) -> Result<MetadataBloc
     Ok(header)
 }
 
-fn read_metadata_block<R: io::Read>(input: &mut R,
-                                    block_type: u8,
-                                    length: u32)
-                                    -> Result<MetadataBlock> {
+fn read_metadata_block<R: ReadBytes>(input: &mut R,
+                                     block_type: u8,
+                                     length: u32)
+                                     -> Result<MetadataBlock> {
     match block_type {
         0 => {
             // The streaminfo block has a fixed size of 34 bytes.
@@ -169,7 +168,7 @@ fn read_metadata_block<R: io::Read>(input: &mut R,
     }
 }
 
-fn read_streaminfo_block<R: io::Read>(input: &mut R) -> Result<StreamInfo> {
+fn read_streaminfo_block<R: ReadBytes>(input: &mut R) -> Result<StreamInfo> {
     let min_block_size = try!(input.read_be_u16());
     let max_block_size = try!(input.read_be_u16());
 
@@ -250,7 +249,7 @@ fn read_streaminfo_block<R: io::Read>(input: &mut R) -> Result<StreamInfo> {
     Ok(stream_info)
 }
 
-fn read_padding_block<R: io::Read>(input: &mut R, length: u32) -> Result<()> {
+fn read_padding_block<R: ReadBytes>(input: &mut R, length: u32) -> Result<()> {
     // The specification dictates that all bits of the padding block must be 0.
     // However, the reference implementation does not issue an error when this
     // is not the case, and frankly, when you are going to skip over these
@@ -259,7 +258,9 @@ fn read_padding_block<R: io::Read>(input: &mut R, length: u32) -> Result<()> {
     skip_block(input, length)
 }
 
-fn skip_block<R: io::Read>(input: &mut R, length: u32) -> Result<()> {
+fn skip_block<R: ReadBytes>(input: &mut R, length: u32) -> Result<()> {
+    // TODO: This can be done more efficiently by just bumping the cursor for
+    // the `BufferedReader` implementation.
     for _ in 0..length {
         try!(input.read_u8());
     }
@@ -267,7 +268,7 @@ fn skip_block<R: io::Read>(input: &mut R, length: u32) -> Result<()> {
     Ok(())
 }
 
-fn read_application_block<R: io::Read>(input: &mut R, length: u32) -> Result<(u32, Vec<u8>)> {
+fn read_application_block<R: ReadBytes>(input: &mut R, length: u32) -> Result<(u32, Vec<u8>)> {
     let id = try!(input.read_be_u32());
 
     // Four bytes of the block have been used for the ID, the rest is payload.
@@ -283,7 +284,7 @@ fn read_application_block<R: io::Read>(input: &mut R, length: u32) -> Result<(u3
 /// byte of a metadata block header. This means that the iterator will yield at
 /// least a single value. If the iterator ever yields an error, then no more
 /// data will be read thereafter, and the next value will be `None`.
-pub struct MetadataBlockReader<R: io::Read> {
+pub struct MetadataBlockReader<R: ReadBytes> {
     input: R,
     done: bool,
 }
@@ -291,7 +292,7 @@ pub struct MetadataBlockReader<R: io::Read> {
 /// Either a `MetadataBlock` or an `Error`.
 pub type MetadataBlockResult = Result<MetadataBlock>;
 
-impl<R: io::Read> MetadataBlockReader<R> {
+impl<R: ReadBytes> MetadataBlockReader<R> {
     /// Creates a metadata block reader that will yield at least one element.
     pub fn new(input: R) -> MetadataBlockReader<R> {
         MetadataBlockReader {
@@ -308,7 +309,7 @@ impl<R: io::Read> MetadataBlockReader<R> {
     }
 }
 
-impl<R: io::Read> Iterator for MetadataBlockReader<R> {
+impl<R: ReadBytes> Iterator for MetadataBlockReader<R> {
     type Item = MetadataBlockResult;
 
     fn next(&mut self) -> Option<MetadataBlockResult> {

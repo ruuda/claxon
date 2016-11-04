@@ -8,9 +8,8 @@
 //! The `subframe` module deals with subframes that make up a frame of the FLAC stream.
 
 use std::cmp;
-use std::io;
 use error::{Error, Result, fmt_err};
-use input::Bitstream;
+use input::{Bitstream, ReadBytes};
 
 #[derive(Clone, Copy, Debug)]
 enum SubframeType {
@@ -26,7 +25,7 @@ struct SubframeHeader {
     wasted_bits_per_sample: u32,
 }
 
-fn read_subframe_header<R: io::Read>(input: &mut Bitstream<R>) -> Result<SubframeHeader> {
+fn read_subframe_header<R: ReadBytes>(input: &mut Bitstream<R>) -> Result<SubframeHeader> {
     // The first bit must be a 0 padding bit.
     if try!(input.read_bit()) {
         return fmt_err("invalid subframe header");
@@ -174,10 +173,10 @@ fn verify_rice_to_signed() {
 /// Decodes a subframe into the provided block-size buffer.
 ///
 /// It is assumed that the length of the buffer is the block size.
-pub fn decode<R: io::Read>(input: &mut Bitstream<R>,
-                           bps: u32,
-                           buffer: &mut [i32])
-                           -> Result<()> {
+pub fn decode<R: ReadBytes>(input: &mut Bitstream<R>,
+                            bps: u32,
+                            buffer: &mut [i32])
+                            -> Result<()> {
     // The sample type i32 should be wide enough to accomodate for all bits of
     // the stream, but this can be verified at a higher level than here. Still,
     // it is a good idea to make the assumption explicit. FLAC supports up to
@@ -213,10 +212,10 @@ enum RicePartitionType {
     Rice2,
 }
 
-fn decode_residual<R: io::Read>(input: &mut Bitstream<R>,
-                                block_size: u16,
-                                buffer: &mut [i32])
-                                -> Result<()> {
+fn decode_residual<R: ReadBytes>(input: &mut Bitstream<R>,
+                                 block_size: u16,
+                                 buffer: &mut [i32])
+                                 -> Result<()> {
     // Residual starts with two bits of coding method.
     let partition_type = match try!(input.read_leq_u8(2)) {
         0b00 => RicePartitionType::Rice,
@@ -274,9 +273,9 @@ fn decode_residual<R: io::Read>(input: &mut Bitstream<R>,
 // partitions, not Rice2 partitions. Therefore it makes sense to inline this
 // function into decode_residual.
 #[inline(always)]
-fn decode_rice_partition<R: io::Read>(input: &mut Bitstream<R>,
-                                      buffer: &mut [i32])
-                                      -> Result<()> {
+fn decode_rice_partition<R: ReadBytes>(input: &mut Bitstream<R>,
+                                       buffer: &mut [i32])
+                                       -> Result<()> {
     // A Rice partition (not Rice2), starts with a 4-bit Rice parameter.
     let rice_param = try!(input.read_leq_u8(4)) as u32;
 
@@ -322,9 +321,9 @@ fn decode_rice_partition<R: io::Read>(input: &mut Bitstream<R>,
 // single one in any real-world FLAC file. So do not inline it, in order not to
 // pollute the caller with dead code.
 #[inline(never)]
-fn decode_rice2_partition<R: io::Read>(input: &mut Bitstream<R>,
-                                       buffer: &mut [i32])
-                                       -> Result<()> {
+fn decode_rice2_partition<R: ReadBytes>(input: &mut Bitstream<R>,
+                                        buffer: &mut [i32])
+                                        -> Result<()> {
     // A Rice2 partition, starts with a 5-bit Rice parameter.
     let rice_param = try!(input.read_leq_u8(5)) as u32;
 
@@ -347,10 +346,10 @@ fn decode_rice2_partition<R: io::Read>(input: &mut Bitstream<R>,
     Ok(())
 }
 
-fn decode_constant<R: io::Read>(input: &mut Bitstream<R>,
-                                bps: u32,
-                                buffer: &mut [i32])
-                                -> Result<()> {
+fn decode_constant<R: ReadBytes>(input: &mut Bitstream<R>,
+                                 bps: u32,
+                                 buffer: &mut [i32])
+                                 -> Result<()> {
     let sample_u32 = try!(input.read_leq_u32(bps));
     let sample = extend_sign_u32(sample_u32, bps);
 
@@ -361,10 +360,10 @@ fn decode_constant<R: io::Read>(input: &mut Bitstream<R>,
     Ok(())
 }
 
-fn decode_verbatim<R: io::Read>(input: &mut Bitstream<R>,
-                                bps: u32,
-                                buffer: &mut [i32])
-                                -> Result<()> {
+fn decode_verbatim<R: ReadBytes>(input: &mut Bitstream<R>,
+                                 bps: u32,
+                                 buffer: &mut [i32])
+                                 -> Result<()> {
 
     // This function must not be called for a sample wider than the sample type.
     // This has been verified at an earlier stage, but it is good to state the
@@ -450,11 +449,11 @@ fn verify_predict_fixed() {
     assert_eq!(&buffer, &[21877, 27482, 26574]);
 }
 
-fn decode_fixed<R: io::Read>(input: &mut Bitstream<R>,
-                             bps: u32,
-                             order: u32,
-                             buffer: &mut [i32])
-                             -> Result<()> {
+fn decode_fixed<R: ReadBytes>(input: &mut Bitstream<R>,
+                              bps: u32,
+                              order: u32,
+                              buffer: &mut [i32])
+                              -> Result<()> {
     // There are order * bits per sample unencoded warm-up sample bits.
     try!(decode_verbatim(input, bps, &mut buffer[..order as usize]));
 
@@ -555,11 +554,11 @@ fn verify_predict_lpc() {
     assert_eq!(&buffer, &[-21363, -21951, -22649, -24364, -27297, -26870, -30017, -29718]);
 }
 
-fn decode_lpc<R: io::Read>(input: &mut Bitstream<R>,
-                           bps: u32,
-                           order: u32,
-                           buffer: &mut [i32])
-                           -> Result<()> {
+fn decode_lpc<R: ReadBytes>(input: &mut Bitstream<R>,
+                            bps: u32,
+                            order: u32,
+                            buffer: &mut [i32])
+                            -> Result<()> {
     // The order minus one fits in 5 bits, so the order is at most 32.
     debug_assert!(order <= 32);
 

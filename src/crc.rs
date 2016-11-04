@@ -6,6 +6,7 @@
 // A copy of the License has been included in the root of the repository.
 
 use std::io;
+use input::ReadBytes;
 
 // These tables were taken from the tables in crc.c in libflac.
 
@@ -58,24 +59,24 @@ const CRC16_TABLE: [u16; 256] =
 /// A reader that computes the CRC-8 over everything it reads.
 ///
 /// The polynomial used is x^8 + x^2 + x^1 + x^0, and the initial value is 0.
-pub struct Crc8Reader<R: io::Read> {
-    reader: R,
+pub struct Crc8Reader<R: ReadBytes> {
+    inner: R,
     state: u8,
 }
 
 /// A reader that computes the CRC-16 over everything it reads.
 ///
 /// The polynomial used is x^16 + x^15 + x^2 + x^0, and the initial value is 0.
-pub struct Crc16Reader<R: io::Read> {
-    reader: R,
+pub struct Crc16Reader<R: ReadBytes> {
+    inner: R,
     state: u16,
 }
 
-impl<R: io::Read> Crc8Reader<R> {
+impl<R: ReadBytes> Crc8Reader<R> {
     /// Wraps the reader with a CRC-8 computing reader with initial value 0.
-    pub fn new(reader: R) -> Crc8Reader<R> {
+    pub fn new(inner: R) -> Crc8Reader<R> {
         Crc8Reader {
-            reader: reader,
+            inner: inner,
             state: 0,
         }
     }
@@ -84,13 +85,18 @@ impl<R: io::Read> Crc8Reader<R> {
     pub fn crc(&self) -> u8 {
         self.state
     }
+
+    #[inline(always)]
+    fn update_state(&mut self, byte: u8) {
+        self.state = CRC8_TABLE[(self.state ^ byte) as usize];
+    }
 }
 
-impl<R: io::Read> Crc16Reader<R> {
+impl<R: ReadBytes> Crc16Reader<R> {
     /// Wraps the reader with a CRC-16 computing reader with initial value 0.
-    pub fn new(reader: R) -> Crc16Reader<R> {
+    pub fn new(inner: R) -> Crc16Reader<R> {
         Crc16Reader {
-            reader: reader,
+            inner: inner,
             state: 0,
         }
     }
@@ -99,51 +105,84 @@ impl<R: io::Read> Crc16Reader<R> {
     pub fn crc(&self) -> u16 {
         self.state
     }
-}
 
-impl<R: io::Read> io::Read for Crc8Reader<R> {
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        // Pass through to the regular reader.
-        let n = try!(self.reader.read(buf));
-
-        // And also update the CRC with the bytes just read.
-        for x in &buf[0..n] {
-            self.state = CRC8_TABLE[(self.state ^ *x) as usize];
-        }
-
-        Ok(n)
+    #[inline(always)]
+    fn update_state(&mut self, byte: u8) {
+        self.state = (self.state << 8) ^ CRC16_TABLE[((self.state >> 8) as u8 ^ byte) as usize];
     }
 }
 
-impl<R: io::Read> io::Read for Crc16Reader<R> {
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        // Pass through to the regular reader.
-        let n = try!(self.reader.read(buf));
-
-        // And also update the CRC with the bytes just read.
-        for x in &buf[0..n] {
-            self.state = (self.state << 8) ^ CRC16_TABLE[((self.state >> 8) as u8 ^ *x) as usize];
+impl<R: ReadBytes> ReadBytes for Crc8Reader<R> {
+    #[inline(always)]
+    fn read_u8(&mut self) -> io::Result<u8> {
+        match self.inner.read_u8() {
+            Ok(byte) => {
+                self.update_state(byte);
+                Ok(byte)
+            },
+            Err(err) => Err(err),
         }
+    }
 
-        Ok(n)
+    fn read_u8_or_eof(&mut self) -> io::Result<Option<u8>> {
+        match self.inner.read_u8_or_eof() {
+            Ok(Some(byte)) => {
+                self.update_state(byte);
+                Ok(Some(byte))
+            },
+            Ok(None) => Ok(None),
+            Err(err) => Err(err),
+        }
+    }
+
+    fn read_into(&mut self, _buffer: &mut [u8]) -> io::Result<()> {
+        panic!("CRC reader does not support read_into.");
+    }
+}
+
+impl<R: ReadBytes> ReadBytes for Crc16Reader<R> {
+    #[inline(always)]
+    fn read_u8(&mut self) -> io::Result<u8> {
+        match self.inner.read_u8() {
+            Ok(byte) => {
+                self.update_state(byte);
+                Ok(byte)
+            },
+            Err(err) => Err(err),
+        }
+    }
+
+    fn read_u8_or_eof(&mut self) -> io::Result<Option<u8>> {
+        match self.inner.read_u8_or_eof() {
+            Ok(Some(byte)) => {
+                self.update_state(byte);
+                Ok(Some(byte))
+            },
+            Ok(None) => Ok(None),
+            Err(err) => Err(err),
+        }
+    }
+
+    fn read_into(&mut self, _buffer: &mut [u8]) -> io::Result<()> {
+        panic!("CRC reader does not support read_into.");
     }
 }
 
 #[cfg(test)]
 fn verify_crc8(test_vector: Vec<u8>, result: u8) {
-    use std::io::Read;
-    let data = io::Cursor::new(test_vector);
+    use input::BufferedReader;
+    let data = BufferedReader::new(io::Cursor::new(test_vector));
     let mut reader = Crc8Reader::new(data);
-    reader.read_to_end(&mut Vec::new()).unwrap();
+    while let Some(_) = reader.read_u8_or_eof().unwrap() {}
     assert_eq!(reader.crc(), result);
 }
 
 #[cfg(test)]
 fn verify_crc16(test_vector: Vec<u8>, result: u16) {
-    use std::io::Read;
-    let data = io::Cursor::new(test_vector);
+    use input::BufferedReader;
+    let data = BufferedReader::new(io::Cursor::new(test_vector));
     let mut reader = Crc16Reader::new(data);
-    reader.read_to_end(&mut Vec::new()).unwrap();
+    while let Some(_) = reader.read_u8_or_eof().unwrap() {}
     assert_eq!(reader.crc(), result);
 }
 
