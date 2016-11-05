@@ -32,7 +32,7 @@ impl<R: io::Read> BufferedReader<R> {
 
     /// Wrap the reader in a new buffered reader.
     pub fn new(inner: R) -> BufferedReader<R> {
-        let buf = vec![0; 1024].into_boxed_slice();
+        let buf = vec![0; 2048].into_boxed_slice();
         BufferedReader {
             inner: inner,
             buf: buf,
