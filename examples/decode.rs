@@ -11,24 +11,12 @@ extern crate hound;
 use claxon::{Block, FlacReader};
 use hound::{WavSpec, WavWriter};
 use std::env;
-use std::fs::File;
-use std::io::{Cursor, Read};
 use std::path;
 
 fn main() {
     let arg = env::args().nth(1).expect("no file given");
     let fname = path::Path::new(&arg);
-    let mut file = File::open(fname).expect("failed to open FLAC file");
-
-    // Load the entire file into memory at once. This allows using a cursor
-    // afterwards to read the data, which is cheaper than mixing IO with the
-    // actual FLAC reading due to inlining.
-    let mut bytes = Vec::new();
-    bytes.reserve(file.metadata().unwrap().len() as usize);
-    file.read_to_end(&mut bytes).expect("failed to read FLAC data into memory");
-
-    let data = Cursor::new(bytes);
-    let mut reader = FlacReader::new(data).expect("failed to open FLAC stream");
+    let mut reader = FlacReader::open(fname).expect("failed to open FLAC stream");
 
     let spec = WavSpec {
         // TODO: u8 for channels, is that weird? Would u32 be better?
@@ -43,7 +31,9 @@ fn main() {
     {
         // TODO: Write fallback for other sample widths.
         assert!(reader.streaminfo().bits_per_sample == 16);
-        let mut sample_writer = wav_writer.get_i16_writer();
+        // TODO: block_size could be confusing. Call it duration instead?
+        let max_bs_len = reader.streaminfo().max_block_size as u32 * reader.streaminfo().channels as u32;
+        let mut sample_writer = wav_writer.get_i16_writer(max_bs_len);
 
         let mut frame_reader = reader.blocks();
         let mut block = Block::empty();
@@ -59,10 +49,11 @@ fn main() {
             // Write the samples in the block to the wav file, channels interleaved.
             for s in 0..block.duration() {
                 for ch in 0..block.channels() {
-                    sample_writer.write_sample(block.sample(ch, s))
-                                 .expect("failed to write to wav file");
+                    sample_writer.write_sample(block.sample(ch, s));
                 }
             }
+
+            sample_writer.flush().expect("failed to write samples to wav file");
         }
     }
 
