@@ -195,5 +195,7 @@ fn verify_crc8_test_vectors() {
 
 #[test]
 fn verify_crc16_test_vectors() {
-    // TODO: find some good test vectors.
+    verify_crc16(vec![0x1f], 0x8041);
+    verify_crc16(vec![0x04, 0x01], 0x1806);
+    verify_crc16(vec![0x61, 0x62, 0x63], 0xcadb);
 }
