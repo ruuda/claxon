@@ -108,7 +108,11 @@ impl<R: ReadBytes> Crc16Reader<R> {
 
     #[inline(always)]
     fn update_state(&mut self, byte: u8) {
-        self.state = (self.state << 8) ^ CRC16_TABLE[((self.state >> 8) as u8 ^ byte) as usize];
+        self.state = self.state ^ ((byte as u16) << 8);
+        for _ in 0..8 {
+            let poly = (self.state >> 15) * 0x8005;
+            self.state = (self.state << 1) ^ poly;
+        }
     }
 }
 
