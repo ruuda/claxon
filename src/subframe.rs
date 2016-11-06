@@ -522,8 +522,8 @@ fn predict_lpc(raw_coefficients: &[i16],
     if buffer.len() <= 12 { return Ok(()) }
 
     // At this point, buffer[0..12] has been predicted. For the rest of the
-    // buffer we can do inner products of 12 samples. This allows the compiler
-    // to do vectorization of the inner products more easily.
+    // buffer we can do inner products of 12 samples. This reduces the amount of
+    // conditional code, and improves performance significantly.
     for i in 12..buffer.len() {
         let prediction = coefficients.iter()
                                      .zip(&buffer[i - 12..i])
