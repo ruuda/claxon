@@ -522,52 +522,9 @@ fn predict_lpc(raw_coefficients: &[i16],
     if buffer.len() <= 12 { return Ok(()) }
 
     // At this point, buffer[0..12] has been predicted. For the rest of the
-    // buffer we can do inner products of 12 samples. This is more efficient
-    // because there is less conditional code.
-
-    // Unroll the loop 4 times to avoid loop counter overhead, which despite all
-    // the multiplications is significant here.
-    let buf_len_4 = (buffer.len() / 4) * 4;
-    let mut i = 12;
-    while i < buf_len_4 {
-        let prediction = coefficients.iter()
-                                     .zip(&buffer[i - 12 + 0..i + 0])
-                                     .map(|(&c, &s)| c * s as i64)
-                                     .sum::<i64>() >> qlp_shift; // snd
-
-        let delta = buffer[i + 0] as i64;
-        buffer[i + 0] = (prediction + delta) as i32;
-
-        let prediction = coefficients.iter()
-                                     .zip(&buffer[i - 12 + 1..i + 1])
-                                     .map(|(&c, &s)| c * s as i64)
-                                     .sum::<i64>() >> qlp_shift; // snd
-
-        let delta = buffer[i + 1] as i64;
-        buffer[i + 1] = (prediction + delta) as i32;
-
-        let prediction = coefficients.iter()
-                                     .zip(&buffer[i - 12 + 2..i + 2])
-                                     .map(|(&c, &s)| c * s as i64)
-                                     .sum::<i64>() >> qlp_shift; // snd
-
-        let delta = buffer[i + 2] as i64;
-        buffer[i + 2] = (prediction + delta) as i32;
-
-        let prediction = coefficients.iter()
-                                     .zip(&buffer[i - 12 + 3..i + 3])
-                                     .map(|(&c, &s)| c * s as i64)
-                                     .sum::<i64>() >> qlp_shift; // snd
-
-        let delta = buffer[i + 3] as i64;
-        buffer[i + 3] = (prediction + delta) as i32;
-
-        i = i + 4;
-    }
-
-    // In case the buffer length was not a multiple of 4, we need to do the
-    // remaining iterations.
-    for i in buf_len_4..buffer.len() {
+    // buffer we can do inner products of 12 samples. This allows the compiler
+    // to do vectorization of the inner products more easily.
+    for i in 12..buffer.len() {
         let prediction = coefficients.iter()
                                      .zip(&buffer[i - 12..i])
                                      .map(|(&c, &s)| c * s as i64)
