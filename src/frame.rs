@@ -9,6 +9,7 @@
 
 use std::i32;
 use std::iter::repeat;
+use std::slice;
 
 use crc::{Crc8Reader, Crc16Reader};
 use error::{Result, fmt_err};
@@ -487,6 +488,29 @@ impl Block {
     pub fn into_buffer(self) -> Vec<i32> {
         return self.buffer;
     }
+
+    /// Returns an iterator that interleaves left and right channel samples.
+    ///
+    /// The first value produced is for the left channel. This iterator can be
+    /// more efficient than requesting a sample directly, because it can avoid
+    /// a bounds check.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the number of channels in the block is not 2.
+    pub fn stereo_samples<'a>(&'a self) -> StereoSamples<'a> {
+        if self.channels != 2 {
+            panic!("stereo_samples() must only be called for blocks with two channels.");
+        }
+
+        let (left, more) = self.buffer.split_at(self.block_size as usize);
+        let right = &more[..self.block_size as usize];
+        StereoSamples {
+            left: left.iter(),
+            right: right.iter(),
+            left_is_next: true,
+        }
+    }
 }
 
 #[test]
@@ -501,6 +525,56 @@ fn verify_block_sample() {
     assert_eq!(block.sample(0, 2), 5);
     assert_eq!(block.sample(1, 3), 23);
     assert_eq!(block.sample(2, 4), 47);
+}
+
+/// A stereo iterator over the samples in a block that interleaves channels.
+///
+/// This iterator is produced by `Block::stereo_samples()`.
+pub struct StereoSamples<'a> {
+    left: slice::Iter<'a, i32>,
+
+    /// An iterator for the right channel samples.
+    right: slice::Iter<'a, i32>,
+
+    /// Whether the next call to `next()` will take from the left channel.
+    /// If false, it will take from the right channel.
+    left_is_next: bool,
+}
+
+impl<'a> Iterator for StereoSamples<'a> {
+    type Item = i32;
+
+    #[inline(always)]
+    fn next(&mut self) -> Option<i32> {
+        if self.left_is_next {
+            self.left_is_next = false;
+            self.left.next().cloned()
+        } else {
+            self.left_is_next = true;
+            self.right.next().cloned()
+        }
+    }
+}
+
+#[test]
+fn verify_block_stereo_samples_iterator() {
+    let block = Block {
+        first_sample_number: 0,
+        block_size: 3,
+        channels: 2,
+        buffer: vec![2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47],
+    };
+
+    let mut iter = block.stereo_samples();
+
+    assert_eq!(iter.next(), Some(2));
+    assert_eq!(iter.next(), Some(7));
+    assert_eq!(iter.next(), Some(3));
+    assert_eq!(iter.next(), Some(11));
+    assert_eq!(iter.next(), Some(5));
+    assert_eq!(iter.next(), Some(13));
+    assert_eq!(iter.next(), None);
+    assert_eq!(iter.next(), None);
 }
 
 /// Reads frames from a stream and exposes decoded blocks as an iterator.

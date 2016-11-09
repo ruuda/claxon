@@ -29,8 +29,10 @@ fn main() {
     let fname_wav = fname.with_extension("wav");
     let mut wav_writer = WavWriter::create(fname_wav, spec).expect("failed to create wav file");
     {
-        // TODO: Write fallback for other sample widths.
+        // TODO: Write fallback for other sample widths and channel numbers.
         assert!(reader.streaminfo().bits_per_sample == 16);
+        assert!(reader.streaminfo().channels == 2);
+
         // TODO: block_size could be confusing. Call it duration instead?
         let max_bs_len = reader.streaminfo().max_block_size as u32 * reader.streaminfo().channels as u32;
         let mut sample_writer = wav_writer.get_i16_writer(max_bs_len);
@@ -47,10 +49,8 @@ fn main() {
             }
 
             // Write the samples in the block to the wav file, channels interleaved.
-            for s in 0..block.duration() {
-                for ch in 0..block.channels() {
-                    sample_writer.write_sample(block.sample(ch, s));
-                }
+            for s in block.stereo_samples() {
+                sample_writer.write_sample(s);
             }
 
             sample_writer.flush().expect("failed to write samples to wav file");
