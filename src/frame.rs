@@ -9,7 +9,6 @@
 
 use std::i32;
 use std::iter::repeat;
-use std::slice;
 
 use crc::{Crc8Reader, Crc16Reader};
 use error::{Result, fmt_err};
@@ -489,26 +488,26 @@ impl Block {
         return self.buffer;
     }
 
-    /// Returns an iterator that interleaves left and right channel samples.
+    /// Returns an iterator that produces left and right channel samples.
     ///
-    /// The first value produced is for the left channel. This iterator can be
-    /// more efficient than requesting a sample directly, because it can avoid
-    /// a bounds check.
+    /// This iterator can be more efficient than requesting a sample directly,
+    /// because it avoids a bounds check.
     ///
     /// # Panics
     ///
     /// Panics if the number of channels in the block is not 2.
+    #[inline]
     pub fn stereo_samples<'a>(&'a self) -> StereoSamples<'a> {
         if self.channels != 2 {
             panic!("stereo_samples() must only be called for blocks with two channels.");
         }
 
-        let (left, more) = self.buffer.split_at(self.block_size as usize);
-        let right = &more[..self.block_size as usize];
+        assert!(self.buffer.len() >= self.block_size as usize * 2);
+
         StereoSamples {
-            left: left.iter(),
-            right: right.iter(),
-            left_is_next: true,
+            buffer: &self.buffer,
+            block_duration: self.block_size,
+            current_sample: 0,
         }
     }
 }
@@ -527,31 +526,39 @@ fn verify_block_sample() {
     assert_eq!(block.sample(2, 4), 47);
 }
 
-/// A stereo iterator over the samples in a block that interleaves channels.
+/// An iterator over the stereo sample pairs in a block.
 ///
 /// This iterator is produced by `Block::stereo_samples()`.
 pub struct StereoSamples<'a> {
-    left: slice::Iter<'a, i32>,
-
-    /// An iterator for the right channel samples.
-    right: slice::Iter<'a, i32>,
-
-    /// Whether the next call to `next()` will take from the left channel.
-    /// If false, it will take from the right channel.
-    left_is_next: bool,
+    buffer: &'a [i32],
+    block_duration: u32,
+    current_sample: u32,
 }
 
 impl<'a> Iterator for StereoSamples<'a> {
-    type Item = i32;
+    type Item = (i32, i32);
 
     #[inline(always)]
-    fn next(&mut self) -> Option<i32> {
-        if self.left_is_next {
-            self.left_is_next = false;
-            self.left.next().cloned()
+    fn next(&mut self) -> Option<(i32, i32)> {
+        if self.current_sample == self.block_duration {
+            None
         } else {
-            self.left_is_next = true;
-            self.right.next().cloned()
+            let ch_offset = self.block_duration as usize;
+            let idx = self.current_sample as usize;
+
+            // Indexing without bounds check is safe here, because the current
+            // sample is less than the block duration, and the buffer size is at
+            // least twice the block duration. (There is an assertion for that
+            // too when the iterator is constructed.)
+            let samples = unsafe {
+                let left = *self.buffer.get_unchecked(idx);
+                let right = *self.buffer.get_unchecked(idx + ch_offset);
+                (left, right)
+            };
+
+            self.current_sample += 1;
+
+            Some(samples)
         }
     }
 }
@@ -567,13 +574,9 @@ fn verify_block_stereo_samples_iterator() {
 
     let mut iter = block.stereo_samples();
 
-    assert_eq!(iter.next(), Some(2));
-    assert_eq!(iter.next(), Some(7));
-    assert_eq!(iter.next(), Some(3));
-    assert_eq!(iter.next(), Some(11));
-    assert_eq!(iter.next(), Some(5));
-    assert_eq!(iter.next(), Some(13));
-    assert_eq!(iter.next(), None);
+    assert_eq!(iter.next(), Some((2, 7)));
+    assert_eq!(iter.next(), Some((3, 11)));
+    assert_eq!(iter.next(), Some((5, 13)));
     assert_eq!(iter.next(), None);
 }
 

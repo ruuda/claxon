@@ -49,8 +49,9 @@ fn main() {
             }
 
             // Write the samples in the block to the wav file, channels interleaved.
-            for s in block.stereo_samples() {
-                sample_writer.write_sample(s);
+            for (left, right) in block.stereo_samples() {
+                sample_writer.write_sample(left);
+                sample_writer.write_sample(right);
             }
 
             sample_writer.flush().expect("failed to write samples to wav file");
