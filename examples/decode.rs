@@ -33,10 +33,6 @@ fn main() {
         assert!(reader.streaminfo().bits_per_sample == 16);
         assert!(reader.streaminfo().channels == 2);
 
-        // TODO: block_size could be confusing. Call it duration instead?
-        let max_bs_len = reader.streaminfo().max_block_size as u32 * reader.streaminfo().channels as u32;
-        let mut sample_writer = wav_writer.get_i16_writer(max_bs_len);
-
         let mut frame_reader = reader.blocks();
         let mut block = Block::empty();
         loop {
@@ -47,6 +43,8 @@ fn main() {
                 Ok(None) => break, // EOF.
                 Err(error) => panic!("{}", error),
             }
+
+            let mut sample_writer = wav_writer.get_i16_writer(block.duration() * 2);
 
             // Write the samples in the block to the wav file, channels interleaved.
             for (left, right) in block.stereo_samples() {
