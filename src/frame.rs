@@ -314,14 +314,15 @@ fn read_frame_header_or_eof<R: ReadBytes>(input: &mut R) -> Result<Option<FrameH
 /// Converts a buffer with left samples and a side channel in-place to left ++ right.
 fn decode_left_side(buffer: &mut [i32]) {
     let block_size = buffer.len() / 2;
-    for i in 0..block_size {
-        let left = buffer[i];
-        let side = buffer[i + block_size];
+    let (mids, sides) = buffer.split_at_mut(block_size);
+    for (fst, snd) in mids.iter_mut().zip(sides) {
+        let left = *fst;
+        let side = *snd;
 
         // Left is correct already, only the right channel needs to be decoded.
         // side = left - right => right = left - side.
         let right = left - side;
-        buffer[block_size + i] = right;
+        *snd = right;
     }
 }
 
@@ -335,16 +336,16 @@ fn verify_decode_left_side() {
 
 /// Converts a buffer with right samples and a side channel in-place to left ++ right.
 fn decode_right_side(buffer: &mut [i32]) {
-
     let block_size = buffer.len() / 2;
-    for i in 0..block_size {
-        let side = buffer[i];
-        let right = buffer[block_size + i];
+    let (mids, sides) = buffer.split_at_mut(block_size);
+    for (fst, snd) in mids.iter_mut().zip(sides) {
+        let side = *fst;
+        let right = *snd;
 
         // Right is correct already, only the left channel needs to be decoded.
         // side = left - right => left = side + right.
         let left = side + right;
-        buffer[i] = left;
+        *fst = left;
     }
 }
 
@@ -359,9 +360,10 @@ fn verify_decode_right_side() {
 /// Converts a buffer with mid samples and a side channel in-place to left ++ right.
 fn decode_mid_side(buffer: &mut [i32]) {
     let block_size = buffer.len() / 2;
-    for i in 0..block_size {
-        let mid = buffer[i];
-        let side = buffer[i + block_size];
+    let (mids, sides) = buffer.split_at_mut(block_size);
+    for (fst, snd) in mids.iter_mut().zip(sides) {
+        let mid = *fst;
+        let side = *snd;
 
         // Double mid first, and then correct for truncated rounding that
         // will have occured if side is odd.
@@ -369,8 +371,8 @@ fn decode_mid_side(buffer: &mut [i32]) {
         let left = (mid + side) / 2;
         let right = (mid - side) / 2;
 
-        buffer[i] = left;
-        buffer[block_size + i] = right;
+        *fst = left;
+        *snd = right;
     }
 }
 
