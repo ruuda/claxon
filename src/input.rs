@@ -230,9 +230,9 @@ fn verify_read_be_u32() {
 fn shift_left(x: u8, shift: u32) -> u8 {
     debug_assert!(shift <= 8);
 
-    // Rust panics when shifting by the integer width, so we have to treat
-    // that case separately.
-    if shift >= 8 { 0 } else { x << shift }
+    // We cannot shift a u8 by 8 or more, because Rust panics when shifting by
+    // the integer width. But we can definitely shift a u32.
+    ((x as u32) << shift) as u8
 }
 
 /// Right shift that does not panic when shifting by the integer width.
@@ -240,9 +240,9 @@ fn shift_left(x: u8, shift: u32) -> u8 {
 fn shift_right(x: u8, shift: u32) -> u8 {
     debug_assert!(shift <= 8);
 
-    // Rust panics when shifting by the integer width, so we have to treat
-    // that case separately.
-    if shift >= 8 { 0 } else { x >> shift }
+    // We cannot shift a u8 by 8 or more, because Rust panics when shifting by
+    // the integer width. But we can definitely shift a u32.
+    ((x as u32) >> shift) as u8
 }
 
 /// Wraps a `Reader` to facilitate reading that is not byte-aligned.
