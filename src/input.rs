@@ -111,8 +111,10 @@ impl<R: io::Read> ReadBytes for BufferedReader<R>
             }
         }
 
-        // TODO: Verify that the bounds check is omitted.
-        let byte = self.buf[self.pos as usize];
+        // At this point there is at least one more byte in the buffer, we
+        // checked that above. However, when using regular indexing, the
+        // compiler still inserts a bounds check here. It is safe to avoid it.
+        let byte = unsafe { *self.buf.get_unchecked(self.pos as usize) };
         self.pos += 1;
         Ok(byte)
     }
