@@ -41,4 +41,4 @@ echo "Benchmarking sample file 4 ..."
 taskset -c 1 target/release/examples/bench_decode testsamples/b4_u2_sunday_bloody_sunday.flac > "${fname}_b4.dat"
 
 # Merge the output files.
-cat "${fname}_b*.dat" > "${fname}_all.dat"
+cat ${fname}_b*.dat > "${fname}_all.dat"
