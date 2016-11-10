@@ -21,6 +21,8 @@ struct MetadataBlockHeader {
 /// The streaminfo metadata block, with important information about the stream.
 #[derive(Clone, Copy)]
 pub struct StreamInfo {
+    // TODO: "size" would better be called "duration" for clarity.
+
     /// The minimum block size (in samples) used in the stream.
     pub min_block_size: u16,
     /// The maximum block size (in samples) used in the stream.

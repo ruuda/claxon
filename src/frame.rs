@@ -8,7 +8,6 @@
 //! The `frame` module deals with the frames that make up a FLAC stream.
 
 use std::i32;
-use std::iter::repeat;
 
 use crc::{Crc8Reader, Crc16Reader};
 use error::{Result, fmt_err};
@@ -618,7 +617,6 @@ fn ensure_buffer_len(mut buffer: Vec<i32>, new_len: usize) -> Vec<i32> {
 impl<R: ReadBytes> FrameReader<R> {
     /// Creates a new frame reader that will yield at least one element.
     pub fn new(input: R) -> FrameReader<R> {
-        // TODO: a hit for the vector size can be provided.
         FrameReader {
             input: input,
         }

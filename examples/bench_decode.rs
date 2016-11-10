@@ -48,10 +48,15 @@ fn decode_file(data: &[u8], sample_times_ns: &mut Vec<f64>) -> (f64, f64) {
     let mut reader = FlacReader::new(cursor).unwrap();
 
     let bps = reader.streaminfo().bits_per_sample as u64;
-    let num_samples = reader.streaminfo().samples.unwrap() as i64 * reader.streaminfo().channels as i64;
+    let num_channels = reader.streaminfo().channels;
+    let num_samples = reader.streaminfo().samples.unwrap() as i64 * num_channels as i64;
     assert!(bps < 8 * 16);
 
-    let mut sample_buffer = Vec::new();
+    // Allocate a buffer once that is big enough to fit all the blocks (after
+    // one another), so we never need to allocate during decoding.
+    let max_block_len = reader.streaminfo().max_block_size as usize * num_channels as usize;
+    let mut sample_buffer = Vec::with_capacity(max_block_len);
+
     let mut frame_reader = reader.blocks();
     let mut frame_epoch = PreciseTime::now();
     let epoch = frame_epoch;
