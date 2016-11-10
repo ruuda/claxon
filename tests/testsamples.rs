@@ -202,26 +202,25 @@ fn verify_decoded_stream_p4() {
 }
 
 #[test]
-fn verify_decoded_stream_b0() {
-    compare_decoded_stream("testsamples/b0_daft_punk_one_more_time.flac");
-}
+fn verify_extra_samples() {
+    use std::ffi::OsStr;
 
-#[test]
-fn verify_decoded_stream_b1() {
-    compare_decoded_stream("testsamples/b1_deadmau5_i_remember.flac");
-}
+    if !Path::new("testsamples/extra").exists() {
+        return
+    }
 
-#[test]
-fn verify_decoded_stream_b2() {
-    compare_decoded_stream("testsamples/b2_massive_attack_unfinished_sympathy.flac");
-}
-
-#[test]
-fn verify_decoded_stream_b3() {
-    compare_decoded_stream("testsamples/b3_muse_starlight.flac");
-}
-
-#[test]
-fn verify_decoded_stream_b4() {
-    compare_decoded_stream("testsamples/b4_u2_sunday_bloody_sunday.flac");
+    // Enumerate all the flac files in the testsamples/extra directory, and
+    // compare the streaminfo and stream itself for those.
+    let dir = fs::read_dir("testsamples/extra")
+                 .ok().expect("failed to enumerate flac files");
+    for path in dir {
+        let path = path.ok().expect("failed to obtain path info").path();
+        if path.is_file() && path.extension() == Some(OsStr::new("flac")) {
+            print!("    comparing {} ...", path.to_str()
+                                               .expect("unsupported filename"));
+            compare_metaflac(&path);
+            compare_decoded_stream(&path);
+            println!(" ok");
+        }
+    }
 }
