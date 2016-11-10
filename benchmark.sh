@@ -17,8 +17,8 @@ if ! grep -q "performance" /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor
   echo performance | sudo tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor > /dev/null
 fi
 
-# Optimize for Skylake CPUs specifically, and include debugging symbols.
-export RUSTFLAGS="-C target-cpu=skylake -g"
+# Optimize for the current CPU specifically, and include debugging symbols.
+export RUSTFLAGS="-C target-cpu=native -g"
 
 # Compile the benchmarking program.
 cargo build --verbose --release --example bench_decode
