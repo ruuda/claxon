@@ -32,7 +32,7 @@ fn read_file<P: AsRef<Path>>(path: P) -> Vec<u8> {
 /// units (nanoseconds, bytes per second). Different channels account for
 /// different samples; a stereo file of the same sample rate and duration as a
 /// mono file will have twice as many samples. Bytes refers to the number of
-/// input bytes. (TODO: Do not count header bytes there.)
+/// input bytes.
 fn decode_file(data: &[u8], sample_times_ns: &mut Vec<f64>) -> (f64, f64) {
     // To get the real number of data bytes (excluding metadata -- which can be
     // quite big due to album art), construct a new reader around a cursor, but
