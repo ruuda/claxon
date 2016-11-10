@@ -48,8 +48,14 @@ fn main() {
 
             // Write the samples in the block to the wav file, channels interleaved.
             for (left, right) in block.stereo_samples() {
-                sample_writer.write_sample(left);
-                sample_writer.write_sample(right);
+                // The `stereo_samples()` iterator does not yield more samples
+                // than the duration of the block, so we never write more
+                // samples to the writer than requested, hence using the
+                // unchecked functions is safe here.
+                unsafe {
+                    sample_writer.write_sample_unchecked(left);
+                    sample_writer.write_sample_unchecked(right);
+                }
             }
 
             sample_writer.flush().expect("failed to write samples to wav file");
