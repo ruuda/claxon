@@ -602,9 +602,13 @@ fn ensure_buffer_len(mut buffer: Vec<i32>, new_len: usize) -> Vec<i32> {
         if buffer.capacity() < new_len {
             buffer = Vec::with_capacity(new_len);
         }
-        let len = buffer.len();
-        // TODO: Can this be optimized by using unsafe code?
-        buffer.extend(repeat(0).take(new_len - len));
+
+        // We are going to fill the buffer anyway, so there is no point in
+        // initializing it with default values. This does mean that there could
+        // be garbage in the buffer, but that is not exposed, as the buffer is
+        // only exposed if a frame has been decoded successfully, and hence the
+        // entire buffer has been overwritten.
+        unsafe { buffer.set_len(new_len); }
     } else {
         buffer.truncate(new_len);
     }
