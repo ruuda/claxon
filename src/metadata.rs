@@ -136,22 +136,22 @@ fn read_metadata_block<R: ReadBytes>(input: &mut R,
         }
         3 => {
             // TODO: implement seektable reading. For now, pretend it is padding.
-            try!(skip_block(input, length));
+            try!(input.skip(length));
             Ok(MetadataBlock::Padding { length: length })
         }
         4 => {
             // TODO: implement Vorbis comment reading. For now, pretend it is padding.
-            try!(skip_block(input, length));
+            try!(input.skip(length));
             Ok(MetadataBlock::Padding { length: length })
         }
         5 => {
             // TODO: implement CUE sheet reading. For now, pretend it is padding.
-            try!(skip_block(input, length));
+            try!(input.skip(length));
             Ok(MetadataBlock::Padding { length: length })
         }
         6 => {
             // TODO: implement picture reading. For now, pretend it is padding.
-            try!(skip_block(input, length));
+            try!(input.skip(length));
             Ok(MetadataBlock::Padding { length: length })
         }
         127 => {
@@ -164,7 +164,7 @@ fn read_metadata_block<R: ReadBytes>(input: &mut R,
             // one way of handling it, but maybe there should be some kind of
             // 'strict' mode (configurable at compile time?) so that this can
             // be an error if desired.
-            try!(skip_block(input, length));
+            try!(input.skip(length));
             Ok(MetadataBlock::Reserved)
         }
     }
@@ -257,17 +257,7 @@ fn read_padding_block<R: ReadBytes>(input: &mut R, length: u32) -> Result<()> {
     // is not the case, and frankly, when you are going to skip over these
     // bytes and do nothing with them whatsoever, why waste all those CPU
     // cycles checking that the padding is valid?
-    skip_block(input, length)
-}
-
-fn skip_block<R: ReadBytes>(input: &mut R, length: u32) -> Result<()> {
-    // TODO: This can be done more efficiently by just bumping the cursor for
-    // the `BufferedReader` implementation.
-    for _ in 0..length {
-        try!(input.read_u8());
-    }
-
-    Ok(())
+    Ok(try!(input.skip(length)))
 }
 
 fn read_application_block<R: ReadBytes>(input: &mut R, length: u32) -> Result<(u32, Vec<u8>)> {

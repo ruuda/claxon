@@ -61,6 +61,11 @@ pub trait ReadBytes {
     /// Reads until the provided buffer is full.
     fn read_into(&mut self, buffer: &mut [u8]) -> io::Result<()>;
 
+    /// Skips over the specified number of bytes.
+    ///
+    /// For a buffered reader, this can help a lot by just bumping a pointer.
+    fn skip(&mut self, amount: u32) -> io::Result<()>;
+
     /// Reads two bytes and interprets them as a big-endian 16-bit unsigned integer.
     fn read_be_u16(&mut self) -> io::Result<u16> {
         let b0 = try!(self.read_u8()) as u16;
@@ -157,6 +162,27 @@ impl<R: io::Read> ReadBytes for BufferedReader<R>
 
         Ok(())
     }
+
+    fn skip(&mut self, mut amount: u32) -> io::Result<()> {
+        while amount > 0 {
+            let num_left = self.num_valid - self.pos;
+            let read_now = cmp::min(amount, num_left);
+            self.pos += read_now;
+            amount -= read_now;
+
+            if amount > 0 {
+                // If there is more to skip, refill the buffer first.
+                self.pos = 0;
+                self.num_valid = try!(self.inner.read(&mut self.buf)) as u32;
+
+                if self.num_valid == 0 {
+                    return Err(io::Error::new(io::ErrorKind::UnexpectedEof,
+                                              "Expected more bytes."))
+                }
+            }
+        }
+        Ok(())
+    }
 }
 
 impl<'r, R: ReadBytes> ReadBytes for &'r mut R {
@@ -172,6 +198,10 @@ impl<'r, R: ReadBytes> ReadBytes for &'r mut R {
 
     fn read_into(&mut self, buffer: &mut [u8]) -> io::Result<()> {
         (*self).read_into(buffer)
+    }
+
+    fn skip(&mut self, amount: u32) -> io::Result<()> {
+        (*self).skip(amount)
     }
 }
 
