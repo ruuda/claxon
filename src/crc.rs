@@ -88,11 +88,7 @@ impl<R: ReadBytes> Crc8Reader<R> {
 
     #[inline(always)]
     fn update_state(&mut self, byte: u8) {
-        let index = self.state as usize ^ byte as usize;
-        // The unchecked index here is safe, because (state >> 8) fits in 8
-        // bits and the byte too, so index is at most 255, and the table has
-        // 256 entries.
-        self.state = unsafe { *CRC8_TABLE.get_unchecked(index) };
+        self.state = CRC8_TABLE[(self.state ^ byte) as usize];
     }
 }
 
@@ -112,12 +108,7 @@ impl<R: ReadBytes> Crc16Reader<R> {
 
     #[inline(always)]
     fn update_state(&mut self, byte: u8) {
-        let index = ((self.state >> 8) as usize) ^ byte as usize;
-        // The unchecked index here is safe, because (state >> 8) fits in 8
-        // bits and the byte too, so index is at most 255, and the table has
-        // 256 entries.
-        let lookup = unsafe { *CRC16_TABLE.get_unchecked(index) };
-        self.state = (self.state << 8) ^ lookup;
+        self.state = (self.state << 8) ^ CRC16_TABLE[((self.state >> 8) as u8 ^ byte) as usize];
     }
 }
 
