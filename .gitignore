@@ -6,6 +6,9 @@
 /testsamples/*.flac
 /testsamples/*.ana
 /testsamples/*.wav
+/testsamples/extra/*.flac
+/testsamples/extra/*.ana
+/testsamples/extra/*.wav
 
 # Except for small test samples that are included verbatim
 !/testsamples/pop.flac
