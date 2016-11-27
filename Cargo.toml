@@ -13,5 +13,5 @@ documentation = "https://docs.rs/claxon"
 
 [dev-dependencies]
 
-hound = { git = "https://github.com/ruuda/hound", rev = "2b212bf" }
+hound = "3.0.0"
 time = "0.1.35"
