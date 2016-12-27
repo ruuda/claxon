@@ -321,6 +321,7 @@ fn decode_rice_partition<R: ReadBytes>(input: &mut Bitstream<R>,
 // single one in any real-world FLAC file. So do not inline it, in order not to
 // pollute the caller with dead code.
 #[inline(never)]
+#[cold]
 fn decode_rice2_partition<R: ReadBytes>(input: &mut Bitstream<R>,
                                         buffer: &mut [i32])
                                         -> Result<()> {
@@ -360,6 +361,7 @@ fn decode_constant<R: ReadBytes>(input: &mut Bitstream<R>,
     Ok(())
 }
 
+#[cold]
 fn decode_verbatim<R: ReadBytes>(input: &mut Bitstream<R>,
                                  bps: u32,
                                  buffer: &mut [i32])
