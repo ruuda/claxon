@@ -1,17 +1,19 @@
 [package]
-
 name = "claxon"
 version = "0.2.1"
 authors = ["Ruud van Asseldonk <dev@veniogames.com>"]
 description = "A FLAC decoding library"
 keywords = ["flac", "lossless", "audio", "codec"]
+categories = ["compression", "multimedia::encoding", "multimedia::audio"]
 license = "Apache-2.0"
 readme = "readme.md"
 homepage = "https://github.com/ruuda/claxon#readme"
 repository = "https://github.com/ruuda/claxon"
 documentation = "https://docs.rs/claxon"
 
-[dev-dependencies]
+[badges]
+travis-ci = { repository = "ruuda/claxon", branch = "v0.2.1" }
 
+[dev-dependencies]
 hound = "3.0.0"
 time = "0.1.35"
