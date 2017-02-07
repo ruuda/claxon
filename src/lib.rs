@@ -10,12 +10,10 @@
 //! Examples
 //! ========
 //!
-//! The following example computes the root mean square (RMS) of an audio file
-//! with at most 16 bits per sample.
+//! The following example computes the root mean square (RMS) of a FLAC file.
 //!
 //! ```
-//! use claxon;
-//!
+//! # use claxon;
 //! let mut reader = claxon::FlacReader::open("testsamples/pop.flac").unwrap();
 //! let mut sqr_sum = 0.0;
 //! let mut count = 0;
@@ -27,7 +25,38 @@
 //! println!("RMS is {}", (sqr_sum / count as f64).sqrt());
 //! ```
 //!
-//! TODO: more examples.
+//! A simple way to decode a file to wav with Claxon and
+//! [Hound](https://github.com/ruuda/hound):
+//!
+//! ```
+//! # extern crate hound;
+//! # extern crate claxon;
+//! # use std::path::Path;
+//! # fn decode_file(fname: &Path) {
+//! let mut reader = claxon::FlacReader::open(fname).expect("failed to open FLAC stream");
+//!
+//! let spec = hound::WavSpec {
+//!     channels: reader.streaminfo().channels as u16,
+//!     sample_rate: reader.streaminfo().sample_rate,
+//!     bits_per_sample: reader.streaminfo().bits_per_sample as u16,
+//!     sample_format: hound::SampleFormat::Int,
+//! };
+//!
+//! let fname_wav = fname.with_extension("wav");
+//! let opt_wav_writer = hound::WavWriter::create(fname_wav, spec);
+//! let mut wav_writer = opt_wav_writer.expect("failed to create wav file");
+//!
+//! for opt_sample in reader.samples() {
+//!     let sample = opt_sample.expect("failed to decode FLAC stream");
+//!     wav_writer.write_sample(sample).expect("failed to write wav file");
+//! }
+//!
+//! wav_writer.finalize().expect("failed to finalize wav file");
+//! # }
+//! ```
+//!
+//! For more examples, see the [examples](https://github.com/ruuda/claxon/tree/master/examples)
+//! directory in the crate.
 
 #![warn(missing_docs)]
 

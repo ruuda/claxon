@@ -23,6 +23,22 @@ Below is a simple example of decoding a FLAC file to wav with Claxon and
 more efficient way of decoding requires dealing with a few details of the FLAC
 format. See [decode.rs](examples/decode.rs) for an example.
 
+The following example computes the root mean square (RMS) of a FLAC file:
+
+```rust
+use claxon;
+
+let mut reader = claxon::FlacReader::open("testsamples/pop.flac").unwrap();
+let mut sqr_sum = 0.0;
+let mut count = 0;
+for sample in reader.samples() {
+    let s = sample.unwrap() as f64;
+    sqr_sum += s * s;
+    count += 1;
+}
+println!("RMS is {}", (sqr_sum / count as f64).sqrt());
+```
+
 ```rust
 fn decode_file(fname: &Path) {
     let mut reader = claxon::FlacReader::open(fname).expect("failed to open FLAC stream");
