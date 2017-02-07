@@ -51,14 +51,13 @@ Performance
 -----------
 
 These are the times to decode 5 real-world FLAC files to wav, average and
-standard deviation of 11 runs, normalized to the reference implementation 1.3.2:
+standard deviation of 11 runs, normalized to version 1.3.2 of the [reference
+implementation][ref-flac]. Measurements were done on a Skylake i7.
 
 | Decoder | Time        |
 | ------- | ----------- |
 | Claxon  | 1.13 ± 0.03 |
 | libflac | 1.00 ± 0.03 |
-
-Measurements were done on a Skylake i7.
 
 License
 -------
@@ -75,5 +74,6 @@ to your copyright notice.
 [docs-img]:  https://img.shields.io/badge/docs-online-blue.svg
 [docs]:      https://docs.rs/claxon
 [hound]:     https://github.com/ruuda/hound
+[ref-flac]:  https://git.xiph.org/?p=flac.git
 [apache2]:   https://www.apache.org/licenses/LICENSE-2.0
 [except]:    https://www.gnu.org/licenses/gpl-faq.html#GPLIncompatibleLibs
