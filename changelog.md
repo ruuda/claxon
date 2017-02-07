@@ -1,6 +1,34 @@
 Changelog
 =========
 
+0.3.0
+-----
+
+This release focuses on performance. Internally quite a lot has happened, and a
+few changes were made to the API too, in order to support faster decoding, and
+to make the API more consistent.
+
+Release highlights:
+
+- The `decode` example is now 7.5 times faster. Performance is close to that of
+  the reference implementation.
+- Ensures compatibility with Rust 1.13 through 1.15.
+- Documentation is now hosted on docs.rs. (Thanks, docs.rs authors!)
+- Scripts for benchmarking two revisions, and for benchmarking against libflac,
+  are now included.
+- A `Block::stereo_samples()` iterator has been added for convenience and
+  performance.
+
+Breaking changes:
+
+- Support for generic integer widths has been removed, along with the `Sample`
+  trait. Samples are now always `i32`. This is both simpler and faster.
+- Many functions now return a `u32`, even if the actual range of legal values
+  would fit in a narrower integer.
+- `Block::len()` now returns the total number of samples for all channels, not
+  the number of inter-channel samples. To get the number of inter-channel
+  samples, use the new `Block::duration()`.
+
 0.2.1
 -----
 
