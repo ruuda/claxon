@@ -50,8 +50,6 @@
 //!     let sample = opt_sample.expect("failed to decode FLAC stream");
 //!     wav_writer.write_sample(sample).expect("failed to write wav file");
 //! }
-//!
-//! wav_writer.finalize().expect("failed to finalize wav file");
 //! # }
 //! ```
 //!
