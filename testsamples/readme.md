@@ -1,6 +1,7 @@
 You can put (or symlink) FLAC files in the "extra" directory, and the tests will
 be run on all files in that directory. This allows the decoder to be tested on
-thousands of files, which is at least an indication that it is correct.
+thousands of files, which is at least an indication that it is correct. The
+benchmark script will also use these files for benchmarking.
 
 For convenience, but mainly for automated testing, the script populate.sh will
 download five audio files from archive.org (about 126 MiB total). No copyright

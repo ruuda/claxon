@@ -1,17 +1,16 @@
 #!/usr/bin/Rscript
 
-# Prints a formatted LaTeX or Markdown table of measurement results, and
-# improvement over a previous measurement. To be used together with the
-# bench_decode example. Columns in the input data should be p10, p50, p90,
-# average, and throughput.
+# Prints a formatted Markdown table of measurement results, and improvement over
+# a previous measurement. To be used together with the bench_decode example.
+# Columns in the input data should be p10, p50, p90, average, and throughput.
 
 # Usage:
 #
-#  ./stats.r --latex new.dat baseline.dat
-#  ./stats.r --plain new.dat baseline.dat
+#  ./stats.r baseline.dat new.dat
+#  ./stats.r baseline.dat new.dat
 
+prev <- read.table(commandArgs(trailingOnly = TRUE)[1])
 data <- read.table(commandArgs(trailingOnly = TRUE)[2])
-prev <- read.table(commandArgs(trailingOnly = TRUE)[3])
 
 # Note: `sapply` is like `Map` with arguments reversed,
 # but it also produces a different data structure as a
@@ -35,21 +34,10 @@ propErr <- function(a, b, aErr, bErr)
 frac <- dataMean / prevMean
 fracSd <- propErr(prevMean, dataMean, prevSd, dataSd)
 
-# Make a format string for either a LaTeX table, or GH-flavored Markdown.
+# Make a format string for GH-flavored Markdown.
 makeFormat <- function(label, unit)
 {
-  if (commandArgs(trailingOnly = TRUE)[1] == "--latex")
-  {
-    # This assumes a LaTeX table format like so:
-    # \begin{tabular}{l r@{ ± } l}
-    # ...
-    # \end{tabular}
-    return(paste(label, '& %5.1f & %3.1f', unit, '& %.3f & %.3f \\\\\n'))
-  }
-  else
-  {
-    return(paste('|', label, '| %5.1f ± %3.1f', unit, '| %.3f ± %.3f |\n'))
-  }
+  return(paste('|', label, '| %5.1f ± %3.1f', unit, '| %.3f ± %.3f |\n'))
 }
 
 # Mu is for mean, tau for throughput.
