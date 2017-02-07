@@ -15,6 +15,38 @@ can be quite complex, and nowadays CPU decoding is not all that common any more.
 Therefore, I decided to first try and write a decoder for an audio codec that I
 love and use on a daily basis: FLAC.
 
+Example
+-------
+
+Below is a simple example of decoding a FLAC file to wav with Claxon and
+[Hound][hound], taken from [decode_simple.rs](examples/decode_simple.rs). A
+more efficient way of decoding requires dealing with a few details of the FLAC
+format. See [decode.rs](examples/decode.rs) for an example.
+
+```rust
+fn decode_file(fname: &Path) {
+    let mut reader = claxon::FlacReader::open(fname).expect("failed to open FLAC stream");
+
+    let spec = hound::WavSpec {
+        channels: reader.streaminfo().channels as u16,
+        sample_rate: reader.streaminfo().sample_rate,
+        bits_per_sample: reader.streaminfo().bits_per_sample as u16,
+        sample_format: hound::SampleFormat::Int,
+    };
+
+    let fname_wav = fname.with_extension("wav");
+    let opt_wav_writer = hound::WavWriter::create(fname_wav, spec);
+    let mut wav_writer = opt_wav_writer.expect("failed to create wav file");
+
+    for opt_sample in reader.samples() {
+        let sample = opt_sample.expect("failed to decode FLAC stream");
+        wav_writer.write_sample(sample).expect("failed to write wav file");
+    }
+
+    wav_writer.finalize().expect("failed to finalize wav file");
+}
+```
+
 Performance
 -----------
 
@@ -42,5 +74,6 @@ to your copyright notice.
 [crate]:     https://crates.io/crates/claxon
 [docs-img]:  https://img.shields.io/badge/docs-online-blue.svg
 [docs]:      https://docs.rs/claxon
+[hound]:     https://github.com/ruuda/hound
 [apache2]:   https://www.apache.org/licenses/LICENSE-2.0
 [except]:    https://www.gnu.org/licenses/gpl-faq.html#GPLIncompatibleLibs
