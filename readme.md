@@ -15,6 +15,19 @@ can be quite complex, and nowadays CPU decoding is not all that common any more.
 Therefore, I decided to first try and write a decoder for an audio codec that I
 love and use on a daily basis: FLAC.
 
+Performance
+-----------
+
+These are the times to decode 5 real-world FLAC files to wav, average and
+standard deviation of 11 runs, normalized to the reference implementation 1.3.2:
+
+| Decoder | Time        |
+| ------- | ----------- |
+| Claxon  | 1.13 ± 0.03 |
+| libflac | 1.00 ± 0.03 |
+
+Measurements were done on a Skylake i7.
+
 License
 -------
 Claxon is licensed under the [Apache 2.0][apache2] license. It may be used in
