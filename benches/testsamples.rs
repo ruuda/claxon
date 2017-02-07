@@ -15,7 +15,24 @@ use std::io::{Cursor, Read};
 use std::path::Path;
 use test::Bencher;
 
-fn bench_decode_i16<P: AsRef<Path>>(path: P, bencher: &mut Bencher) {
+/// Replace the reader with one that starts again from the beginning.
+fn refresh_reader(reader: &mut claxon::FlacReader<Cursor<Vec<u8>>>) {
+    // We want to replace the reader in-place, but in order to do so, we must
+    // first destruct it. Rust does not allow us to do that without providing a
+    // replacement, so we temporarily put `mem::uninitialized()` in there. At
+    // the end, that memory is released without running a destructor with
+    // `mem::forget()`.
+    let fake_reader = unsafe { std::mem::uninitialized() };
+    let stolen_reader = std::mem::replace(reader, fake_reader);
+    let cursor = stolen_reader.into_inner();
+    let vec = cursor.into_inner();
+    let new_cursor = Cursor::new(vec);
+    let new_reader = claxon::FlacReader::new(new_cursor).unwrap();
+    let stolen_reader = std::mem::replace(reader, new_reader);
+    std::mem::forget(stolen_reader);
+}
+
+fn bench_decode<P: AsRef<Path>>(path: P, bencher: &mut Bencher) {
     // Read the file into memory. We want to measure decode speed, not IO
     // overhead.
     let mut file = File::open(path).unwrap();
@@ -25,87 +42,58 @@ fn bench_decode_i16<P: AsRef<Path>>(path: P, bencher: &mut Bencher) {
 
     let mut reader = claxon::FlacReader::new(cursor).unwrap();
 
-    let bps = reader.streaminfo().bits_per_sample as u64;
+    let bps = reader.streaminfo().bits_per_sample as u32;
     assert!(bps < 8 * 16);
 
-    let mut samples = reader.samples::<i16>();
-    let mut bytes = 0u64;
+    let mut bytes = 0u32;
+    let mut buffer = Vec::new();
+    let mut iterations = 0;
     bencher.iter(|| {
-        for _ in 0..1024 {
-            let sample = samples.next().unwrap().unwrap();
-            test::black_box(sample);
+        let mut should_refresh = true;
+        {
+            let mut blocks = reader.blocks();
+            let stolen_buffer = std::mem::replace(&mut buffer, Vec::new());
+            let block = blocks.read_next_or_eof(stolen_buffer).expect("decode error");
+            if let Some(b) = block {
+                bytes += b.len() * (bps / 8);
+                iterations += 1;
+                buffer = test::black_box(b.into_buffer());
+                should_refresh = false;
+            }
         }
-        bytes += 1024 * bps / 8;
-    });
-    bencher.bytes = bytes;
-}
-
-fn bench_decode_i32<P: AsRef<Path>>(path: P, bencher: &mut Bencher) {
-    // This function is identical to `bench_decode_i16`, except it decodes into
-    // i32s, so it can also deal with 24-bit audio.
-    let mut file = File::open(path).unwrap();
-    let mut data = Vec::new();
-    file.read_to_end(&mut data).unwrap();
-    let cursor = Cursor::new(data);
-
-    let mut reader = claxon::FlacReader::new(cursor).unwrap();
-
-    let bps = reader.streaminfo().bits_per_sample as u64;
-    assert!(bps < 8 * 32);
-
-    let mut samples = reader.samples::<i32>();
-    let mut bytes = 0u64;
-    bencher.iter(|| {
-        for _ in 0..1024 {
-            let sample = samples.next().unwrap().unwrap();
-            test::black_box(sample);
+        if should_refresh {
+            // We decoded until the end, but the bencher wants to measure more
+            // still. Re-create a new FlacReader and start over then.
+            refresh_reader(&mut reader);
         }
-        bytes += 1024 * bps / 8;
     });
-    bencher.bytes = bytes;
+
+    // The `bytes` field of the bencher indicates the number of bytes *per
+    // iteration*, not the total number of bytes.
+    bencher.bytes = (bytes as u64) / iterations;
 }
 
 #[bench]
 fn bench_p0_mono_16bit(bencher: &mut Bencher) {
-    bench_decode_i16("testsamples/p0.flac", bencher);
-}
-
-#[bench]
-fn bench_p0_mono_16bit_as_i32(bencher: &mut Bencher) {
-    bench_decode_i32("testsamples/p0.flac", bencher);
+    bench_decode("testsamples/p0.flac", bencher);
 }
 
 #[bench]
 fn bench_p1_stereo_24bit(bencher: &mut Bencher) {
-    bench_decode_i32("testsamples/p1.flac", bencher);
+    bench_decode("testsamples/p1.flac", bencher);
 }
 
 #[bench]
 fn bench_p2_stereo_16bit(bencher: &mut Bencher) {
-    bench_decode_i16("testsamples/p2.flac", bencher);
-}
-
-#[bench]
-fn bench_p2_stereo_16bit_as_i32(bencher: &mut Bencher) {
-    bench_decode_i32("testsamples/p2.flac", bencher);
+    bench_decode("testsamples/p2.flac", bencher);
 }
 
 #[bench]
 fn bench_p3_stereo_16bit(bencher: &mut Bencher) {
-    bench_decode_i16("testsamples/p3.flac", bencher);
-}
-
-#[bench]
-fn bench_p3_stereo_16bit_as_i32(bencher: &mut Bencher) {
-    bench_decode_i32("testsamples/p3.flac", bencher);
+    bench_decode("testsamples/p3.flac", bencher);
 }
 
 #[bench]
 fn bench_p4_stereo_16bit(bencher: &mut Bencher) {
-    bench_decode_i16("testsamples/p4.flac", bencher);
-}
-
-#[bench]
-fn bench_p4_stereo_16bit_as_i32(bencher: &mut Bencher) {
-    bench_decode_i32("testsamples/p4.flac", bencher);
+    bench_decode("testsamples/p4.flac", bencher);
 }
