@@ -218,7 +218,7 @@ impl<R: ReadBytes> Iterator for FlacSamples<R> {
             self.sample += 1;
 
             // If that was the last sample in the block, decode the next block.
-            if self.sample >= self.block.len() {
+            if self.sample >= self.block.duration() {
                 self.sample = 0;
 
                 // Replace the current block with an empty one so that we may
