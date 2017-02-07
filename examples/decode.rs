@@ -5,6 +5,10 @@
 // you may not use this file except in compliance with the License.
 // A copy of the License has been included in the root of the repository.
 
+// This file implements a decoder, like the reference `flac -d`. It is fast, but
+// being fast requires dealing with a few details of the FLAC format. There is
+// also a simpler example, `decode_simple`, which is less verbose.
+
 extern crate claxon;
 extern crate hound;
 
@@ -21,10 +25,8 @@ fn decode_file(fname: &Path) {
     assert!(reader.streaminfo().channels == 2);
 
     let spec = WavSpec {
-        // TODO: u8 for channels, is that weird? Would u32 be better?
         channels: reader.streaminfo().channels as u16,
         sample_rate: reader.streaminfo().sample_rate,
-        // TODO: again, would u32 be better, even if the range is smaller?
         bits_per_sample: reader.streaminfo().bits_per_sample as u16,
         sample_format: hound::SampleFormat::Int,
     };
