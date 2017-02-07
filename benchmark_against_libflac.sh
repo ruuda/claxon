@@ -39,3 +39,32 @@ for i in {1..11}; do
 
     echo -e "\b\b\b\b\b\b\b\b[done]  "
 done
+
+# Compute statistics with R.
+
+Rscript - << EOF
+claxon  <- read.table('/tmp/bench_times_claxon.dat')[[1]]
+libflac <- read.table('/tmp/bench_times_libflac.dat')[[1]]
+
+# Estimates the absolute error in (a ± aErr) / (b ± bErr).
+# See also https://en.wikipedia.org/wiki/Propagation_of_uncertainty.
+propErr <- function(a, b, aErr, bErr)
+{
+  # The new relative variance is the sum of the relative variances of a and b.
+  relA2 <- (aErr / a) * (aErr / a)
+  relB2 <- (bErr / b) * (bErr / b)
+  return(abs(b / a) * sqrt(relA2 + relB2))
+}
+
+claxonMean <- mean(claxon)  / mean(libflac)
+refMean    <- mean(libflac) / mean(libflac)
+
+claxonSd <- propErr(mean(claxon),  mean(libflac), sd(claxon), sd(libflac))
+refSd    <- propErr(mean(libflac), mean(libflac), sd(libflac), sd(libflac))
+
+cat(sprintf('Claxon:  %3.2f ± %2.2f\n', claxonMean, claxonSd))
+cat(sprintf('libflac: %3.2f ± %2.2f\n', refMean, refSd))
+EOF
+
+rm /tmp/bench_times_claxon.dat
+rm /tmp/bench_times_libflac.dat
