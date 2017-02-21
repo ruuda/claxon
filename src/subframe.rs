@@ -8,6 +8,7 @@
 //! The `subframe` module deals with subframes that make up a frame of the FLAC stream.
 
 use std::cmp;
+use std::num;
 use error::{Error, Result, fmt_err};
 use input::{Bitstream, ReadBytes};
 
@@ -420,11 +421,15 @@ fn predict_fixed(order: u32, buffer: &mut [i32]) -> Result<()> {
 
         // The #coefficients elements of the window store already decoded
         // samples, the last element of the window is the delta. Therefore,
-        // predict based on the first #coefficients samples.
+        // predict based on the first #coefficients samples. From the note
+        // above we know that the multiplication will not overflow for 24-bit
+        // samples, so the wrapping mul is safe. If it wraps, the file was
+        // invalid, and we make no guarantees about the decoded result. But
+        // we explicitly do not crash.
         let prediction = coefficients.iter()
                                      .zip(window.iter())
-                                     .map(|(&c, &s)| c * s)
-                                     .sum::<i32>();
+                                     .map(|(&c, &s)| num::Wrapping(c) * num::Wrapping(s))
+                                     .sum::<num::Wrapping<i32>>().0;
 
         // The delta is stored, so the sample is the prediction + delta.
         let delta = window[coefficients.len()];
