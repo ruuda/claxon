@@ -1,0 +1,11 @@
+[package]
+name = "claxon-fuzz"
+version = "0.0.1"
+authors = ["Automatically generated"]
+
+[dependencies.claxon]
+path = ".."
+
+[[bin]]
+name = "fuzzer_script_1"
+path = "fuzzers/fuzzer_script_1.rs"

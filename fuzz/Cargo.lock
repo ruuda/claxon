@@ -1,0 +1,11 @@
+[root]
+name = "claxon-fuzz"
+version = "0.0.1"
+dependencies = [
+ "claxon 0.3.0",
+]
+
+[[package]]
+name = "claxon"
+version = "0.3.0"
+
