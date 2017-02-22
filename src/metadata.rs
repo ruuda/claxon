@@ -261,6 +261,10 @@ fn read_padding_block<R: ReadBytes>(input: &mut R, length: u32) -> Result<()> {
 }
 
 fn read_application_block<R: ReadBytes>(input: &mut R, length: u32) -> Result<(u32, Vec<u8>)> {
+    if length < 4 {
+        return fmt_err("application block length must be at least 4 bytes.")
+    }
+
     let id = try!(input.read_be_u32());
 
     // Four bytes of the block have been used for the ID, the rest is payload.
