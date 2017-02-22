@@ -330,8 +330,7 @@ fn decode_rice2_partition<R: ReadBytes>(input: &mut Bitstream<R>,
 
     // All ones is an escape code that indicates unencoded binary.
     if rice_param == 0b11111 {
-        // TODO: Return "unsupported" result instead.
-        panic!("unencoded binary is not yet implemented");
+        return Err(Error::Unsupported("unencoded binary is not yet implemented"))
     }
 
     for sample in buffer.iter_mut() {
