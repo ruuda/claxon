@@ -529,8 +529,8 @@ fn predict_lpc(raw_coefficients: &[i16],
                                          .zip(&buffer[i..order + i])
                                          .map(|(&c, &s)| c as i64 * s as i64)
                                          .sum::<i64>() >> qlp_shift;
-        let delta = buffer[order + i];
-        buffer[order + i] = prediction as i32 + delta;
+        let delta = buffer[order + i] as i64;
+        buffer[order + i] = (prediction + delta) as i32;
     }
 
     if buffer.len() <= 12 { return Ok(()) }
@@ -543,8 +543,8 @@ fn predict_lpc(raw_coefficients: &[i16],
                                      .zip(&buffer[i - 12..i])
                                      .map(|(&c, &s)| c * s as i64)
                                      .sum::<i64>() >> qlp_shift;
-        let delta = buffer[i];
-        buffer[i] = prediction as i32 + delta;
+        let delta = buffer[i] as i64;
+        buffer[i] = (prediction + delta) as i32;
     }
 
     Ok(())
