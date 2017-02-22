@@ -446,7 +446,7 @@ fn predict_fixed(order: u32, buffer: &mut [i32]) -> Result<()> {
 
         // The delta is stored, so the sample is the prediction + delta.
         let delta = window[coefficients.len()];
-        window[coefficients.len()] = prediction + delta;
+        window[coefficients.len()] = prediction.wrapping_add(delta);
     }
 
     Ok(())
