@@ -319,8 +319,11 @@ fn decode_left_side(buffer: &mut [i32]) {
         let side = *snd;
 
         // Left is correct already, only the right channel needs to be decoded.
-        // side = left - right => right = left - side.
-        let right = left - side;
+        // side = left - right => right = left - side. A valid FLAC file will
+        // never overflow here. If we do have an overflow then we decode
+        // garbage, but at least Rust does not panic in debug mode due to
+        // overflow.
+        let right = left.wrapping_sub(side);
         *snd = right;
     }
 }
