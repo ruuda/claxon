@@ -10,7 +10,7 @@
 use std::i32;
 
 use crc::{Crc8Reader, Crc16Reader};
-use error::{Result, fmt_err};
+use error::{Error, Result, fmt_err};
 use input::{Bitstream, ReadBytes};
 use subframe;
 
@@ -650,9 +650,12 @@ impl<R: ReadBytes> FrameReader<R> {
         let total_samples = header.channels() as usize * header.block_size as usize;
         buffer = ensure_buffer_len(buffer, total_samples);
 
-        // TODO: if the bps is missing from the header, we must get it from
-        // the streaminfo block.
-        let bps = header.bits_per_sample.unwrap();
+        let bps = match header.bits_per_sample {
+            Some(x) => x,
+            // TODO: if the bps is missing from the header, we must get it from
+            // the streaminfo block.
+            None => return Err(Error::Unsupported("header without bits per sample info")),
+        };
 
         // The number of bits per sample must not exceed 32, for we decode into
         // an i32. TODO: Turn this into an error instead of panic? Or is it
