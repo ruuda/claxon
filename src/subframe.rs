@@ -480,6 +480,8 @@ fn predict_lpc(raw_coefficients: &[i16],
                qlp_shift: i16,
                buffer: &mut [i32])
                -> Result<()> {
+    debug_assert!(qlp_shift >= 0, "Right-shift by negative value is not allowed.");
+    debug_assert!(qlp_shift < 64, "Cannot shift by more than integer width.");
     // The decoded residuals are 25 bits at most (assuming subset FLAC of at
     // most 24 bits per sample, but there is the delta encoding for channels).
     // The coefficients are 16 bits at most, so their product is 41 bits. In
@@ -584,6 +586,17 @@ fn decode_lpc<R: ReadBytes>(input: &mut Bitstream<R>,
     // in signed two's complement. Read 5 bits and then extend the sign bit.
     let qlp_shift_unsig = try!(input.read_leq_u16(5));
     let qlp_shift = extend_sign_u16(qlp_shift_unsig, 5);
+
+    // The spec does allow the qlp shift to be negative, but in practice this
+    // does not happen. Fully supporting it would be a performance hit, as an
+    // arithmetic shift by a negative amount is invalid, so this would incur a
+    // branch. If a real-world file ever hits this case, then we should consider
+    // making two LPC predictors, one for positive, and one for negative qlp.
+    if qlp_shift < 0 {
+        let msg = "a negative quantized linear predictor coefficient shift is \
+                   not supported, please file a bug.";
+        return Err(Error::Unsupported(msg))
+    }
 
     // Finally, the coefficients themselves. The order is at most 32, so all
     // coefficients can be kept on the stack. Store them in reverse, because
