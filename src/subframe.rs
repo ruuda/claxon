@@ -76,6 +76,13 @@ fn read_subframe_header<R: ReadBytes>(input: &mut Bitstream<R>) -> Result<Subfra
         1 + try!(input.read_unary())
     };
 
+    // The spec puts no bounds on the number of wasted bits per sample, but more
+    // than 31 does not make sense, as it would remove all data even for 32-bit
+    // samples.
+    if wasted_bits > 31 {
+        return fmt_err("wasted bits per sample must not exceed 31");
+    }
+
     let subframe_header = SubframeHeader {
         sf_type: sf_type,
         wasted_bits_per_sample: wasted_bits,
@@ -199,7 +206,7 @@ pub fn decode<R: ReadBytes>(input: &mut Bitstream<R>,
     // the left. Note: it might be better performance-wise to do this on
     // the fly while decoding. That could be done if this is a bottleneck.
     if header.wasted_bits_per_sample > 0 {
-        debug_assert!(header.wasted_bits_per_sample < 31,
+        debug_assert!(header.wasted_bits_per_sample <= 31,
                       "Cannot shift by more than the sample width.");
         for s in buffer {
             // For a valid FLAC file, this shift does not overflow. For an
