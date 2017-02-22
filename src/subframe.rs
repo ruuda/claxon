@@ -429,7 +429,9 @@ fn predict_fixed(order: u32, buffer: &mut [i32]) -> Result<()> {
         let prediction = coefficients.iter()
                                      .zip(window.iter())
                                      .map(|(&c, &s)| num::Wrapping(c) * num::Wrapping(s))
-                                     .sum::<num::Wrapping<i32>>().0;
+                                     // Rust 1.13 does not support using `sum`
+                                     // with `Wrapping`, so do a fold.
+                                     .fold(num::Wrapping(0), |a, x| a + x).0;
 
         // The delta is stored, so the sample is the prediction + delta.
         let delta = window[coefficients.len()];
