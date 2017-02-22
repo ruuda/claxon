@@ -199,8 +199,13 @@ pub fn decode<R: ReadBytes>(input: &mut Bitstream<R>,
     // the left. Note: it might be better performance-wise to do this on
     // the fly while decoding. That could be done if this is a bottleneck.
     if header.wasted_bits_per_sample > 0 {
+        debug_assert!(header.wasted_bits_per_sample < 31,
+                      "Cannot shift by more than the sample width.");
         for s in buffer {
-            *s = *s << header.wasted_bits_per_sample as usize;
+            // For a valid FLAC file, this shift does not overflow. For an
+            // invalid file it might, and then we decode garbage, but we don't
+            // crash the program in debug mode due to shift overflow.
+            *s = s.wrapping_shl(header.wasted_bits_per_sample);
         }
     }
 
