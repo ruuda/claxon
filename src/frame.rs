@@ -365,10 +365,12 @@ fn decode_mid_side(buffer: &mut [i32]) {
         let side = *snd;
 
         // Double mid first, and then correct for truncated rounding that
-        // will have occured if side is odd.
-        let mid = (mid * 2) | (side & 1);
-        let left = (mid + side) / 2;
-        let right = (mid - side) / 2;
+        // will have occured if side is odd. Note that samples are never
+        // expected to exceed 25 bits, so the wrapping multiplication does not
+        // actually wrap for valid files.
+        let mid = mid.wrapping_mul(2) | (side & 1);
+        let left = mid.wrapping_add(side) / 2;
+        let right = mid.wrapping_sub(side) / 2;
 
         *fst = left;
         *snd = right;
