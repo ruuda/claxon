@@ -583,6 +583,13 @@ fn decode_lpc<R: ReadBytes>(input: &mut Bitstream<R>,
     // The order minus one fits in 5 bits, so the order is at most 32.
     debug_assert!(order <= 32);
 
+    // On the frame decoding level it is ensured that the buffer is large
+    // enough. If it can't even fit the warm-up samples, then there is a frame
+    // smaller than its lpc order, which is invalid.
+    if buffer.len() < order as usize {
+        return fmt_err("invalid subframe, buffer is too small for given lpc order")
+    }
+
     // There are order * bits per sample unencoded warm-up sample bits.
     try!(decode_verbatim(input, bps, &mut buffer[..order as usize]));
 
