@@ -7,7 +7,6 @@
 
 //! The `metadata` module deals with metadata at the beginning of a FLAC stream.
 
-use std::iter;
 use error::{Result, fmt_err};
 use input::ReadBytes;
 
@@ -268,7 +267,12 @@ fn read_application_block<R: ReadBytes>(input: &mut R, length: u32) -> Result<(u
     let id = try!(input.read_be_u32());
 
     // Four bytes of the block have been used for the ID, the rest is payload.
-    let mut data: Vec<u8> = iter::repeat(0).take(length as usize - 4).collect();
+    // Create a vector of uninitialized memory, and read the block into it. The
+    // uninitialized memory is never exposed: read_into will either fill the
+    // buffer completely, or return an err, in which case the memory is not
+    // exposed.
+    let mut data = Vec::with_capacity(length as usize - 4);
+    unsafe { data.set_len(length as usize - 4); }
     try!(input.read_into(&mut data));
 
     Ok((id, data))
