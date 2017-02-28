@@ -61,5 +61,23 @@ rustc --crate-name decode_full fuzzers/decode_full.rs \
       -Zsanitizer=address \
       -Cpanic=abort
 
-echo "Running fuzzer for ${FUZZ_SECONDS:-60} seconds ..."
-target/debug/decode-full -max_len=2048 -max_total_time=${FUZZ_SECONDS:-60} corpus
+echo "Running fuzzer for ${FUZZ_SECONDS:-10} seconds ..."
+
+# Disable leak detection, because when the fuzzer terminates after the set
+# timeout, it might leak because it is in the middle of an iteration, but then
+# the leak sanitizer will report that and exit with a nonzero exit code, while
+# actually everything is fine.
+export ASAN_OPTIONS="detect_leaks=0"
+
+# Set max length to a small-ish number (in comparison to the test samples), as
+# the coverage is similar (it is a harder to find a few elusive paths), but
+# every iteration runs much faster. Warn about slow runs, as every iteration
+# should execute in well below a second. Disable the leak sanitizer, otherwise
+# it reports a leak when the fuzzer exits after the given total time.
+target/debug/decode-full \
+  -max_len=2048 \
+  -report_slow_units=1 \
+  -max_total_time=${FUZZ_SECONDS:-10} \
+  -print_final_stats=1 \
+  -detect_leaks=0 \
+  corpus
