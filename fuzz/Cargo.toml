@@ -1,11 +1,11 @@
 [package]
 name = "claxon-fuzz"
-version = "0.0.1"
-authors = ["Automatically generated"]
+version = "0.0.0"
+authors = ["Ruud van Asseldonk <dev@veniogames.com>"]
 
 [dependencies.claxon]
 path = ".."
 
 [[bin]]
-name = "fuzzer_script_1"
-path = "fuzzers/fuzzer_script_1.rs"
+name = "decode-full"
+path = "fuzzers/decode_full.rs"

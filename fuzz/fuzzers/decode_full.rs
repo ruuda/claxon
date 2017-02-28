@@ -7,29 +7,23 @@
 
 #![no_main]
 
-extern crate fuzzer_sys;
+extern crate libfuzzer_sys;
 extern crate claxon;
 
-use std::slice;
 use std::io::Cursor;
 
-#[export_name="LLVMFuzzerTestOneInput"]
-pub extern fn go(data: *const u8, size: isize) -> i32 {
-    let data_slice = unsafe { slice::from_raw_parts(data, size as usize) };
-    let cursor = Cursor::new(data_slice);
+#[export_name="rust_fuzzer_test_input"]
+pub extern fn go(data: &[u8]) {
+    let cursor = Cursor::new(data);
     let mut reader = match claxon::FlacReader::new(cursor) {
         Ok(r) => r,
-        Err(..) => return 0,
+        Err(..) => return,
     };
-    let mut csum = 0;
+
     for sample in reader.samples() {
         match sample {
-            Ok(s) => csum ^= s,
-            Err(..) => return 0,
+            Ok(..) => { }
+            Err(..) => return,
         }
     }
-
-    // TODO: Do I need to consume a variable somewhere, or call test::black_box?
-
-    0
 }
