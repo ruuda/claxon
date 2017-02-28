@@ -13,13 +13,15 @@ addons:
       - flac
 
 cache:
-  # Cache the fuzzing corpus, so it does not have to discover the entire corpus
-  # again every time, and it can focus on finding bugs instead.
-  - fuzz/corpus
+  directories:
+    # Cache the fuzzing corpus, so it does not have to discover the entire corpus
+    # again every time, and it can focus on finding bugs instead.
+    - fuzz/corpus
 
 before_script:
   - cd testsamples
   - ./populate.sh
+  - cd ..
 
 script:
   # Do not use the default --verbose commands, they are only noisy.
