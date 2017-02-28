@@ -7,11 +7,24 @@ rust:
   - beta
   - nightly
 
-before_script:
-  - cd testsamples
-  - ./populate.sh
-
 addons:
   apt:
     packages:
       - flac
+
+cache:
+  # Cache the fuzzing corpus, so it does not have to discover the entire corpus
+  # again every time, and it can focus on finding bugs instead.
+  - fuzz/corpus
+
+before_script:
+  - cd testsamples
+  - ./populate.sh
+
+script:
+  # Do not use the default --verbose commands, they are only noisy.
+  - cargo build
+  - cargo test
+
+  # On the nightly configuration, fuzz for 15 minutes.
+  - FUZZ_SECONDS=900 tools/fuzz_on_ci.sh
