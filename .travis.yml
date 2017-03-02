@@ -7,6 +7,11 @@ rust:
   - beta
   - nightly
 
+# Opt for a less ancient distribution with a C++11-compliant compiler, in order
+# to compile libfuzzer.
+dist: trusty
+sudo: false
+
 addons:
   apt:
     packages:
