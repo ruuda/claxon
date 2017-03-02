@@ -23,10 +23,12 @@ cache:
     # again every time, and it can focus on finding bugs instead.
     - fuzz/corpus
 
+    # Cache the test samples to not put so much load on archive.org, but on
+    # Travis' S3 buckets instead.
+    - testsamples
+
 before_script:
-  - cd testsamples
-  - ./populate.sh
-  - cd ..
+  - cd testsamples && ./populate.sh && cd ..
 
 script:
   # Do not use the default --verbose commands, they are only noisy.
