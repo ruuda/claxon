@@ -1,11 +1,22 @@
+
 [package]
 name = "claxon-fuzz"
-version = "0.0.0"
-authors = ["Ruud van Asseldonk <dev@veniogames.com>"]
+version = "0.0.1"
+authors = ["Automatically generated"]
+publish = false
+
+[package.metadata]
+cargo-fuzz = true
 
 [dependencies.claxon]
 path = ".."
+[dependencies.libfuzzer-sys]
+git = "https://github.com/rust-fuzz/libfuzzer-sys.git"
+
+# Prevent this from interfering with workspaces
+[workspace]
+members = ["."]
 
 [[bin]]
-name = "decode-full"
+name = "decode_full"
 path = "fuzzers/decode_full.rs"
