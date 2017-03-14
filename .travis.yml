@@ -21,7 +21,7 @@ cache:
   directories:
     # Cache the fuzzing corpus, so it does not have to discover the entire corpus
     # again every time, and it can focus on finding bugs instead.
-    - fuzz/corpus
+    - fuzz_corpus
 
     # Cache the test samples to not put so much load on archive.org, but on
     # Travis' S3 buckets instead.

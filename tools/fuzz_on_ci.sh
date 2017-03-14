@@ -11,15 +11,15 @@ fi
 cargo install cargo-fuzz --vers 0.3.1 || true
 
 # Pre-populate the corpus with the test samples, if they did not exist already.
+# Note that we do not cache the corpus directly on Travis, due to this bug:
+# https://bugs.llvm.org//show_bug.cgi?id=25991.
 mkdir -p fuzz/corpus
-cp --update testsamples/*.flac fuzz/corpus
-cp --update testsamples/fuzz/*.flac fuzz/corpus
+mkdir -p fuzz_corpus
+cp --no-clobber testsamples/*.flac fuzz_corpus
+cp --no-clobber testsamples/fuzz/*.flac fuzz_corpus
+cp --no-clobber fuzz_corpus/* fuzz/corpus
 
 echo "Corpus size: $(ls -A fuzz/corpus | wc -l)"
-
-# On Travis, the fuzzer does not use the correct corpus directory for some
-# reason. Provide it manually, relative to the root of the repository.
-corpus_dir="$(git rev-parse --show-toplevel)/fuzz/corpus"
 
 echo "Running fuzzer for ${FUZZ_SECONDS:-10} seconds ..."
 
@@ -39,5 +39,9 @@ cargo fuzz run decode_full -- \
   -report_slow_units=1 \
   -max_total_time=${FUZZ_SECONDS:-10} \
   -print_final_stats=1 \
-  -detect_leaks=0 \
-  ${corpus_dir}
+  -detect_leaks=0
+
+# Copy back any new discoveries, so Travis can cache them. This step is not
+# reached when fuzzing finds a crash, but that is ok, because in that case we
+# should reproduce manually and add a regression test anyway.
+cp --no-clobber fuzz/corpus/* fuzz_corpus
