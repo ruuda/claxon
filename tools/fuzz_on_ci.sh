@@ -8,7 +8,7 @@ if [[ "${TRAVIS_RUST_VERSION}" != "nightly" ]]; then
   exit 0
 fi
 
-cargo install cargo-fuzz --vers 0.3.0 || true
+cargo install cargo-fuzz --vers 0.3.1 || true
 
 # Pre-populate the corpus with the test samples, if they did not exist already.
 mkdir -p fuzz/corpus
