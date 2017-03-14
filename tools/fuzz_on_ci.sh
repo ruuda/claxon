@@ -17,6 +17,10 @@ cp --update testsamples/fuzz/*.flac fuzz/corpus
 
 echo "Corpus size: $(ls -A fuzz/corpus | wc -l)"
 
+# On Travis, the fuzzer does not use the correct corpus directory for some
+# reason. Provide it manually, relative to the root of the repository.
+corpus_dir="$(git rev-parse --show-toplevel)/fuzz/corpus"
+
 echo "Running fuzzer for ${FUZZ_SECONDS:-10} seconds ..."
 
 # Disable leak detection, because when the fuzzer terminates after the set
@@ -35,4 +39,5 @@ cargo fuzz run decode_full -- \
   -report_slow_units=1 \
   -max_total_time=${FUZZ_SECONDS:-10} \
   -print_final_stats=1 \
-  -detect_leaks=0
+  -detect_leaks=0 \
+  ${corpus_dir}
