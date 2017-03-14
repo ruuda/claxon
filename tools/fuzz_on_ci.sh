@@ -15,6 +15,8 @@ mkdir -p fuzz/corpus
 cp --update testsamples/*.flac fuzz/corpus
 cp --update testsamples/fuzz/*.flac fuzz/corpus
 
+echo "Corpus size: $(ls -A fuzz/corpus | wc -l)"
+
 echo "Running fuzzer for ${FUZZ_SECONDS:-10} seconds ..."
 
 # Disable leak detection, because when the fuzzer terminates after the set
