@@ -18,7 +18,7 @@ struct MetadataBlockHeader {
 }
 
 /// The streaminfo metadata block, with important information about the stream.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub struct StreamInfo {
     // TODO: "size" would better be called "duration" for clarity.
 
