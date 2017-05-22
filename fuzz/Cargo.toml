@@ -20,3 +20,11 @@ members = ["."]
 [[bin]]
 name = "decode_full"
 path = "fuzzers/decode_full.rs"
+
+[[bin]]
+name = "decode_header"
+path = "fuzzers/decode_header.rs"
+
+[[bin]]
+name = "decode_single_block"
+path = "fuzzers/decode_single_block.rs"
