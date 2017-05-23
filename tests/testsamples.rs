@@ -177,6 +177,16 @@ fn verify_streaminfo_p4() {
 }
 
 #[test]
+fn verify_streaminfo_pop() {
+    compare_metaflac("testsamples/pop.flac");
+}
+
+#[test]
+fn verify_streaminfo_short() {
+    compare_metaflac("testsamples/short.flac");
+}
+
+#[test]
 fn verify_decoded_stream_p0() {
     compare_decoded_stream("testsamples/p0.flac");
 }
@@ -199,6 +209,17 @@ fn verify_decoded_stream_p3() {
 #[test]
 fn verify_decoded_stream_p4() {
     compare_decoded_stream("testsamples/p4.flac");
+}
+
+#[test]
+fn verify_decoded_stream_pop() {
+    compare_decoded_stream("testsamples/pop.flac");
+}
+
+#[test]
+fn verify_decoded_stream_short() {
+    // The short sample has only 4 samples, even less than pop.flac.
+    compare_decoded_stream("testsamples/short.flac");
 }
 
 #[test]
