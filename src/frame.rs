@@ -275,10 +275,6 @@ fn read_frame_header_or_eof<R: ReadBytes>(input: &mut R) -> Result<Option<FrameH
         block_size = bs + 1;
     }
 
-    if block_size < 16 {
-        return fmt_err("invalid block size, must be at least 16");
-    }
-
     if read_8bit_sr {
         let sr = try!(crc_input.read_u8());
         sample_rate = Some(sr as u32);
