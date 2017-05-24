@@ -245,3 +245,28 @@ fn verify_extra_samples() {
         }
     }
 }
+
+#[test]
+fn regression_test_fuzz_samples() {
+    use std::ffi::OsStr;
+
+    // Enumerate all the flac files in the testsamples/fuzz directory,
+    // and ensure that they can be decoded without panic.
+    let dir = fs::read_dir("testsamples/fuzz")
+                 .ok().expect("failed to enumerate flac files");
+    for path in dir {
+        let path = path.ok().expect("failed to obtain path info").path();
+        if path.is_file() && path.extension() == Some(OsStr::new("flac")) {
+            print!("    regression testing {} ...", path.to_str()
+                   .expect("unsupported filename"));
+
+            if let Ok(mut reader) = claxon::FlacReader::open(&path) {
+                let mut buffer = Vec::new();
+                while let Ok(Some(block)) = reader.blocks().read_next_or_eof(buffer) {
+                    buffer = block.into_buffer();
+                }
+            }
+            println!(" ok");
+        }
+    }
+}
