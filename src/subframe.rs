@@ -473,6 +473,12 @@ fn decode_fixed<R: ReadBytes>(input: &mut Bitstream<R>,
                               order: u32,
                               buffer: &mut [i32])
                               -> Result<()> {
+    // The length of the buffer which is passed in, is the length of the block.
+    // Thus, the number of warm-up samples must not exceed that length.
+    if buffer.len() < order as usize {
+        return fmt_err("invalid fixed subframe, order is larger than block size")
+    }
+
     // There are order * bits per sample unencoded warm-up sample bits.
     try!(decode_verbatim(input, bps, &mut buffer[..order as usize]));
 
@@ -587,7 +593,7 @@ fn decode_lpc<R: ReadBytes>(input: &mut Bitstream<R>,
     // enough. If it can't even fit the warm-up samples, then there is a frame
     // smaller than its lpc order, which is invalid.
     if buffer.len() < order as usize {
-        return fmt_err("invalid subframe, buffer is too small for given lpc order")
+        return fmt_err("invalid LPC subframe, lpc order is larger than block size")
     }
 
     // There are order * bits per sample unencoded warm-up sample bits.
