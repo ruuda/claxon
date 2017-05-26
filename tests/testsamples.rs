@@ -17,33 +17,35 @@ fn run_metaflac<P: AsRef<Path>>(fname: P) -> String {
 
     // Run metaflac on the specified file and print all streaminfo data.
     let output = Command::new("metaflac")
-                     .arg("--show-min-blocksize")
-                     .arg("--show-max-blocksize")
-                     .arg("--show-min-framesize")
-                     .arg("--show-max-framesize")
-                     .arg("--show-sample-rate")
-                     .arg("--show-channels")
-                     .arg("--show-bps")
-                     .arg("--show-total-samples")
-                     .arg("--show-md5sum")
-                     .arg(fname.as_ref().to_str().expect("unsupported filename"))
-                     .output()
-                     .expect("failed to run metaflac");
+        .arg("--show-min-blocksize")
+        .arg("--show-max-blocksize")
+        .arg("--show-min-framesize")
+        .arg("--show-max-framesize")
+        .arg("--show-sample-rate")
+        .arg("--show-channels")
+        .arg("--show-bps")
+        .arg("--show-total-samples")
+        .arg("--show-md5sum")
+        .arg(fname.as_ref().to_str().expect("unsupported filename"))
+        .output()
+        .expect("failed to run metaflac");
     String::from_utf8(output.stdout).expect("metaflac wrote invalid UTF-8")
 }
 
-fn decode_file<P: AsRef<Path>>(fname: P) {
+fn decode_file<P: AsRef<Path>>(fname: P) -> Vec<u8> {
     use std::process::Command;
 
     // Run the the reference flac decoder on the file.
-    let success = Command::new("flac")
-                      .arg("--decode")
-                      .arg("--silent")
-                      .arg(fname.as_ref().to_str().expect("unsupported filename"))
-                      .status()
-                      .expect("failed to run flac")
-                      .success();
-    assert!(success);
+    let output = Command::new("flac")
+        .arg("--decode")
+        .arg("--silent")
+        .arg("--stdout")
+        .arg(fname.as_ref().to_str().expect("unsupported filename"))
+        .output()
+        .expect("failed to run flac");
+
+    assert!(output.status.success());
+    output.stdout
 }
 
 fn print_hex(seq: &[u8]) -> String {
@@ -86,64 +88,54 @@ fn compare_metaflac<P: AsRef<Path>>(fname: P) {
 }
 
 fn compare_decoded_stream<P: AsRef<Path>>(fname: P) {
-    let ref_fname = fname.as_ref().with_extension("wav");
-    if !ref_fname.exists() {
-        // TODO: actually, we might only want to run the test for files that
-        // do exist already. It is fine to run streaminfo or decode-only tests
-        // on thousands of files, but decoding thousands of files to wav before
-        // running the tests will take a lot of space. For now, while the
-        // number of samples is closer to 10 than to 100, this is fine.
-        decode_file(&fname);
-    }
+    let wav = decode_file(&fname);
+    let cursor = io::Cursor::new(wav);
 
-    // If the reference file does exist after decoding, we can compare it to
-    // how Claxon decodes it, sample by sample.
-    if ref_fname.exists() {
-        let mut ref_wav_reader = hound::WavReader::open(ref_fname).unwrap();
+    // Compare the reference decoded by the 'flac' program (stored as wav, which
+    // we read with Hound) to how Claxon decodes it, sample by sample.
+    let mut ref_wav_reader = hound::WavReader::new(cursor).unwrap();
 
-        let try_file = fs::File::open(fname).unwrap();
-        let try_buf_reader = io::BufReader::new(try_file);
-        let mut try_flac_reader = claxon::FlacReader::new(try_buf_reader).unwrap();
+    let try_file = fs::File::open(fname).unwrap();
+    let try_buf_reader = io::BufReader::new(try_file);
+    let mut try_flac_reader = claxon::FlacReader::new(try_buf_reader).unwrap();
 
-        // The streaminfo test will ensure that things like bit depth and
-        // sample rate match, only the actual samples are compared here.
+    // The streaminfo test will ensure that things like bit depth and
+    // sample rate match, only the actual samples are compared here.
+    let mut ref_samples = ref_wav_reader.samples::<i32>();
 
-        let mut ref_samples = ref_wav_reader.samples::<i32>();
+    let samples = try_flac_reader.streaminfo().samples.unwrap();
+    let n_channels = try_flac_reader.streaminfo().channels;
+    let mut blocks = try_flac_reader.blocks();
+    let mut sample = 0u64;
+    let mut b = 0u64;
+    let mut buffer = Vec::new();
 
-        let samples = try_flac_reader.streaminfo().samples.unwrap();
-        let n_channels = try_flac_reader.streaminfo().channels;
-        let mut blocks = try_flac_reader.blocks();
-        let mut sample = 0u64;
-        let mut b = 0u64;
-        let mut buffer = Vec::new();
-
-        while sample < samples {
-            let block = blocks.read_next_or_eof(buffer).unwrap().unwrap();
-            {
-                let mut channels: Vec<_> = (0..n_channels)
-                                               .map(|i| block.channel(i).iter().cloned())
-                                               .collect();
-                for i in 0..block.duration() {
-                    for ch in 0..n_channels as usize {
-                        let ref_sample = ref_samples.next().map(|r| r.ok().unwrap());
-                        let try_sample = channels[ch].next();
-                        if ref_sample != try_sample {
-                            println!("disagreement at sample {} of block {} in channel {}: \
-                                      reference is {} but decoded is {}",
-                                     i,
-                                     b,
-                                     ch,
-                                     ref_sample.unwrap(),
-                                     try_sample.unwrap());
-                            panic!("decoding differs from reference decoder");
-                        }
+    while sample < samples {
+        let block = blocks.read_next_or_eof(buffer).unwrap().unwrap();
+        {
+            let mut channels: Vec<_> = (0..n_channels)
+                                           .map(|i| block.channel(i).iter().cloned())
+                                           .collect();
+            for i in 0..block.duration() {
+                for ch in 0..n_channels as usize {
+                    let ref_sample = ref_samples.next().map(|r| r.ok().unwrap());
+                    let try_sample = channels[ch].next();
+                    if ref_sample != try_sample {
+                        println!("disagreement at sample {} of block {} in channel {}: \
+                                  reference is {} but decoded is {}",
+                                 i,
+                                 b,
+                                 ch,
+                                 ref_sample.unwrap(),
+                                 try_sample.unwrap());
+                        panic!("decoding differs from reference decoder");
                     }
                 }
-                sample = sample + block.duration() as u64;
             }
-            b = b + 1;
-            buffer = block.into_buffer();
+            sample = sample + block.duration() as u64;
         }
+        b = b + 1;
+        buffer = block.into_buffer();
     }
 }
 
