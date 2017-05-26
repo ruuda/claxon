@@ -7,6 +7,7 @@
 
 extern crate claxon;
 extern crate hound;
+extern crate walkdir;
 
 use std::fs;
 use std::io;
@@ -222,12 +223,15 @@ fn verify_extra_samples() {
         return
     }
 
-    // Enumerate all the flac files in the testsamples/extra directory, and
-    // compare the streaminfo and stream itself for those.
-    let dir = fs::read_dir("testsamples/extra")
-                 .ok().expect("failed to enumerate flac files");
-    for path in dir {
-        let path = path.ok().expect("failed to obtain path info").path();
+    let wd = walkdir::WalkDir::new("testsamples/extra")
+        .follow_links(true)
+        .into_iter()
+        .filter_map(|e| e.ok());
+
+    // Recursively enumerate all the flac files in the testsamples/extra
+    // directory, and compare the streaminfo and stream itself for those.
+    for entry in wd {
+        let path = entry.path();
         if path.is_file() && path.extension() == Some(OsStr::new("flac")) {
             print!("    comparing {} ...", path.to_str()
                                                .expect("unsupported filename"));

@@ -15,5 +15,6 @@ documentation = "https://docs.rs/claxon"
 travis-ci = { repository = "ruuda/claxon", branch = "v0.3.0" }
 
 [dev-dependencies]
-hound = "3.0.0"
-time = "0.1.35"
+hound   = "3.0"
+time    = "0.1.35"
+walkdir = "1.0"
