@@ -195,11 +195,19 @@ pub fn decode<R: ReadBytes>(input: &mut Bitstream<R>,
 
     let header = try!(read_subframe_header(input));
 
+    if header.wasted_bits_per_sample >= bps {
+        return fmt_err("subframe has no non-wased bits");
+    }
+
+    // If there are wasted bits, the subframe stores samples with a lower bps
+    // than the stream bps. We later shift all the samples left to correct this.
+    let sf_bps = bps - header.wasted_bits_per_sample;
+
     match header.sf_type {
-        SubframeType::Constant => try!(decode_constant(input, bps, buffer)),
-        SubframeType::Verbatim => try!(decode_verbatim(input, bps, buffer)),
-        SubframeType::Fixed(ord) => try!(decode_fixed(input, bps, ord as u32, buffer)),
-        SubframeType::Lpc(ord) => try!(decode_lpc(input, bps, ord as u32, buffer)),
+        SubframeType::Constant => try!(decode_constant(input, sf_bps, buffer)),
+        SubframeType::Verbatim => try!(decode_verbatim(input, sf_bps, buffer)),
+        SubframeType::Fixed(ord) => try!(decode_fixed(input, sf_bps, ord as u32, buffer)),
+        SubframeType::Lpc(ord) => try!(decode_lpc(input, sf_bps, ord as u32, buffer)),
     }
 
     // Finally, everything must be shifted by 'wasted bits per sample' to
