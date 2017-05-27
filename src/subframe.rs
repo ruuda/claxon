@@ -196,7 +196,7 @@ pub fn decode<R: ReadBytes>(input: &mut Bitstream<R>,
     let header = try!(read_subframe_header(input));
 
     if header.wasted_bits_per_sample >= bps {
-        return fmt_err("subframe has no non-wased bits");
+        return fmt_err("subframe has no non-wasted bits");
     }
 
     // If there are wasted bits, the subframe stores samples with a lower bps
