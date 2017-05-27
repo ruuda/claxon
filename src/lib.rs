@@ -103,10 +103,20 @@ pub struct FlacSamples<R: ReadBytes> {
 
 fn read_stream_header<R: ReadBytes>(input: &mut R) -> Result<()> {
     // A FLAC stream starts with a 32-bit header 'fLaC' (big endian).
-    const HEADER: u32 = 0x66_4c_61_43;
+    const FLAC_HEADER: u32 = 0x66_4c_61_43;
+
+    // Some files start with ID3 tag data. The reference decoder supports this
+    // for convenience. Claxon does not, but we can at least generate a helpful
+    // error message if a file starts like this.
+    const ID3_HEADER: u32 = 0x49_44_33_00;
+
     let header = try!(input.read_be_u32());
-    if header != HEADER {
-        fmt_err("invalid stream header")
+    if header != FLAC_HEADER {
+        if (header & 0xff_ff_ff_00) == ID3_HEADER {
+            fmt_err("stream starts with ID3 header rather than FLAC header")
+        } else {
+            fmt_err("invalid stream header")
+        }
     } else {
         Ok(())
     }
