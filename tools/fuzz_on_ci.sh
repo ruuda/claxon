@@ -13,7 +13,7 @@ cargo install cargo-fuzz --vers 0.4.2 || true
 # Pre-populate the corpus with the test samples, if they did not exist already.
 # Note that we do not cache the corpus directly on Travis, due to this bug:
 # https://bugs.llvm.org//show_bug.cgi?id=25991.
-mkdir -p fuzz/corpus
+mkdir -p fuzz/corpus/decode_full
 mkdir -p fuzz_corpus
 cp --no-clobber testsamples/*.flac fuzz_corpus
 cp --no-clobber testsamples/fuzz/*.flac fuzz_corpus
