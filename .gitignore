@@ -13,6 +13,7 @@
 # Except for small test samples that are included verbatim
 !/testsamples/pop.flac
 !/testsamples/short.flac
+!/testsamples/wasted_bits.flac
 
 # Editor files
 *.swp

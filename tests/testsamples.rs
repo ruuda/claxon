@@ -180,6 +180,11 @@ fn verify_streaminfo_short() {
 }
 
 #[test]
+fn verify_streaminfo_wasted_bits() {
+    compare_metaflac("testsamples/wasted_bits.flac");
+}
+
+#[test]
 fn verify_decoded_stream_p0() {
     compare_decoded_stream("testsamples/p0.flac");
 }
@@ -213,6 +218,12 @@ fn verify_decoded_stream_pop() {
 fn verify_decoded_stream_short() {
     // The short sample has only 4 samples, even less than pop.flac.
     compare_decoded_stream("testsamples/short.flac");
+}
+
+#[test]
+fn verify_decoded_stream_wasted_bits() {
+    // This sample has subframes where the number of wasted bits is not 0.
+    compare_decoded_stream("testsamples/wasted_bits.flac");
 }
 
 #[test]
