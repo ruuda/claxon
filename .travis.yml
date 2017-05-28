@@ -30,6 +30,11 @@ cache:
     # Travis' S3 buckets instead.
     - testsamples
 
+    # Cargo directories, the default when we could set "cache: cargo". See also
+    # https://github.com/travis-ci/travis-build/pull/710
+    - $HOME/.cargo
+    - $TRAVIS_BUILD_DIR/target
+
 before_script:
   - cd testsamples && ./populate.sh && cd ..
 
