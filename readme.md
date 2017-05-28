@@ -55,7 +55,8 @@ Claxon is licensed under the [Apache 2.0][apache2] license. It may be used in
 free software as well as closed-source applications, both for commercial and
 non-commercial use under the conditions given in the license. If you want to
 use Claxon in your GPLv2-licensed software, you can add an [exception][except]
-to your copyright notice.
+to your copyright notice. Please do not open an issue if you disagree with the
+choice of license.
 
 [ci-img]:    https://travis-ci.org/ruuda/claxon.svg?branch=master
 [ci]:        https://travis-ci.org/ruuda/claxon
