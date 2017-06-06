@@ -1,6 +1,39 @@
 Changelog
 =========
 
+0.3.1
+-----
+
+Not released yet.
+
+This is a bugfix release. Claxon has been fuzzed, and all issues discovered have
+been fixed. Claxon has also been verified against the reference decoder on more
+than 11000 real-world FLAC files.
+
+**Breaking changes**:
+
+- None.
+
+Release highlights:
+
+- Fuzzing targets for libFuzzer have been added. All crashes and hangs
+  discovered have been fixed.
+- `StreamInfo` now implements `fmt::Debug`.
+- A specialized format error message was added for ID3-prefixed streams.
+- Skipping over an “application” metadata block is now faster.
+- The test suite will no longer write intermediate wav files.
+- Ensures compatibility with Rust 1.13 through 1.17.
+
+Bugs fixed:
+
+- Files where the length of the last block is less than 16 samples are now
+  decoded correctly.
+- Subframes with wasted bits are now decoded correctly.
+- Decoding of pathological ill-formed files will now report an error,
+  rather than crashing.
+- A panic due to index out of bounds has been fixed.
+- Arithmetic overflow bugs have been fixed.
+
 0.3.0
 -----
 
