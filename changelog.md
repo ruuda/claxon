@@ -4,6 +4,8 @@ Changelog
 0.3.0
 -----
 
+Released 2017-02-07.
+
 This release focuses on performance. Internally quite a lot has happened, and a
 few changes were made to the API too, in order to support faster decoding, and
 to make the API more consistent.
@@ -32,6 +34,8 @@ Release highlights:
 0.2.1
 -----
 
+Released 2016-08-27.
+
 Release highlights:
 
 - Ensures compatibility with Rust 1.13. Older versions are not supported, but
@@ -40,6 +44,8 @@ Release highlights:
 
 0.2.0
 -----
+
+Released 2016-05-29.
 
 Release highlights:
 
@@ -65,6 +71,8 @@ to make the lower-level block decoding API pleasant to use.
 
 0.1.0
 -----
+
+Released 2015-06-06.
 
 This is the initial release. It is far from complete, but something has to be
 released at some point. Claxon was able to correctly decode 1.25 GiB of test
