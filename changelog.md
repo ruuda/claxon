@@ -4,7 +4,7 @@ Changelog
 0.3.1
 -----
 
-Not released yet.
+Released 2017-06-06.
 
 This is a bugfix release. Claxon has been fuzzed, and all issues discovered have
 been fixed. Claxon has also been verified against the reference decoder on more
