@@ -6,17 +6,17 @@
 // A copy of the License has been included in the root of the repository.
 
 // This file contains a minimal example of using Claxon with mp4parse and Hound
-// to decode a flac stream inside an MP4 container to a wav file.
+// to decode a flac stream inside an MP4 (.mp4 or .m4a) container to a wav file.
 
 extern crate claxon;
 extern crate hound;
 extern crate mp4parse;
 
 use std::env;
-use std::path::Path;
 use std::fs::File;
-use std::io;
 use std::io::Seek;
+use std::io;
+use std::path::Path;
 
 use claxon::metadata::read_metadata_block;
 use claxon::metadata::StreamInfo;
@@ -36,55 +36,56 @@ fn decode_file(fname: &Path) {
     // An MP4 file contains one or more tracks. A track can contain a single
     // FLAC stream. Iterate over those.
     for track in &context.tracks {
-        if track.codec_type == CodecType::FLAC {
-            let streaminfo = get_streaminfo(track).expect("missing streaminfo");
-
-            // Build a wav writer to write the decoded track to a wav file.
-            let spec = WavSpec {
-                channels: streaminfo.channels as u16,
-                sample_rate: streaminfo.sample_rate,
-                bits_per_sample: streaminfo.bits_per_sample as u16,
-                sample_format: hound::SampleFormat::Int,
-            };
-
-            let fname_wav = fname.with_extension("wav");
-            let opt_wav_writer = WavWriter::create(fname_wav, spec);
-            let mut wav_writer = opt_wav_writer.expect("failed to create wav file");
-
-            // The data in an MP4 file is split into "chunks", for which we can
-            // get the file offset where the chunk starts. Every chunk contains
-            // one or more "samples", which is one FLAC frame. These frames are
-            // all stored adjacently in the chunk, so we can read them with a
-            // fingle frame reader.
-
-            // The "stco" in mp4parse's Track stands for "Chunk Offset Box",
-            // "stsc" stands for "Sample to Chunk Box", which actually tells per
-            // chunk how many samples it contains, not per sample in which chunk
-            // it is.
-            let chunk_offsets = &track.stco.as_ref().expect("missing chunk offset box").offsets;
-            let chunk_samples = &track.stsc.as_ref().expect("missing sample to chunk box").samples;
-
-            let mut ck_off_iter = chunk_offsets.iter().enumerate();
-
-            for cs in chunk_samples {
-                // The "sample" contains the index of the chunk that contains
-                // the sample and subsequent samples. Locate the file offset of
-                // that chunk in the "Chunk Offset Box", then seek to there. The
-                // first_chunk field is a 1-based chunk index, not 0-based.
-                let i_off = ck_off_iter.find(|&(i, _off)| 1 + i as u32 == cs.first_chunk);
-                let seek_to = i_off.expect("failed to locate chunk offset for mp4 sample").1;
-                bufread.seek(io::SeekFrom::Start(*seek_to)).expect("failed to seek to chunk");
-                
-                // Decode all the "samples" (FLAC frames) in the chunk.
-                bufread = decode_frames(bufread, &streaminfo, cs.samples_per_chunk, &mut wav_writer);
-            }
-
-            // Stop iterating over tracks; if there are more FLAC tracks, we
-            // would overwrite the previously written output. (This could be
-            // avoided by picking a unique file name for every track, or by
-            // asking the user which track to decode.)
-            break
+        if track.codec_type != CodecType::FLAC {
+            continue
         }
+
+        let streaminfo = get_streaminfo(track).expect("missing streaminfo");
+
+        // Build a wav writer to write the decoded track to a wav file.
+        let spec = WavSpec {
+            channels: streaminfo.channels as u16,
+            sample_rate: streaminfo.sample_rate,
+            bits_per_sample: streaminfo.bits_per_sample as u16,
+            sample_format: hound::SampleFormat::Int,
+        };
+
+        let fname_wav = fname.with_extension("wav");
+        let opt_wav_writer = WavWriter::create(fname_wav, spec);
+        let mut wav_writer = opt_wav_writer.expect("failed to create wav file");
+
+        // The data in an MP4 file is split into "chunks", for which we can get
+        // the file offset where the chunk starts. Every chunk contains one or
+        // more "samples", which is one FLAC frame. These frames are all stored
+        // adjacently in the chunk, so we can read them with a fingle frame
+        // reader.
+
+        // The "stco" in mp4parse's Track stands for "Chunk Offset Box", "stsc"
+        // stands for "Sample to Chunk Box", which actually tells per chunk how
+        // many samples it contains, not per sample in which chunk it is.
+        let chunk_offsets = &track.stco.as_ref().expect("missing chunk offset box").offsets;
+        let chunk_samples = &track.stsc.as_ref().expect("missing sample to chunk box").samples;
+
+        let mut ck_off_iter = chunk_offsets.iter().enumerate();
+
+        for cs in chunk_samples {
+            // The "sample" contains the index of the chunk that contains the
+            // sample and subsequent samples. Locate the file offset of that
+            // chunk in the "Chunk Offset Box", then seek to there. The
+            // first_chunk field is a 1-based chunk index, not 0-based.
+            let i_off = ck_off_iter.find(|&(i, _off)| 1 + i as u32 == cs.first_chunk);
+            let seek_to = i_off.expect("failed to locate chunk offset for mp4 sample").1;
+            bufread.seek(io::SeekFrom::Start(*seek_to)).expect("failed to seek to chunk");
+
+            // Decode all the "samples" (FLAC frames) in the chunk.
+            bufread = decode_frames(bufread, &streaminfo, cs.samples_per_chunk, &mut wav_writer);
+        }
+
+        // Stop iterating over tracks; if there are more FLAC tracks, we would
+        // overwrite the previously written output. (This could be avoided by
+        // picking a unique file name for every track, or by asking the user
+        // which track to decode.)
+        break
     }
 }
 
