@@ -68,11 +68,11 @@ use input::{BufferedReader, ReadBytes};
 use metadata::{MetadataBlock, MetadataBlockReader, StreamInfo};
 
 mod crc;
-mod input;
 mod error;
 pub mod frame;
-pub mod subframe;
+pub mod input;
 pub mod metadata;
+pub mod subframe;
 
 pub use error::{Error, Result};
 pub use frame::Block;

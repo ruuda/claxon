@@ -108,10 +108,20 @@ fn read_metadata_block_header<R: ReadBytes>(input: &mut R) -> Result<MetadataBlo
     Ok(header)
 }
 
-fn read_metadata_block<R: ReadBytes>(input: &mut R,
-                                     block_type: u8,
-                                     length: u32)
-                                     -> Result<MetadataBlock> {
+/// Read a single metadata block of the given type and length from the input.
+///
+/// When reading a regular flac stream, there is no need to use this function
+/// directly; constructing a `FlacReader` will read the header and its metadata
+/// blocks.
+///
+/// When a flac stream is embedded in a container format, this function can be
+/// used to decode a single metadata block. For instance, the MP4 format sports
+/// a “FLAC Specific Box” which contains the block type and the raw data. This
+/// function can be used to decode that raw data.
+pub fn read_metadata_block<R: ReadBytes>(input: &mut R,
+                                         block_type: u8,
+                                         length: u32)
+                                         -> Result<MetadataBlock> {
     match block_type {
         0 => {
             // The streaminfo block has a fixed size of 34 bytes.
