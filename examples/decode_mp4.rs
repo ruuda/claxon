@@ -66,19 +66,30 @@ fn decode_file(fname: &Path) {
         let chunk_offsets = &track.stco.as_ref().expect("missing chunk offset box").offsets;
         let chunk_samples = &track.stsc.as_ref().expect("missing sample to chunk box").samples;
 
-        let mut ck_off_iter = chunk_offsets.iter().enumerate();
+        let mut samples_iter = chunk_samples.iter();
+        let mut next_samples = samples_iter.next();
+        let mut samples_per_chunk = 0;
 
-        for cs in chunk_samples {
-            // The "sample" contains the index of the chunk that contains the
-            // sample and subsequent samples. Locate the file offset of that
-            // chunk in the "Chunk Offset Box", then seek to there. The
-            // first_chunk field is a 1-based chunk index, not 0-based.
-            let i_off = ck_off_iter.find(|&(i, _off)| 1 + i as u32 == cs.first_chunk);
-            let seek_to = i_off.expect("failed to locate chunk offset for mp4 sample").1;
-            bufread.seek(io::SeekFrom::Start(*seek_to)).expect("failed to seek to chunk");
+        // Iterate over all chunks in this track. We need all chunks, and every
+        // chunk is present in the chunk offset box.
+        for (i, offset) in chunk_offsets.iter().enumerate() {
+            bufread.seek(io::SeekFrom::Start(*offset)).expect("failed to seek to chunk");
 
-            // Decode all the "samples" (FLAC frames) in the chunk.
-            bufread = decode_frames(bufread, &streaminfo, cs.samples_per_chunk, &mut wav_writer);
+            // For some chunks, the "Sample to Chunk Box" stores details about
+            // how many "samples" (FLAC frames) there are per chunk. When there
+            // is no such data for a chunk, the samples per chunk is the same as
+            // for the previous chunk.
+            next_samples = next_samples.and_then(|ns| {
+                // The first_chunk field is a 1-based index, not 0-based.
+                if ns.first_chunk == 1 + i as u32 {
+                    samples_per_chunk = ns.samples_per_chunk;
+                    samples_iter.next()
+                } else {
+                    Some(ns)
+                }
+            });
+
+            bufread = decode_frames(bufread, &streaminfo, samples_per_chunk, &mut wav_writer);
         }
 
         // Stop iterating over tracks; if there are more FLAC tracks, we would
