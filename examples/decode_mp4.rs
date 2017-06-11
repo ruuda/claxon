@@ -5,9 +5,8 @@
 // you may not use this file except in compliance with the License.
 // A copy of the License has been included in the root of the repository.
 
-// This file contains a minimal example of using Claxon and Hound to decode a
-// flac file. This can be done more efficiently, but it is also more verbose.
-// See the `decode` example for that.
+// This file contains a minimal example of using Claxon with mp4parse and Hound
+// to decode a flac stream inside an MP4 container to a wav file.
 
 extern crate claxon;
 extern crate hound;
