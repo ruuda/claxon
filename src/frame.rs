@@ -736,6 +736,11 @@ impl<R: ReadBytes> FrameReader<R> {
 
         Ok(Some(block))
     }
+
+    /// Destroy the frame reader, returning the wrapped reader.
+    pub fn into_inner(self) -> R {
+        self.input
+    }
 }
 
 // TODO: implement Iterator<Item = FrameResult> for FrameReader, with an
