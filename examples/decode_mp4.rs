@@ -21,6 +21,7 @@ use std::io::Seek;
 
 use claxon::metadata::read_metadata_block;
 use claxon::metadata::StreamInfo;
+use hound::{WavSpec, WavWriter};
 use mp4parse::CodecType;
 
 fn decode_file(fname: &Path) {
@@ -40,7 +41,7 @@ fn decode_file(fname: &Path) {
             let streaminfo = get_streaminfo(track).expect("missing streaminfo");
 
             // Build a wav writer to write the decoded track to a wav file.
-            let spec = hound::WavSpec {
+            let spec = WavSpec {
                 channels: streaminfo.channels as u16,
                 sample_rate: streaminfo.sample_rate,
                 bits_per_sample: streaminfo.bits_per_sample as u16,
@@ -48,7 +49,7 @@ fn decode_file(fname: &Path) {
             };
 
             let fname_wav = fname.with_extension("wav");
-            let opt_wav_writer = hound::WavWriter::create(fname_wav, spec);
+            let opt_wav_writer = WavWriter::create(fname_wav, spec);
             let mut wav_writer = opt_wav_writer.expect("failed to create wav file");
 
             // The data in an MP4 file is split into "chunks", for which we can
@@ -75,36 +76,8 @@ fn decode_file(fname: &Path) {
                 let seek_to = i_off.expect("failed to locate chunk offset for mp4 sample").1;
                 bufread.seek(io::SeekFrom::Start(*seek_to)).expect("failed to seek to chunk");
                 
-                // The simplest way to read frames now, is unfortunately to
-                // double buffer. This might be avoided by not wrapping the
-                // original file in an `io::BufReader`, but in a Claxon
-                // `BufferedReader`. It would have to implement `io::Read` then.
-                let buffered_reader = claxon::input::BufferedReader::new(bufread);
-                let mut frame_reader = claxon::frame::FrameReader::new(buffered_reader);
-                let mut buffer = Vec::with_capacity(streaminfo.max_block_size as usize);
-
-                for _ in 0..cs.samples_per_chunk {
-                    // TODO There should be a read_next method too that does not
-                    // tolerate EOF.
-                    let result = frame_reader.read_next_or_eof(buffer);
-                    let block = result.expect("failed to decode frame").expect("unexpected EOF");
-
-                    // TODO: Here we assume that we are decoding a stereo
-                    // stream, which is wrong, but very convenient, as there is
-                    // no interleaved sample iterator for `Block`. One should be
-                    // added.
-                    for (sl, sr) in block.stereo_samples() {
-                        wav_writer.write_sample(sl).expect("failed to write wav file");
-                        wav_writer.write_sample(sr).expect("failed to write wav file");
-                    }
-
-                    buffer = block.into_buffer();
-                }
-
-                // Strip off the frame reader and buffered reader to get back
-                // the original reader, so we can seek to the right point for
-                // the next chunk.
-                bufread = frame_reader.into_inner().into_inner();
+                // Decode all the "samples" (FLAC frames) in the chunk.
+                bufread = decode_frames(bufread, &streaminfo, cs.samples_per_chunk, &mut wav_writer);
             }
 
             // Stop iterating over tracks; if there are more FLAC tracks, we
@@ -142,6 +115,43 @@ fn get_streaminfo(track: &mp4parse::Track) -> Option<StreamInfo> {
     }
 
     None
+}
+
+/// Decode a number of FLAC frames. Takes an input `io::Read` and returns it.
+fn decode_frames<R, W>(input: R,
+                       streaminfo: &StreamInfo,
+                       num_frames: u32,
+                       wav_writer: &mut WavWriter<W>)
+                       -> R
+where R: io::Read, W: io::Write + io::Seek {
+    // The simplest way to read frames now, is unfortunately to double buffer.
+    // (The input `R` is a buffered reader.) This might be avoided by not
+    // wrapping the original file in an `io::BufReader`, but in a Claxon
+    // `BufferedReader`. It would have to implement `io::Read` then.
+    let buffered_reader = claxon::input::BufferedReader::new(input);
+    let mut frame_reader = claxon::frame::FrameReader::new(buffered_reader);
+    let mut buffer = Vec::with_capacity(streaminfo.max_block_size as usize);
+
+    for _ in 0..num_frames {
+        // TODO There should be a read_next method too that does not tolerate
+        // EOF.
+        let result = frame_reader.read_next_or_eof(buffer);
+        let block = result.expect("failed to decode frame").expect("unexpected EOF");
+
+        // TODO: Here we assume that we are decoding a stereo stream, which
+        // is wrong, but very convenient, as there is no interleaved sample
+        // iterator for `Block`. One should be added.
+        for (sl, sr) in block.stereo_samples() {
+            wav_writer.write_sample(sl).expect("failed to write wav file");
+            wav_writer.write_sample(sr).expect("failed to write wav file");
+        }
+
+        buffer = block.into_buffer();
+    }
+
+    // Strip off the frame reader and buffered reader to get back the original
+    // reader.
+    frame_reader.into_inner().into_inner()
 }
 
 fn main() {
