@@ -64,12 +64,16 @@ fn decode_file(fname: &Path) {
             let chunk_offsets = &track.stco.as_ref().expect("missing chunk offset box").offsets;
             let chunk_samples = &track.stsc.as_ref().expect("missing sample to chunk box").samples;
 
-            for (ck_index, (co, ref cs)) in chunk_offsets.iter().zip(chunk_samples).enumerate() {
-                // The first_chunk value appears to be redundant and equal to
-                // the current chunk index, but 1-based rather than 0-based.
-                assert_eq!(ck_index as u32 + 1, cs.first_chunk);
+            let mut ck_off_iter = chunk_offsets.iter().enumerate();
 
-                bufread.seek(io::SeekFrom::Start(*co)).expect("failed to seek to chunk");
+            for cs in chunk_samples {
+                // The "sample" contains the index of the chunk that contains
+                // the sample and subsequent samples. Locate the file offset of
+                // that chunk in the "Chunk Offset Box", then seek to there. The
+                // first_chunk field is a 1-based chunk index, not 0-based.
+                let i_off = ck_off_iter.find(|&(i, _off)| 1 + i as u32 == cs.first_chunk);
+                let seek_to = i_off.expect("failed to locate chunk offset for mp4 sample").1;
+                bufread.seek(io::SeekFrom::Start(*seek_to)).expect("failed to seek to chunk");
                 
                 // The simplest way to read frames now, is unfortunately to
                 // double buffer. This might be avoided by not wrapping the
