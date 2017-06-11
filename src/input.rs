@@ -5,6 +5,13 @@
 // you may not use this file except in compliance with the License.
 // A copy of the License has been included in the root of the repository.
 
+//! Exposes traits that help reading data at the bit level with low overhead.
+//!
+//! The traits in this module deal with reading bytes (with a given endianness)
+//! from a buffered reader, in such a way that still allows efficient
+//! checksumming of the data read. There is also a bitstream which is used
+//! internally to read the bitstream.
+
 use std::cmp;
 use std::io;
 
@@ -205,9 +212,54 @@ impl<'r, R: ReadBytes> ReadBytes for &'r mut R {
     }
 }
 
+impl<T: AsRef<[u8]>> ReadBytes for io::Cursor<T> {
+
+    fn read_u8(&mut self) -> io::Result<u8> {
+        let pos = self.position();
+        if pos < self.get_ref().as_ref().len() as u64 {
+            self.set_position(pos + 1);
+            Ok(self.get_ref().as_ref()[pos as usize])
+        } else {
+            Err(io::Error::new(io::ErrorKind::UnexpectedEof, "unexpected eof"))
+        }
+    }
+
+    fn read_u8_or_eof(&mut self) -> io::Result<Option<u8>> {
+        let pos = self.position();
+        if pos < self.get_ref().as_ref().len() as u64 {
+            self.set_position(pos + 1);
+            Ok(Some(self.get_ref().as_ref()[pos as usize]))
+        } else {
+            Ok(None)
+        }
+    }
+
+    fn read_into(&mut self, buffer: &mut [u8]) -> io::Result<()> {
+        let pos = self.position();
+        if pos + buffer.len() as u64 <= self.get_ref().as_ref().len() as u64 {
+            let start = pos as usize;
+            let end = pos as usize + buffer.len();
+            buffer.copy_from_slice(&self.get_ref().as_ref()[start..end]);
+            self.set_position(pos + buffer.len() as u64);
+            Ok(())
+        } else {
+            Err(io::Error::new(io::ErrorKind::UnexpectedEof, "unexpected eof"))
+        }
+    }
+
+    fn skip(&mut self, amount: u32) -> io::Result<()> {
+        let pos = self.position();
+        if pos + amount as u64 <= self.get_ref().as_ref().len() as u64 {
+            self.set_position(pos + amount as u64);
+            Ok(())
+        } else {
+            Err(io::Error::new(io::ErrorKind::UnexpectedEof, "unexpected eof"))
+        }
+    }
+}
 
 #[test]
-fn verify_read_into() {
+fn verify_read_into_buffered_reader() {
     let mut reader = BufferedReader::new(io::Cursor::new(vec![2u8, 3, 5, 7, 11, 13, 17, 19, 23]));
     let mut buf1 = [0u8; 3];
     let mut buf2 = [0u8; 5];
@@ -220,7 +272,20 @@ fn verify_read_into() {
 }
 
 #[test]
-fn verify_read_u8() {
+fn verify_read_into_cursor() {
+    let mut cursor = io::Cursor::new(vec![2u8, 3, 5, 7, 11, 13, 17, 19, 23]);
+    let mut buf1 = [0u8; 3];
+    let mut buf2 = [0u8; 5];
+    let mut buf3 = [0u8; 2];
+    cursor.read_into(&mut buf1).ok().unwrap();
+    cursor.read_into(&mut buf2).ok().unwrap();
+    assert!(cursor.read_into(&mut buf3).is_err());
+    assert_eq!(&buf1[..], &[2u8, 3, 5]);
+    assert_eq!(&buf2[..], &[7u8, 11, 13, 17, 19]);
+}
+
+#[test]
+fn verify_read_u8_buffered_reader() {
     let mut reader = BufferedReader::new(io::Cursor::new(vec![0u8, 2, 129, 89, 122]));
     assert_eq!(reader.read_u8().unwrap(), 0);
     assert_eq!(reader.read_u8().unwrap(), 2);
@@ -232,7 +297,19 @@ fn verify_read_u8() {
 }
 
 #[test]
-fn verify_read_be_u16() {
+fn verify_read_u8_cursor() {
+    let mut reader = io::Cursor::new(vec![0u8, 2, 129, 89, 122]);
+    assert_eq!(reader.read_u8().unwrap(), 0);
+    assert_eq!(reader.read_u8().unwrap(), 2);
+    assert_eq!(reader.read_u8().unwrap(), 129);
+    assert_eq!(reader.read_u8().unwrap(), 89);
+    assert_eq!(reader.read_u8_or_eof().unwrap(), Some(122));
+    assert_eq!(reader.read_u8_or_eof().unwrap(), None);
+    assert!(reader.read_u8().is_err());
+}
+
+#[test]
+fn verify_read_be_u16_buffered_reader() {
     let mut reader = BufferedReader::new(io::Cursor::new(vec![0u8, 2, 129, 89, 122]));
     assert_eq!(reader.read_be_u16().ok(), Some(2));
     assert_eq!(reader.read_be_u16().ok(), Some(33113));
@@ -240,7 +317,15 @@ fn verify_read_be_u16() {
 }
 
 #[test]
-fn verify_read_be_u24() {
+fn verify_read_be_u16_cursor() {
+    let mut cursor = io::Cursor::new(vec![0u8, 2, 129, 89, 122]);
+    assert_eq!(cursor.read_be_u16().ok(), Some(2));
+    assert_eq!(cursor.read_be_u16().ok(), Some(33113));
+    assert!(cursor.read_be_u16().is_err());
+}
+
+#[test]
+fn verify_read_be_u24_buffered_reader() {
     let mut reader = BufferedReader::new(io::Cursor::new(vec![0u8, 0, 2, 0x8f, 0xff, 0xf3, 122]));
     assert_eq!(reader.read_be_u24().ok(), Some(2));
     assert_eq!(reader.read_be_u24().ok(), Some(9_437_171));
@@ -248,11 +333,27 @@ fn verify_read_be_u24() {
 }
 
 #[test]
-fn verify_read_be_u32() {
+fn verify_read_be_u24_cursor() {
+    let mut cursor = io::Cursor::new(vec![0u8, 0, 2, 0x8f, 0xff, 0xf3, 122]);
+    assert_eq!(cursor.read_be_u24().ok(), Some(2));
+    assert_eq!(cursor.read_be_u24().ok(), Some(9_437_171));
+    assert!(cursor.read_be_u24().is_err());
+}
+
+#[test]
+fn verify_read_be_u32_buffered_reader() {
     let mut reader = BufferedReader::new(io::Cursor::new(vec![0u8, 0, 0, 2, 0x80, 0x01, 0xff, 0xe9, 0]));
     assert_eq!(reader.read_be_u32().ok(), Some(2));
     assert_eq!(reader.read_be_u32().ok(), Some(2_147_614_697));
     assert!(reader.read_be_u32().is_err());
+}
+
+#[test]
+fn verify_read_be_u32_cursor() {
+    let mut cursor = io::Cursor::new(vec![0u8, 0, 0, 2, 0x80, 0x01, 0xff, 0xe9, 0]);
+    assert_eq!(cursor.read_be_u32().ok(), Some(2));
+    assert_eq!(cursor.read_be_u32().ok(), Some(2_147_614_697));
+    assert!(cursor.read_be_u32().is_err());
 }
 
 /// Left shift that does not panic when shifting by the integer width.
