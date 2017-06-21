@@ -6,8 +6,9 @@
 // A copy of the License has been included in the root of the repository.
 
 // This file contains a minimal example of using Claxon with Ogg and Hound
-// to decode a flac stream inside an ogg container to a wav file. See also
-// https://xiph.org/flac/ogg_mapping.html.
+// to decode a flac stream inside an ogg container to a wav file. It assumes
+// that the ogg file actually contains flac data, this is not verified. See
+// also https://xiph.org/flac/ogg_mapping.html for the format.
 
 extern crate claxon;
 extern crate hound;
@@ -51,9 +52,17 @@ fn decode_file(fname: &Path) {
 
     let fname_wav = fname.with_extension("wav");
     let opt_wav_writer = WavWriter::create(fname_wav, spec);
-    let mut _wav_writer = opt_wav_writer.expect("failed to create wav file");
+    let mut wav_writer = opt_wav_writer.expect("failed to create wav file");
 
-    // TODO: Actually read audio packets.
+    // All the packets that follow contain one flac frame each. Decode those one
+    // by one, recycling the buffer.
+    let mut buffer = Vec::with_capacity(streaminfo.max_block_size as usize);
+    while let Some(packet) = preader.read_packet().expect("failed to read ogg") {
+        // Empty packets do occur, skip them. So far I have only observed the
+        // final packet to be empty.
+        if packet.data.len() == 0 { continue }
+        buffer = decode_frame(&packet, buffer, &mut wav_writer);
+    }
 }
 
 /// Decode the streaminfo block, and the number of metadata packets that still follow.
@@ -81,6 +90,37 @@ fn read_first_packet(packet: &ogg::Packet) -> (StreamInfo, u16) {
       Ok(..) => panic!("expected streaminfo, found other metadata block"),
       Err(err) => panic!("failed to read streaminfo: {:?}", err),
     }
+}
+
+/// Decode a single frame stored in an ogg packet.
+///
+/// Takes a buffer to decode into, and returns it again so it can be recycled.
+fn decode_frame<W>(packet: &ogg::Packet,
+                   buffer: Vec<i32>,
+                   wav_writer: &mut WavWriter<W>)
+                   -> Vec<i32>
+where W: io::Seek + io::Write {
+    // The Claxon `FrameReader` takes something that implements `ReadBytes`, it
+    // needs a buffer to decode efficiently. The packet stores the bytes in a
+    // vec, so wrapping it in an `io::Cursor` works; it implements `ReadBytes`.
+    let cursor = io::Cursor::new(&packet.data);
+
+    let mut frame_reader = claxon::frame::FrameReader::new(cursor);
+
+    // TODO There should be a read_next method too that does not tolerate EOF.
+    let result = frame_reader.read_next_or_eof(buffer);
+    let block = result.expect("failed to decode frame").expect("unexpected EOF");
+
+    // TODO: Here we assume that we are decoding a stereo stream, which is
+    // wrong, but very convenient, as there is no interleaved sample iterator
+    // for `Block`. One should be added.
+    for (sl, sr) in block.stereo_samples() {
+        wav_writer.write_sample(sl).expect("failed to write wav file");
+        wav_writer.write_sample(sr).expect("failed to write wav file");
+    }
+
+    // Give the buffer back so it can be recycled.
+    block.into_buffer()
 }
 
 fn main() {
