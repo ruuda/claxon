@@ -141,7 +141,8 @@ where R: io::Read, W: io::Write + io::Seek {
     // `BufferedReader`. It would have to implement `io::Read` then.
     let buffered_reader = claxon::input::BufferedReader::new(input);
     let mut frame_reader = claxon::frame::FrameReader::new(buffered_reader);
-    let mut buffer = Vec::with_capacity(streaminfo.max_block_size as usize);
+    let mut buffer = Vec::with_capacity(streaminfo.max_block_size as usize *
+                                        streaminfo.channels as usize);
 
     for _ in 0..num_frames {
         // TODO There should be a read_next method too that does not tolerate

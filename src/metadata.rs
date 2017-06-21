@@ -26,11 +26,13 @@ pub struct StreamInfo {
     ///
     /// To get the minimum block duration in seconds, divide this by the sample
     /// rate.
+    // TODO: Rename to `min_block_duration` for clarity?
     pub min_block_size: u16,
     /// The maximum block size (in inter-channel samples) used in the stream.
     ///
     /// To get the maximum block duration in seconds, divide this by the sample
     /// rate.
+    // TODO: Rename to `max_block_duration` for clarity?
     pub max_block_size: u16,
     /// The minimum frame size (in bytes) used in the stream.
     pub min_frame_size: Option<u32>,
@@ -43,6 +45,7 @@ pub struct StreamInfo {
     /// The number of bits per sample.
     pub bits_per_sample: u32,
     /// The total number of inter-channel samples in the stream.
+    // TODO: rename to `duration` for clarity?
     pub samples: Option<u64>,
     /// MD5 signature of the unencoded audio data.
     pub md5sum: [u8; 16],

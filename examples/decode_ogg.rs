@@ -56,7 +56,8 @@ fn decode_file(fname: &Path) {
 
     // All the packets that follow contain one flac frame each. Decode those one
     // by one, recycling the buffer.
-    let mut buffer = Vec::with_capacity(streaminfo.max_block_size as usize);
+    let mut buffer = Vec::with_capacity(streaminfo.max_block_size as usize *
+                                        streaminfo.channels as usize);
     while let Some(packet) = preader.read_packet().expect("failed to read ogg") {
         // Empty packets do occur, skip them. So far I have only observed the
         // final packet to be empty.
