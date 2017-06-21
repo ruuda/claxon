@@ -108,6 +108,22 @@ fn read_metadata_block_header<R: ReadBytes>(input: &mut R) -> Result<MetadataBlo
     Ok(header)
 }
 
+/// Read a single metadata block header and body from the input.
+///
+/// When reading a regular flac stream, there is no need to use this function
+/// directly; constructing a `FlacReader` will read the header and its metadata
+/// blocks.
+///
+/// When a flac stream is embedded in a container format, this function can be
+/// used to decode a single metadata block. For instance, the Ogg format embeds
+/// metadata blocks including their header verbatim in packets. This function
+/// can be used to decode that raw data.
+pub fn read_metadata_block_with_header<R: ReadBytes>(input: &mut R)
+                                                     -> Result<MetadataBlock> {
+  let header = try!(read_metadata_block_header(input));
+  read_metadata_block(input, header.block_type, header.length)
+}
+
 /// Read a single metadata block of the given type and length from the input.
 ///
 /// When reading a regular flac stream, there is no need to use this function
