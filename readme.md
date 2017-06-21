@@ -39,7 +39,6 @@ See [decode.rs](examples/decode.rs) for an example.
 
 Performance
 -----------
-
 These are the times to decode 5 real-world FLAC files to wav, average and
 standard deviation of 11 runs, normalized to version 1.3.2 of the [reference
 implementation][ref-flac]. Measurements were done on a Skylake i7.
@@ -48,6 +47,11 @@ implementation][ref-flac]. Measurements were done on a Skylake i7.
 | ------- | ---------------- |
 | Claxon  | 1.13 ± 0.03      |
 | libflac | 1.00 ± 0.03      |
+
+Contributing
+------------
+Contributions in the form of bug reports, feature requests, or pull requests are
+welcome. See [contributing.md](contributing.md).
 
 License
 -------
