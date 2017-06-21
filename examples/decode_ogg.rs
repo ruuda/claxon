@@ -19,8 +19,7 @@ use std::io;
 use std::path::Path;
 
 use claxon::input::ReadBytes;
-use claxon::metadata::MetadataBlock;
-use claxon::metadata::read_metadata_block_with_header;
+use claxon::metadata::{StreamInfo, read_metadata_block_with_header};
 use hound::{WavSpec, WavWriter};
 
 fn decode_file(fname: &Path) {
@@ -30,33 +29,9 @@ fn decode_file(fname: &Path) {
     let mut preader = ogg::PacketReader::new(bufread);
 
     // According to the FLAC to Ogg mapping, the first packet contains the
-    // streaminfo.
+    // streaminfo. It also contains a count of how many metadata packets follow.
     let first_packet = preader.read_packet_expected().expect("failed to read ogg");
-
-    let (header_packets_left, streaminfo) = {
-        let mut cursor = io::Cursor::new(&first_packet.data);
-
-        // The first 7 bytes contain magic values and version info. We don't
-        // verify this. A real application should. Because we are using an
-        // `io::Cursor`, the IO operation will not fail, so the unwrap is safe.
-        cursor.skip(7).unwrap();
-
-        // Next is a 16-bit big-endian number that specifies the number of
-        // header packets that follow. Claxon exposes a `ReadBytes` trait that
-        // simplifies reading this.
-        let header_packets_left = cursor.read_be_u16().unwrap();
-
-        // The 'fLaC' magic signature follows. We don't verify it.
-        cursor.skip(4).unwrap();
-
-        // Next is the streaminfo metadata block, which we return to the outer
-        // scope.
-        match read_metadata_block_with_header(&mut cursor) {
-          Ok(MetadataBlock::StreamInfo(si)) => (header_packets_left, si),
-          Ok(..) => panic!("expected streaminfo, found other metadata block"),
-          Err(err) => panic!("failed to read streaminfo: {:?}", err),
-        }
-    };
+    let (streaminfo, header_packets_left) = read_first_packet(&first_packet);
 
     // Skip over the packets that contain metadata. We do decode the metadata
     // just for demonstration purposes, but then we throw it away.
@@ -79,6 +54,33 @@ fn decode_file(fname: &Path) {
     let mut _wav_writer = opt_wav_writer.expect("failed to create wav file");
 
     // TODO: Actually read audio packets.
+}
+
+/// Decode the streaminfo block, and the number of metadata packets that still follow.
+fn read_first_packet(packet: &ogg::Packet) -> (StreamInfo, u16) {
+    use claxon::metadata::MetadataBlock;
+
+    let mut cursor = io::Cursor::new(&packet.data);
+
+    // The first 7 bytes contain magic values and version info. We don't
+    // verify this. A real application should. Because we are using an
+    // `io::Cursor`, the IO operation will not fail, so the unwrap is safe.
+    cursor.skip(7).unwrap();
+
+    // Next is a 16-bit big-endian number that specifies the number of header
+    // packets that follow. Claxon exposes a `ReadBytes` trait that simplifies
+    // reading this.
+    let header_packets_left = cursor.read_be_u16().unwrap();
+
+    // The 'fLaC' magic signature follows. We don't verify it.
+    cursor.skip(4).unwrap();
+
+    // Next is the streaminfo metadata block, which we return.
+    match read_metadata_block_with_header(&mut cursor) {
+      Ok(MetadataBlock::StreamInfo(si)) => (si, header_packets_left),
+      Ok(..) => panic!("expected streaminfo, found other metadata block"),
+      Err(err) => panic!("failed to read streaminfo: {:?}", err),
+    }
 }
 
 fn main() {
