@@ -17,6 +17,9 @@ travis-ci = { repository = "ruuda/claxon", branch = "v0.3.1" }
 [dev-dependencies]
 hound    = "3.0"
 mp4parse = "0.8"
-ogg      = "0.5"
 time     = "0.1"
 walkdir  = "1.0"
+
+# Use a fork of the ogg crate for now, because v0.5.0 is not compatible with
+# Rust versions below 1.17, and Claxon wants to be compatible with 1.13.
+ogg = { git = "https://github.com/ruuda/ogg", rev = "72105a4125f98f638a9735ad" }
