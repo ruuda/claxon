@@ -421,7 +421,11 @@ impl Block {
         }
     }
 
-    /// Returns the sample number of the first sample in the block.
+    /// Returns the inter-channel sample number of the first sample in the block.
+    ///
+    /// The time is independent of the number of channels. To get the start time
+    /// of the block in seconds, divide this number by the sample rate in the
+    /// streaminfo.
     pub fn time(&self) -> u64 {
         self.first_sample_number
     }
