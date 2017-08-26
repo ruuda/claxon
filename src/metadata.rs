@@ -61,6 +61,24 @@ pub struct SeekTable {
     seekpoints: Vec<SeekPoint>,
 }
 
+/// Vorbis comments, also known as FLAC tags (e.g. artist, title, etc.).
+pub struct VorbisComment {
+    /// TODO: What does the vendor actually indicate?
+    vendor: String,
+
+    /// Name-value pairs of Vorbis comments, such as `ARTIST=Queen`.
+    ///
+    /// The name is supposed to be interpreted case-insensitively, and is
+    /// guaranteed to consist of ascii characters. Claxon does not normalize
+    /// the casing of the name.
+    ///
+    /// Names need not be unique. For instance, multiple `ARTIST` comments might
+    /// be present on a track by multiple artist.
+    ///
+    /// See https://www.xiph.org/vorbis/doc/v-comment.html for more details.
+    comments: Vec<(String, String)>,
+}
+
 /// A metadata about the flac stream.
 pub enum MetadataBlock {
     /// A stream info block.
@@ -80,7 +98,7 @@ pub enum MetadataBlock {
     /// A seek table block.
     SeekTable(SeekTable),
     /// A Vorbis comment block, also known as FLAC tags.
-    VorbisComment, // TODO
+    VorbisComment(VorbisComment),
     /// A CUE sheet block.
     CueSheet, // TODO
     /// A picture block.
