@@ -106,6 +106,15 @@ pub trait ReadBytes {
         let b3 = try!(self.read_u8()) as u32;
         Ok(b0 << 24 | b1 << 16 | b2 << 8 | b3)
     }
+
+    /// Reads four bytes and interprets them as a little-endian 32-bit unsigned integer.
+    fn read_le_u32(&mut self) -> io::Result<u32> {
+        let b0 = try!(self.read_u8()) as u32;
+        let b1 = try!(self.read_u8()) as u32;
+        let b2 = try!(self.read_u8()) as u32;
+        let b3 = try!(self.read_u8()) as u32;
+        Ok(b3 << 24 | b2 << 16 | b1 << 8 | b0)
+    }
 }
 
 impl<R: io::Read> ReadBytes for BufferedReader<R>

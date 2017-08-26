@@ -183,9 +183,8 @@ pub fn read_metadata_block<R: ReadBytes>(input: &mut R,
             Ok(MetadataBlock::Padding { length: length })
         }
         4 => {
-            // TODO: implement Vorbis comment reading. For now, pretend it is padding.
-            try!(input.skip(length));
-            Ok(MetadataBlock::Padding { length: length })
+            let vorbis_comment = try!(read_vorbis_comment_block(input, length));
+            Ok(MetadataBlock::VorbisComment(vorbis_comment))
         }
         5 => {
             // TODO: implement CUE sheet reading. For now, pretend it is padding.
@@ -292,6 +291,28 @@ fn read_streaminfo_block<R: ReadBytes>(input: &mut R) -> Result<StreamInfo> {
         md5sum: md5sum,
     };
     Ok(stream_info)
+}
+
+fn read_vorbis_comment_block<R: ReadBytes>(input: &mut R, length: u32) -> Result<VorbisComment> {
+    let vendor_len = try!(input.read_le_u32());
+    let mut vendor_bytes = Vec::with_capacity(vendor_len as usize);
+
+    // We can safely set the lenght of the vector here; the uninitialized memory
+    // is not exposed. If `read_into` succeeds, it will have overwritten all
+    // bytes. If not, an error is returned and the memory is never exposed.
+    unsafe { vendor_bytes.set_len(vendor_len as usize); }
+    try!(input.read_into(&mut vendor_bytes));
+    let vendor = try!(String::from_utf8(vendor_bytes));
+
+    let vorbis_comment = VorbisComment {
+        vendor: vendor,
+        comments: Vec::new(),
+    };
+
+    // TODO: Read the rest.
+    try!(input.skip(length - 4 - vendor_len));
+
+    Ok(vorbis_comment)
 }
 
 fn read_padding_block<R: ReadBytes>(input: &mut R, length: u32) -> Result<()> {
