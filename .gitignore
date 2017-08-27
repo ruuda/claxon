@@ -11,6 +11,7 @@
 /testsamples/extra/*.wav
 
 # Except for small test samples that are included verbatim
+!/testsamples/large_vendor_string.flac
 !/testsamples/pop.flac
 !/testsamples/short.flac
 !/testsamples/wasted_bits.flac

@@ -286,6 +286,19 @@ fn verify_decoded_stream_wasted_bits() {
 }
 
 #[test]
+fn verify_limits_on_vendor_string() {
+    // This file claims to have a vendor string which would not fit in the
+    // block.
+    let file = fs::File::open("testsamples/large_vendor_string.flac").unwrap();
+    match claxon::FlacReader::new(file) {
+        Ok(..) => panic!("This file should fail to load"),
+        Err(err) => {
+            assert_eq!(err, claxon::Error::FormatError("vendor string too long"))
+        }
+    }
+}
+
+#[test]
 fn verify_extra_samples() {
     use std::ffi::OsStr;
 

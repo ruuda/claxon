@@ -7,7 +7,7 @@
 
 //! The `metadata` module deals with metadata at the beginning of a FLAC stream.
 
-use error::{Result, fmt_err};
+use error::{Error, Result, fmt_err};
 use input::ReadBytes;
 
 #[derive(Clone, Copy)]
@@ -304,8 +304,22 @@ fn read_vorbis_comment_block<R: ReadBytes>(input: &mut R, length: u32) -> Result
         return fmt_err("Vorbis comment block is too short")
     }
 
+    // Fail if the length of the Vorbis comment block is larger than 1 MiB. This
+    // block is full of length-prefixed strings for which we allocate memory up
+    // front. If there were no limit on these, a maliciously crafted file could
+    // cause OOM by claiming to contain large strings. But at least the strings
+    // cannot be longer than the size of the Vorbis comment block, and by
+    // limiting the size of that block, we can mitigate such DoS attacks.
+    if length > 1024 * 1024 {
+        let msg = "Vorbis comment blocks larger than 1 MiB are not supported";
+        return Err(Error::Unsupported(msg))
+    }
+
     // The Vorbis comment block starts with a length-prefixed "vendor string".
+    // It cannot be larger than the block length - 8, because there are the
+    // 32-bit vendor string length, and comment count.
     let vendor_len = try!(input.read_le_u32());
+    if vendor_len > length - 8 { return fmt_err("vendor string too long") }
     let mut vendor_bytes = Vec::with_capacity(vendor_len as usize);
 
     // We can safely set the lenght of the vector here; the uninitialized memory
@@ -315,8 +329,14 @@ fn read_vorbis_comment_block<R: ReadBytes>(input: &mut R, length: u32) -> Result
     try!(input.read_into(&mut vendor_bytes));
     let vendor = try!(String::from_utf8(vendor_bytes));
 
-    // Next up is the number of comments.
+    // Next up is the number of comments. Because every comment is at least 4
+    // bytes to indicate its length, there cannot be more comments than the
+    // length of the block divided by 4. This is only an upper bound to ensure
+    // that we don't allocate a big vector, to protect against DoS attacks.
     let comments_len = try!(input.read_le_u32());
+    if comments_len >= length / 4 {
+        return fmt_err("too many entries for Vorbis comment block")
+    }
     let mut comments = Vec::with_capacity(comments_len as usize);
 
     let mut bytes_left = length - 8 - vendor_len;
@@ -350,7 +370,7 @@ fn read_vorbis_comment_block<R: ReadBytes>(input: &mut R, length: u32) -> Result
     }
 
     if comments.len() != comments_len as usize {
-        return fmt_err("Vorbis comment block contains wrong number of comments")
+        return fmt_err("Vorbis comment block contains wrong number of entries")
     }
 
     let vorbis_comment = VorbisComment {
