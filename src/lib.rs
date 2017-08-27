@@ -194,10 +194,28 @@ impl<R: io::Read> FlacReader<R> {
     /// Returns the vendor string of the Vorbis comment block, if present.
     ///
     /// This string usually contains the name and version of the program that
-    /// produced the FLAC stream, such as `reference libFLAC 1.3.2 20170101`
+    /// encoded the FLAC stream, such as `reference libFLAC 1.3.2 20170101`
     /// or `Lavf57.25.100`.
     pub fn vendor(&self) -> Option<&str> {
         self.vorbis_comment.as_ref().map(|vc| &vc.vendor[..])
+    }
+
+    /// Returns name-value pairs of Vorbis comments, such as `("ARTIST", "Queen")`.
+    ///
+    /// The name is supposed to be interpreted case-insensitively, and is
+    /// guaranteed to consist of ascii characters. Claxon does not normalize
+    /// the casing of the name.
+    ///
+    /// Names need not be unique. For instance, multiple `ARTIST` comments might
+    /// be present on a track by multiple artist.
+    ///
+    /// See https://www.xiph.org/vorbis/doc/v-comment.html for more details.
+    // TODO: Return Iterator<Item=(&str, &str)> instead?
+    pub fn tags(&self) -> &[(String, String)] {
+        match self.vorbis_comment.as_ref() {
+            Some(vc) => &vc.comments[..],
+            None => &[],
+        }
     }
 
     /// Returns an iterator that decodes a single frame on every iteration.

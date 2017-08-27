@@ -81,7 +81,7 @@ pub struct VorbisComment {
     /// be present on a track by multiple artist.
     ///
     /// See https://www.xiph.org/vorbis/doc/v-comment.html for more details.
-    comments: Vec<(String, String)>,
+    pub comments: Vec<(String, String)>,
 }
 
 /// A metadata about the flac stream.
