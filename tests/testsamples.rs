@@ -13,7 +13,7 @@ use std::fs;
 use std::io;
 use std::path::Path;
 
-fn run_metaflac<P: AsRef<Path>>(fname: P) -> String {
+fn run_metaflac_streaminfo<P: AsRef<Path>>(fname: P) -> String {
     use std::process::Command;
 
     // Run metaflac on the specified file and print all streaminfo data.
@@ -27,6 +27,19 @@ fn run_metaflac<P: AsRef<Path>>(fname: P) -> String {
         .arg("--show-bps")
         .arg("--show-total-samples")
         .arg("--show-md5sum")
+        .arg(fname.as_ref().to_str().expect("unsupported filename"))
+        .output()
+        .expect("failed to run metaflac");
+    String::from_utf8(output.stdout).expect("metaflac wrote invalid UTF-8")
+}
+
+fn run_metaflac_vorbis_comment<P: AsRef<Path>>(fname: P) -> String {
+    use std::process::Command;
+
+    // Run metaflac on the specified file and print all Vorbis comment data.
+    let output = Command::new("metaflac")
+        .arg("--block-type=VORBIS_COMMENT")
+        .arg("--list")
         .arg(fname.as_ref().to_str().expect("unsupported filename"))
         .output()
         .expect("failed to run metaflac");
@@ -74,8 +87,8 @@ fn read_streaminfo<P: AsRef<Path>>(fname: P) -> String {
             print_hex(&streaminfo.md5sum)) // TODO implement LowerHex for &[u8] and submit a PR.
 }
 
-fn compare_metaflac<P: AsRef<Path>>(fname: P) {
-    let metaflac = run_metaflac(&fname);
+fn compare_metaflac_streaminfo<P: AsRef<Path>>(fname: P) {
+    let metaflac = run_metaflac_streaminfo(&fname);
     let streaminfo = read_streaminfo(&fname);
     let mut mf_lines = metaflac.lines();
     let mut si_lines = streaminfo.lines();
@@ -84,6 +97,27 @@ fn compare_metaflac<P: AsRef<Path>>(fname: P) {
             println!("metaflac\n--------\n{}", metaflac);
             println!("streaminfo\n----------\n{}", streaminfo);
             panic!("metaflac disagrees on parsed streaminfo");
+        }
+    }
+}
+
+fn compare_metaflac_vorbis_comment<P: AsRef<Path>>(fname: P) {
+    let metaflac = run_metaflac_vorbis_comment(&fname);
+
+    // Use a buffered reader, this speeds up the test by 120%.
+    let file = fs::File::open(fname).unwrap();
+    let reader = io::BufReader::new(file);
+    let stream = claxon::FlacReader::new(reader).unwrap();
+
+    let mut mf_lines = metaflac.lines();
+
+    // Search for the vendor string in the metaflac output.
+    while let Some(line) = mf_lines.next() {
+        let prefix = "  vendor string: ";
+        if line.starts_with(prefix) {
+            let mf_vendor_string = &line[prefix.len()..];
+            assert_eq!(stream.vendor(), Some(mf_vendor_string));
+            break
         }
     }
 }
@@ -146,42 +180,67 @@ fn compare_decoded_stream<P: AsRef<Path>>(fname: P) {
 
 #[test]
 fn verify_streaminfo_p0() {
-    compare_metaflac("testsamples/p0.flac");
+    compare_metaflac_streaminfo("testsamples/p0.flac");
 }
 
 #[test]
 fn verify_streaminfo_p1() {
-    compare_metaflac("testsamples/p1.flac");
+    compare_metaflac_streaminfo("testsamples/p1.flac");
 }
 
 #[test]
 fn verify_streaminfo_p2() {
-    compare_metaflac("testsamples/p2.flac");
+    compare_metaflac_streaminfo("testsamples/p2.flac");
 }
 
 #[test]
 fn verify_streaminfo_p3() {
-    compare_metaflac("testsamples/p3.flac");
+    compare_metaflac_streaminfo("testsamples/p3.flac");
 }
 
 #[test]
 fn verify_streaminfo_p4() {
-    compare_metaflac("testsamples/p4.flac");
+    compare_metaflac_streaminfo("testsamples/p4.flac");
 }
 
 #[test]
 fn verify_streaminfo_pop() {
-    compare_metaflac("testsamples/pop.flac");
+    compare_metaflac_streaminfo("testsamples/pop.flac");
 }
 
 #[test]
 fn verify_streaminfo_short() {
-    compare_metaflac("testsamples/short.flac");
+    compare_metaflac_streaminfo("testsamples/short.flac");
 }
 
 #[test]
 fn verify_streaminfo_wasted_bits() {
-    compare_metaflac("testsamples/wasted_bits.flac");
+    compare_metaflac_streaminfo("testsamples/wasted_bits.flac");
+}
+
+#[test]
+fn verify_vorbis_comment_p0() {
+    compare_metaflac_vorbis_comment("testsamples/p0.flac");
+}
+
+#[test]
+fn verify_vorbis_comment_p1() {
+    compare_metaflac_vorbis_comment("testsamples/p1.flac");
+}
+
+#[test]
+fn verify_vorbis_comment_p2() {
+    compare_metaflac_vorbis_comment("testsamples/p2.flac");
+}
+
+#[test]
+fn verify_vorbis_comment_p3() {
+    compare_metaflac_vorbis_comment("testsamples/p3.flac");
+}
+
+#[test]
+fn verify_vorbis_comment_p4() {
+    compare_metaflac_vorbis_comment("testsamples/p4.flac");
 }
 
 #[test]
@@ -246,7 +305,8 @@ fn verify_extra_samples() {
         if path.is_file() && path.extension() == Some(OsStr::new("flac")) {
             print!("    comparing {} ...", path.to_str()
                                                .expect("unsupported filename"));
-            compare_metaflac(&path);
+            compare_metaflac_streaminfo(&path);
+            compare_metaflac_vorbis_comment(&path);
             compare_decoded_stream(&path);
             println!(" ok");
         }

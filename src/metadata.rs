@@ -64,7 +64,7 @@ pub struct SeekTable {
 /// Vorbis comments, also known as FLAC tags (e.g. artist, title, etc.).
 pub struct VorbisComment {
     /// TODO: What does the vendor actually indicate?
-    vendor: String,
+    pub vendor: String,
 
     /// Name-value pairs of Vorbis comments, such as `ARTIST=Queen`.
     ///
@@ -76,7 +76,7 @@ pub struct VorbisComment {
     /// be present on a track by multiple artist.
     ///
     /// See https://www.xiph.org/vorbis/doc/v-comment.html for more details.
-    comments: Vec<(String, String)>,
+    pub comments: Vec<(String, String)>,
 }
 
 /// A metadata about the flac stream.

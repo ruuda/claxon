@@ -65,7 +65,7 @@ use std::path;
 use error::fmt_err;
 use frame::FrameReader;
 use input::{BufferedReader, ReadBytes};
-use metadata::{MetadataBlock, MetadataBlockReader, StreamInfo};
+use metadata::{MetadataBlock, MetadataBlockReader, StreamInfo, VorbisComment};
 
 mod crc;
 mod error;
@@ -173,6 +173,21 @@ impl<R: io::Read> FlacReader<R> {
     /// This contains information like the sample rate and number of channels.
     pub fn streaminfo(&self) -> StreamInfo {
         self.streaminfo
+    }
+
+    fn vorbis_comment_block(&self) -> Option<&VorbisComment> {
+        for metadata_block in &self.metadata_blocks {
+            match *metadata_block {
+                MetadataBlock::VorbisComment(ref vc) => return Some(vc),
+                _ => continue,
+            }
+        }
+        None
+    }
+
+    /// Returns the vendor string of the Vorbis comment block, if present.
+    pub fn vendor(&self) -> Option<&str> {
+        self.vorbis_comment_block().map(|vc| &vc.vendor[..])
     }
 
     /// Returns an iterator that decodes a single frame on every iteration.
