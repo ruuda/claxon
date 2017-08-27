@@ -9,6 +9,7 @@
 
 use error::{Error, Result, fmt_err};
 use input::ReadBytes;
+use std::str;
 
 #[derive(Clone, Copy)]
 struct MetadataBlockHeader {
@@ -367,10 +368,22 @@ fn read_vorbis_comment_block<R: ReadBytes>(input: &mut R, length: u32) -> Result
         bytes_left -= comment_len;
 
         if let Some(sep_index) = comment_bytes.iter().position(|&x| x == b'=') {
-            let comment = try!(String::from_utf8(comment_bytes));
-            let name = String::from(&comment[..sep_index]);
-            let value = String::from(&comment[sep_index + 1..]);
-            comments.push((name, value));
+            let name_bytes = &comment_bytes[..sep_index];
+            let value_bytes = &comment_bytes[sep_index + 1..];
+
+            // According to the Vorbis spec, the field name may consist of ascii
+            // bytes 0x20 through 0x7d, 0x3d (`=`) excluded. Verifying this has
+            // the advantage that if the check passes, the result is valid
+            // UTF-8, so the conversion to string will not fail.
+            if name_bytes.iter().any(|&x| x < 0x20 || x > 0x7d) {
+                return fmt_err("Vorbis comment field name contains invalid byte")
+            }
+            // Unchecked is safe here; we checked for valid ascii above, and all
+            // ascii text is valid UTF-8.
+            let name = unsafe { str::from_utf8_unchecked(name_bytes) };
+            let value = try!(str::from_utf8(value_bytes));
+
+            comments.push((name.to_string(), value.to_string()));
         } else {
             return fmt_err("Vorbis comment does not contain '='")
         }

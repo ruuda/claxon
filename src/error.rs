@@ -7,6 +7,7 @@
 
 //! The `error` module defines the error and result types.
 
+use std;
 use std::error;
 use std::fmt;
 use std::io;
@@ -21,9 +22,6 @@ pub enum Error {
 
     /// An ill-formed FLAC stream was encountered.
     FormatError(&'static str),
-
-    /// A tag (Vorbis comment) was invalid UTF-8.
-    TagEncodingError(string::FromUtf8Error),
 
     /// The audio stream has more bits per sample than the provided sample
     /// buffer to decode into.
@@ -40,13 +38,12 @@ pub enum Error {
 
 impl PartialEq for Error {
     fn eq(&self, other: &Error) -> bool {
-        use error::Error::{IoError, FormatError, TagEncodingError, TooWide, Unsupported};
+        use error::Error::{IoError, FormatError, TooWide, Unsupported};
         match (self, other) {
             (&FormatError(r1), &FormatError(r2)) => r1 == r2,
             (&TooWide, &TooWide) => true,
             (&Unsupported(f1), &Unsupported(f2)) => f1 == f2,
             (&IoError(_), _) => false,
-            (&TagEncodingError(_), _) => false,
             (&FormatError(_), _) => false,
             (&TooWide, _) => false,
             (&Unsupported(_), _) => false,
@@ -58,10 +55,6 @@ impl fmt::Display for Error {
     fn fmt(&self, formatter: &mut fmt::Formatter) -> result::Result<(), fmt::Error> {
         match *self {
             Error::IoError(ref err) => err.fmt(formatter),
-            Error::TagEncodingError(ref reason) => {
-                try!(formatter.write_str("Tag is not valid UTF-8: "));
-                reason.fmt(formatter)
-            }
             Error::FormatError(reason) => {
                 try!(formatter.write_str("Ill-formed FLAC stream: "));
                 formatter.write_str(reason)
@@ -83,7 +76,6 @@ impl error::Error for Error {
     fn description(&self) -> &str {
         match *self {
             Error::IoError(ref err) => err.description(),
-            Error::TagEncodingError(ref reason) => reason.description(),
             Error::FormatError(reason) => reason,
             Error::TooWide => "the sample has more bits than the destination type",
             Error::Unsupported(_) => "unsupported feature",
@@ -93,7 +85,6 @@ impl error::Error for Error {
     fn cause(&self) -> Option<&error::Error> {
         match *self {
             Error::IoError(ref err) => Some(err),
-            Error::TagEncodingError(ref err) => Some(err),
             Error::FormatError(_) => None,
             Error::TooWide => None,
             Error::Unsupported(_) => None,
@@ -108,8 +99,18 @@ impl From<io::Error> for Error {
 }
 
 impl From<string::FromUtf8Error> for Error {
-    fn from(err: string::FromUtf8Error) -> Error {
-        Error::TagEncodingError(err)
+    fn from(_: string::FromUtf8Error) -> Error {
+        // Vendor strings are the only place where UTF-8 is parsed
+        // into a String.
+        Error::FormatError("Vorbis comment vendor string is not valid UTF-8")
+    }
+}
+
+impl From<std::str::Utf8Error> for Error {
+    fn from(_: std::str::Utf8Error) -> Error {
+        // Vorbis comment values are the only place where UTF-8 is parsed
+        // into a str.
+        Error::FormatError("Vorbis comment value is not valid UTF-8")
     }
 }
 
