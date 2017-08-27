@@ -310,8 +310,15 @@ fn read_vorbis_comment_block<R: ReadBytes>(input: &mut R, length: u32) -> Result
     // cause OOM by claiming to contain large strings. But at least the strings
     // cannot be longer than the size of the Vorbis comment block, and by
     // limiting the size of that block, we can mitigate such DoS attacks.
-    if length > 1024 * 1024 {
-        let msg = "Vorbis comment blocks larger than 1 MiB are not supported";
+    //
+    // The typical size of a the Vorbis comment block is 1 KiB; on a corpus of
+    // real-world flac files, the 0.05 and 0.95 quantiles were 792 and 1257
+    // bytes respectively, with even the 0.99 quantile below 2 KiB. The only
+    // reason for having a large Vorbis comment block is when cover art is
+    // incorrectly embedded there, but the Vorbis comment block is not the right
+    // place for that anyway.
+    if length > 10 * 1024 * 1024 {
+        let msg = "Vorbis comment blocks larger than 10 MiB are not supported";
         return Err(Error::Unsupported(msg))
     }
 
