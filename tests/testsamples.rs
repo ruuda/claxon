@@ -106,8 +106,8 @@ fn compare_metaflac_vorbis_comment<P: AsRef<Path>>(fname: P) {
 
     // Use a buffered reader, this speeds up the test by 120%.
     let file = fs::File::open(fname).unwrap();
-    let reader = io::BufReader::new(file);
-    let stream = claxon::FlacReader::new(reader).unwrap();
+    let buf_reader = io::BufReader::new(file);
+    let reader = claxon::FlacReader::new(buf_reader).unwrap();
 
     let mut mf_lines = metaflac.lines();
 
@@ -116,8 +116,29 @@ fn compare_metaflac_vorbis_comment<P: AsRef<Path>>(fname: P) {
         let prefix = "  vendor string: ";
         if line.starts_with(prefix) {
             let mf_vendor_string = &line[prefix.len()..];
-            assert_eq!(stream.vendor(), Some(mf_vendor_string));
+            assert_eq!(reader.vendor(), Some(mf_vendor_string));
             break
+        }
+    }
+
+    let mut tags = reader.tags().iter();
+
+    // Loop through all of the comments.
+    while let Some(line) = mf_lines.next() {
+        let prefix = "    comment[";
+        if line.starts_with(prefix) {
+            let mf_line = &line[prefix.len()..];
+            let prefix_sep_index = mf_line.find(' ').unwrap();
+            let mf_pair = &mf_line[prefix_sep_index + 1..];
+
+            let sep_index = mf_pair.find('=').unwrap();
+            let mf_name = &mf_pair[..sep_index];
+            let mf_value = &mf_pair[sep_index + 1..];
+
+            let &(ref name, ref value) = tags.next().unwrap();
+
+            assert_eq!(name, mf_name);
+            assert_eq!(value, mf_value);
         }
     }
 }
