@@ -294,6 +294,12 @@ fn read_streaminfo_block<R: ReadBytes>(input: &mut R) -> Result<StreamInfo> {
 }
 
 fn read_vorbis_comment_block<R: ReadBytes>(input: &mut R, length: u32) -> Result<VorbisComment> {
+    if length < 8 {
+        // We expect at a minimum a 32-bit vendor string length, and a 32-bit
+        // comment count.
+        return fmt_err("Vorbis comment block is too short")
+    }
+
     // The Vorbis comment block starts with a length-prefixed "vendor string".
     let vendor_len = try!(input.read_le_u32());
     let mut vendor_bytes = Vec::with_capacity(vendor_len as usize);
@@ -309,13 +315,13 @@ fn read_vorbis_comment_block<R: ReadBytes>(input: &mut R, length: u32) -> Result
     let comments_len = try!(input.read_le_u32());
     let mut comments = Vec::with_capacity(comments_len as usize);
 
+    let mut bytes_left = length - 8 - vendor_len;
+
     // For every comment, there is a length-prefixed string of the form
     // "NAME=value".
-    let mut bytes_left = length - 8 - vendor_len;
     while bytes_left >= 4 {
         let comment_len = try!(input.read_le_u32());
         bytes_left -= 4;
-        println!("bytes_left: {}", bytes_left);
 
         if comment_len > bytes_left {
             return fmt_err("Vorbis comment too long for Vorbis comment block")
@@ -324,12 +330,10 @@ fn read_vorbis_comment_block<R: ReadBytes>(input: &mut R, length: u32) -> Result
         // For the same reason as above, setting the length is safe here.
         // TODO: Might recycle this buffer for a small speedup.
         let mut comment_bytes = Vec::with_capacity(comment_len as usize);
-        unsafe { comment_bytes.set_len(vendor_len as usize); }
+        unsafe { comment_bytes.set_len(comment_len as usize); }
         try!(input.read_into(&mut comment_bytes));
 
         bytes_left -= comment_len;
-
-        println!("Comment bytes: {:?}", String::from_utf8(comment_bytes.clone()));
 
         if let Some(sep_index) = comment_bytes.iter().position(|&x| x == b'=') {
             let comment = try!(String::from_utf8(comment_bytes));
