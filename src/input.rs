@@ -365,6 +365,22 @@ fn verify_read_be_u32_cursor() {
     assert!(cursor.read_be_u32().is_err());
 }
 
+#[test]
+fn verify_read_le_u32_buffered_reader() {
+    let mut reader = BufferedReader::new(io::Cursor::new(vec![2u8, 0, 0, 0, 0xe9, 0xff, 0x01, 0x80, 0]));
+    assert_eq!(reader.read_le_u32().ok(), Some(2));
+    assert_eq!(reader.read_le_u32().ok(), Some(2_147_614_697));
+    assert!(reader.read_le_u32().is_err());
+}
+
+#[test]
+fn verify_read_le_u32_cursor() {
+    let mut reader = io::Cursor::new(vec![2u8, 0, 0, 0, 0xe9, 0xff, 0x01, 0x80, 0]);
+    assert_eq!(reader.read_le_u32().ok(), Some(2));
+    assert_eq!(reader.read_le_u32().ok(), Some(2_147_614_697));
+    assert!(reader.read_le_u32().is_err());
+}
+
 /// Left shift that does not panic when shifting by the integer width.
 #[inline(always)]
 fn shift_left(x: u8, shift: u32) -> u8 {
