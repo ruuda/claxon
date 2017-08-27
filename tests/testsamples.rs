@@ -299,6 +299,18 @@ fn verify_limits_on_vendor_string() {
 }
 
 #[test]
+fn verify_limits_on_vorbis_comment_block() {
+    // This file claims to have a very large Vorbis comment block, which could
+    // make the decoder go OOM.
+    let file = fs::File::open("testsamples/large_vorbis_comment_block.flac").unwrap();
+    match claxon::FlacReader::new(file) {
+        Ok(..) => panic!("This file should fail to load"),
+        Err(claxon::Error::Unsupported(..)) => { }
+        Err(..) => panic!("Expected 'Unsupported' error."),
+    }
+}
+
+#[test]
 fn verify_extra_samples() {
     use std::ffi::OsStr;
 
