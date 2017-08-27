@@ -76,7 +76,7 @@ pub struct VorbisComment {
     /// be present on a track by multiple artist.
     ///
     /// See https://www.xiph.org/vorbis/doc/v-comment.html for more details.
-    pub comments: Vec<(String, String)>,
+    comments: Vec<(String, String)>,
 }
 
 /// A metadata about the flac stream.
@@ -294,6 +294,7 @@ fn read_streaminfo_block<R: ReadBytes>(input: &mut R) -> Result<StreamInfo> {
 }
 
 fn read_vorbis_comment_block<R: ReadBytes>(input: &mut R, length: u32) -> Result<VorbisComment> {
+    // The Vorbis comment block starts with a length-prefixed "vendor string".
     let vendor_len = try!(input.read_le_u32());
     let mut vendor_bytes = Vec::with_capacity(vendor_len as usize);
 
@@ -304,13 +305,50 @@ fn read_vorbis_comment_block<R: ReadBytes>(input: &mut R, length: u32) -> Result
     try!(input.read_into(&mut vendor_bytes));
     let vendor = try!(String::from_utf8(vendor_bytes));
 
+    // Next up is the number of comments.
+    let comments_len = try!(input.read_le_u32());
+    let mut comments = Vec::with_capacity(comments_len as usize);
+
+    // For every comment, there is a length-prefixed string of the form
+    // "NAME=value".
+    let mut bytes_left = length - 8 - vendor_len;
+    while bytes_left >= 4 {
+        let comment_len = try!(input.read_le_u32());
+        bytes_left -= 4;
+        println!("bytes_left: {}", bytes_left);
+
+        if comment_len > bytes_left {
+            return fmt_err("Vorbis comment too long for Vorbis comment block")
+        }
+
+        // For the same reason as above, setting the length is safe here.
+        // TODO: Might recycle this buffer for a small speedup.
+        let mut comment_bytes = Vec::with_capacity(comment_len as usize);
+        unsafe { comment_bytes.set_len(vendor_len as usize); }
+        try!(input.read_into(&mut comment_bytes));
+
+        bytes_left -= comment_len;
+
+        println!("Comment bytes: {:?}", String::from_utf8(comment_bytes.clone()));
+
+        if let Some(sep_index) = comment_bytes.iter().position(|&x| x == b'=') {
+            let comment = try!(String::from_utf8(comment_bytes));
+            let name = String::from(&comment[..sep_index]);
+            let value = String::from(&comment[sep_index + 1..]);
+            comments.push((name, value));
+        } else {
+            return fmt_err("Vorbis comment does not contain '='")
+        }
+    }
+
+    if comments.len() != comments_len as usize {
+        return fmt_err("Vorbis comment block contains wrong number of comments")
+    }
+
     let vorbis_comment = VorbisComment {
         vendor: vendor,
-        comments: Vec::new(),
+        comments: comments,
     };
-
-    // TODO: Read the rest.
-    try!(input.skip(length - 4 - vendor_len));
 
     Ok(vorbis_comment)
 }
@@ -326,7 +364,7 @@ fn read_padding_block<R: ReadBytes>(input: &mut R, length: u32) -> Result<()> {
 
 fn read_application_block<R: ReadBytes>(input: &mut R, length: u32) -> Result<(u32, Vec<u8>)> {
     if length < 4 {
-        return fmt_err("application block length must be at least 4 bytes.")
+        return fmt_err("application block length must be at least 4 bytes")
     }
 
     let id = try!(input.read_be_u32());
