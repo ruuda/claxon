@@ -186,6 +186,10 @@ impl<R: io::Read> FlacReader<R> {
     }
 
     /// Returns the vendor string of the Vorbis comment block, if present.
+    ///
+    /// This string usually contains the name and version of the program that
+    /// produced the FLAC stream, such as `reference libFLAC 1.3.2 20170101`
+    /// or `Lavf57.25.100`.
     pub fn vendor(&self) -> Option<&str> {
         self.vorbis_comment_block().map(|vc| &vc.vendor[..])
     }
