@@ -82,6 +82,7 @@ pub use frame::Block;
 /// TODO: Add an example.
 pub struct FlacReader<R: io::Read> {
     streaminfo: StreamInfo,
+    vorbis_comment: Option<VorbisComment>,
     #[allow(dead_code)] // TODO: Expose metadata nicely.
     metadata_blocks: Vec<MetadataBlock>,
     input: BufferedReader<R>,
@@ -135,7 +136,7 @@ impl<R: io::Read> FlacReader<R> {
 
         // Start a new scope, because the input reader must be available again
         // for the frame reader next.
-        let (streaminfo, metadata_blocks) = {
+        let (streaminfo, vorbis_comment, metadata_blocks) = {
             // Next are one or more metadata blocks. The flac specification
             // dictates that the streaminfo block is the first block. The metadata
             // block reader will yield at least one element, so the unwrap is safe.
@@ -146,21 +147,36 @@ impl<R: io::Read> FlacReader<R> {
                 _ => return fmt_err("streaminfo block missing"),
             };
 
+            let mut vorbis_comment = None;
+
             // There might be more metadata blocks, read and store them.
             let mut metadata_blocks = Vec::new();
             for block_result in metadata_iter {
-                match block_result {
-                    Err(error) => return Err(error),
-                    Ok(block) => metadata_blocks.push(block),
+                match try!(block_result) {
+                    MetadataBlock::VorbisComment(vc) => {
+                        // The Vorbis comment block need not be present, but
+                        // when it is, it must be unique.
+                        if vorbis_comment.is_some() {
+                            return fmt_err("encountered second Vorbis comment block")
+                        } else {
+                            vorbis_comment = Some(vc);
+                        }
+                    }
+                    MetadataBlock::StreamInfo(..) => {
+                        return fmt_err("encountered second streaminfo block")
+                    }
+                    // Other blocks are currently not handled.
+                    block => metadata_blocks.push(block),
                 }
             }
 
-            (streaminfo, metadata_blocks)
+            (streaminfo, vorbis_comment, metadata_blocks)
         };
 
         // The flac reader will contain the reader that will read frames.
         let flac_reader = FlacReader {
             streaminfo: streaminfo,
+            vorbis_comment: vorbis_comment,
             metadata_blocks: metadata_blocks,
             input: buf_reader,
         };
@@ -175,23 +191,13 @@ impl<R: io::Read> FlacReader<R> {
         self.streaminfo
     }
 
-    fn vorbis_comment_block(&self) -> Option<&VorbisComment> {
-        for metadata_block in &self.metadata_blocks {
-            match *metadata_block {
-                MetadataBlock::VorbisComment(ref vc) => return Some(vc),
-                _ => continue,
-            }
-        }
-        None
-    }
-
     /// Returns the vendor string of the Vorbis comment block, if present.
     ///
     /// This string usually contains the name and version of the program that
     /// produced the FLAC stream, such as `reference libFLAC 1.3.2 20170101`
     /// or `Lavf57.25.100`.
     pub fn vendor(&self) -> Option<&str> {
-        self.vorbis_comment_block().map(|vc| &vc.vendor[..])
+        self.vorbis_comment.as_ref().map(|vc| &vc.vendor[..])
     }
 
     /// Returns an iterator that decodes a single frame on every iteration.
