@@ -112,6 +112,48 @@ pub enum MetadataBlock {
     Reserved,
 }
 
+/// Iterates over Vorbis comments looking for a specific one.
+///
+/// See `FlacReader::get_tag()` for more details.
+pub struct GetTag<'a> {
+    /// The Vorbis comments to search through.
+    vorbis_comments: &'a [(String, String)],
+    /// The tag to look for.
+    needle: &'a str,
+    /// The index of the (name, value) pair that should be inspected next.
+    index: usize,
+}
+
+impl<'a> GetTag<'a> {
+    /// Returns a new `GetTag` iterator.
+    pub fn new(vorbis_comments: &'a [(String, String)], needle: &'a str) -> GetTag<'a> {
+        GetTag {
+            vorbis_comments: vorbis_comments,
+            needle: needle,
+            index: 0,
+        }
+    }
+}
+
+impl<'a> Iterator for GetTag<'a> {
+    type Item = &'a (String, String);
+
+    fn next(&mut self) -> Option<&'a (String, String)> {
+        use std::ascii::AsciiExt;
+
+        while self.index < self.vorbis_comments.len() {
+            let pair = &self.vorbis_comments[self.index];
+            self.index += 1;
+
+            if pair.0.eq_ignore_ascii_case(self.needle) {
+                return Some(pair)
+            }
+        }
+
+        return None
+    }
+}
+
 fn read_metadata_block_header<R: ReadBytes>(input: &mut R) -> Result<MetadataBlockHeader> {
     let byte = try!(input.read_u8());
 

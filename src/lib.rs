@@ -203,11 +203,11 @@ impl<R: io::Read> FlacReader<R> {
     /// Returns name-value pairs of Vorbis comments, such as `("ARTIST", "Queen")`.
     ///
     /// The name is supposed to be interpreted case-insensitively, and is
-    /// guaranteed to consist of ascii characters. Claxon does not normalize
-    /// the casing of the name.
+    /// guaranteed to consist of ASCII characters. Claxon does not normalize
+    /// the casing of the name. Use `get_tag()` to do a case-insensitive lookup.
     ///
     /// Names need not be unique. For instance, multiple `ARTIST` comments might
-    /// be present on a track by multiple artist.
+    /// be present on a collaboration track.
     ///
     /// See https://www.xiph.org/vorbis/doc/v-comment.html for more details.
     // TODO: Return Iterator<Item=(&str, &str)> instead?
@@ -216,6 +216,23 @@ impl<R: io::Read> FlacReader<R> {
             Some(vc) => &vc.comments[..],
             None => &[],
         }
+    }
+
+    /// Look up a Vorbis comment such as `ARTIST` in a case-insensitive way.
+    ///
+    /// This iterator can be used to look up a tag in the Vorbis comments. An
+    /// iterator is returned because tags may occur more than once (there could
+    /// be multiple `ARTIST` tags on a collaboration track, for instance).
+    ///
+    /// Note that tag names are ASCII and never contain `=`; trying to look up a
+    /// non-ASCII tag will return no results. Furthermore, the Vorbis comment
+    /// spec dictates that tag names should be handled case-insensitively, so
+    /// this method performs a case-insensitive lookup.
+    ///
+    /// See also `tags()` for access to the raw tags.
+    /// See https://www.xiph.org/vorbis/doc/v-comment.html for more details.
+    pub fn get_tag<'a>(&'a self, tag_name: &'a str) -> metadata::GetTag<'a> {
+        metadata::GetTag::new(self.tags(), tag_name)
     }
 
     /// Returns an iterator that decodes a single frame on every iteration.
