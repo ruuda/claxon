@@ -289,6 +289,53 @@ fn verify_vorbis_comment_p4() {
 }
 
 #[test]
+fn test_flac_reader_get_tag_is_case_insensitive() {
+    let file = fs::File::open("testsamples/p4.flac").unwrap();
+    let buf_reader = io::BufReader::new(file);
+    let flac_reader = claxon::FlacReader::new(buf_reader).unwrap();
+
+    // This file contains the following metadata:
+    // METADATA block #2
+    //   type: 4 (VORBIS_COMMENT)
+    //   is last: false
+    //   length: 241
+    //   vendor string: reference libFLAC 1.1.0 20030126
+    //   comments: 5
+    //     comment[0]: REPLAYGAIN_TRACK_PEAK=0.69879150
+    //     comment[1]: REPLAYGAIN_TRACK_GAIN=-4.00 dB
+    //     comment[2]: REPLAYGAIN_ALBUM_PEAK=0.69879150
+    //     comment[3]: REPLAYGAIN_ALBUM_GAIN=-3.68 dB
+    //     comment[4]: Comment=Encoded by FLAC v1.1.1a with FLAC Frontend v1.7.1
+
+    let mut replaygain_upper = flac_reader.get_tag("REPLAYGAIN_TRACK_GAIN");
+    assert_eq!(replaygain_upper.next(), Some("-4.00 dB"));
+    assert_eq!(replaygain_upper.next(), None);
+
+    // The lookup should be case-insensitive.
+    let mut replaygain_lower = flac_reader.get_tag("replaygain_track_gain");
+    assert_eq!(replaygain_lower.next(), Some("-4.00 dB"));
+    assert_eq!(replaygain_lower.next(), None);
+
+    // Non-existing tags should not be found.
+    let mut foobar = flac_reader.get_tag("foobar");
+    assert_eq!(foobar.next(), None);
+}
+
+#[test]
+fn test_flac_reader_get_tag_returns_all_matches() {
+    let file = fs::File::open("testsamples/repeated_vorbis_comment.flac").unwrap();
+    let buf_reader = io::BufReader::new(file);
+    let flac_reader = claxon::FlacReader::new(buf_reader).unwrap();
+
+    // This file contains two FOO tags, `FOO=bar` and `FOO=baz`.
+
+    let mut foo = flac_reader.get_tag("FOO");
+    assert_eq!(foo.next(), Some("bar"));
+    assert_eq!(foo.next(), Some("baz"));
+    assert_eq!(foo.next(), None);
+}
+
+#[test]
 fn verify_decoded_stream_p0() {
     compare_decoded_stream("testsamples/p0.flac");
 }
