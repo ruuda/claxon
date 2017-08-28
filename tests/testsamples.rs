@@ -121,7 +121,10 @@ fn compare_metaflac_vorbis_comment<P: AsRef<Path>>(fname: P) {
             // print it -- my guess is because metaflac is written in C and uses
             // C-style string manipulation. In that case we skip it.
             match reader.vendor() {
-                Some(x) if x.starts_with('\0') => break,
+                Some(x) if x.starts_with('\0') => {
+                    assert_eq!("", mf_vendor_string);
+                    break
+                }
                 _ => {}
             }
 
