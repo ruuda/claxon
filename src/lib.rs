@@ -220,12 +220,11 @@ impl<R: io::Read> FlacReader<R> {
 
     /// Look up a Vorbis comment such as `ARTIST` in a case-insensitive way.
     ///
-    /// This iterator can be used to look up a tag in the Vorbis comments. An
-    /// iterator is returned because tags may occur more than once (there could
-    /// be multiple `ARTIST` tags on a collaboration track, for instance).
+    /// Returns an iterator,  because tags may occur more than once. There could
+    /// be multiple `ARTIST` tags on a collaboration track, for instance.
     ///
-    /// Note that tag names are ASCII and never contain `=`; trying to look up a
-    /// non-ASCII tag will return no results. Furthermore, the Vorbis comment
+    /// Note that tag names are ASCII and never contain `'='`; trying to look up
+    /// a non-ASCII tag will return no results. Furthermore, the Vorbis comment
     /// spec dictates that tag names should be handled case-insensitively, so
     /// this method performs a case-insensitive lookup.
     ///

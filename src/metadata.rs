@@ -67,18 +67,19 @@ pub struct VorbisComment {
     /// The “vendor string”, chosen by the encoder vendor.
     ///
     /// This string usually contains the name and version of the program that
-    /// produced the FLAC stream, such as `reference libFLAC 1.3.2 20170101`
+    /// encoded the FLAC stream, such as `reference libFLAC 1.3.2 20170101`
     /// or `Lavf57.25.100`.
     pub vendor: String,
 
-    /// Name-value pairs of Vorbis comments, such as `ARTIST=Queen`.
+    /// Name-value pairs of Vorbis comments, such as `("ARTIST", "Queen")`.
     ///
     /// The name is supposed to be interpreted case-insensitively, and is
-    /// guaranteed to consist of ascii characters. Claxon does not normalize
-    /// the casing of the name.
+    /// guaranteed to consist of ASCII characters. Claxon does not normalize
+    /// the casing of the name. Use `metadata::GetTag` to do a case-insensitive
+    /// lookup.
     ///
     /// Names need not be unique. For instance, multiple `ARTIST` comments might
-    /// be present on a track by multiple artist.
+    /// be present on a collaboration track.
     ///
     /// See https://www.xiph.org/vorbis/doc/v-comment.html for more details.
     pub comments: Vec<(String, String)>,
@@ -112,7 +113,7 @@ pub enum MetadataBlock {
     Reserved,
 }
 
-/// Iterates over Vorbis comments looking for a specific one.
+/// Iterates over Vorbis comments looking for a specific one; returns its values as `&str`.
 ///
 /// See `FlacReader::get_tag()` for more details.
 pub struct GetTag<'a> {
