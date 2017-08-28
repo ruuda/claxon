@@ -458,6 +458,14 @@ fn read_application_block<R: ReadBytes>(input: &mut R, length: u32) -> Result<(u
         return fmt_err("application block length must be at least 4 bytes")
     }
 
+    // Reject large application blocks to avoid memory-based denial-
+    // of-service attacks. See also the more elaborate motivation in
+    // `read_vorbis_comment_block()`.
+    if length > 10 * 1024 * 1024 {
+        let msg = "application blocks larger than 10 MiB are not supported";
+        return Err(Error::Unsupported(msg))
+    }
+
     let id = try!(input.read_be_u32());
 
     // Four bytes of the block have been used for the ID, the rest is payload.
