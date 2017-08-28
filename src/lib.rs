@@ -57,7 +57,7 @@
 //!
 //! ```
 //! # use claxon;
-//! let mut reader = claxon::FlacReader::open("testsamples/pop.flac").unwrap();
+//! let reader = claxon::FlacReader::open("testsamples/pop.flac").unwrap();
 //! for artist in reader.get_tag("ARTIST") {
 //!     println!("{}", artist);
 //! }
