@@ -136,9 +136,9 @@ impl<'a> GetTag<'a> {
 }
 
 impl<'a> Iterator for GetTag<'a> {
-    type Item = &'a (String, String);
+    type Item = &'a str;
 
-    fn next(&mut self) -> Option<&'a (String, String)> {
+    fn next(&mut self) -> Option<&'a str> {
         use std::ascii::AsciiExt;
 
         while self.index < self.vorbis_comments.len() {
@@ -146,7 +146,7 @@ impl<'a> Iterator for GetTag<'a> {
             self.index += 1;
 
             if pair.0.eq_ignore_ascii_case(self.needle) {
-                return Some(pair)
+                return Some(&pair.1)
             }
         }
 
