@@ -53,6 +53,16 @@
 //! # }
 //! ```
 //!
+//! Retrieving the artist metadata:
+//!
+//! ```
+//! # use claxon;
+//! let mut reader = claxon::FlacReader::open("testsamples/pop.flac").unwrap();
+//! for artist in reader.get_tag("ARTIST") {
+//!     println!("{}", artist);
+//! }
+//! ```
+//!
 //! For more examples, see the [examples](https://github.com/ruuda/claxon/tree/master/examples)
 //! directory in the crate.
 
