@@ -116,6 +116,15 @@ fn compare_metaflac_vorbis_comment<P: AsRef<Path>>(fname: P) {
         let prefix = "  vendor string: ";
         if line.starts_with(prefix) {
             let mf_vendor_string = &line[prefix.len()..];
+
+            // If the vendor string starts with a null byte, metaflac will not
+            // print it -- my guess is because metaflac is written in C and uses
+            // C-style string manipulation. In that case we skip it.
+            match reader.vendor() {
+                Some(x) if x.starts_with('\0') => break,
+                _ => {}
+            }
+
             assert_eq!(reader.vendor(), Some(mf_vendor_string));
             break
         }
@@ -135,10 +144,22 @@ fn compare_metaflac_vorbis_comment<P: AsRef<Path>>(fname: P) {
             let mf_name = &mf_pair[..sep_index];
             let mf_value = &mf_pair[sep_index + 1..];
 
-            let &(ref name, ref value) = tags.next().unwrap();
+            let &(ref name, ref value_lines) = tags.next().unwrap();
+            let mut value_lines_iter = value_lines.lines();
+            let value = value_lines_iter.next().unwrap();
 
             assert_eq!(name, mf_name);
             assert_eq!(value, mf_value);
+
+            // If there are newlines, then we also need to read those as
+            // separate lines from the metaflac untput. This does assume that
+            // the newline count that Claxon read is correct, and because of the
+            // behavior of the `.lines()` iterator this does not accurately
+            // verify carriage returns, but we could not anyway, because
+            // metaflac does not escape them.
+            while let Some(actual_line) = value_lines_iter.next() {
+                assert_eq!(actual_line, mf_lines.next().unwrap());
+            }
         }
     }
 }
