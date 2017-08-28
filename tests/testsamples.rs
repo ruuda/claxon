@@ -68,11 +68,8 @@ fn print_hex(seq: &[u8]) -> String {
 }
 
 fn read_streaminfo<P: AsRef<Path>>(fname: P) -> String {
-    // Use a buffered reader, this speeds up the test by 120%.
-    let file = fs::File::open(fname).unwrap();
-    let reader = io::BufReader::new(file);
-    let stream = claxon::FlacReader::new(reader).unwrap();
-    let streaminfo = stream.streaminfo();
+    let reader = claxon::FlacReader::open(fname).unwrap();
+    let streaminfo = reader.streaminfo();
 
     // Format the streaminfo in the same way that metaflac prints it.
     format!("{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n",
@@ -103,11 +100,7 @@ fn compare_metaflac_streaminfo<P: AsRef<Path>>(fname: P) {
 
 fn compare_metaflac_vorbis_comment<P: AsRef<Path>>(fname: P) {
     let metaflac = run_metaflac_vorbis_comment(&fname);
-
-    // Use a buffered reader, this speeds up the test by 120%.
-    let file = fs::File::open(fname).unwrap();
-    let buf_reader = io::BufReader::new(file);
-    let reader = claxon::FlacReader::new(buf_reader).unwrap();
+    let reader = claxon::FlacReader::open(fname).unwrap();
 
     let mut mf_lines = metaflac.lines();
 
@@ -175,17 +168,15 @@ fn compare_decoded_stream<P: AsRef<Path>>(fname: P) {
     // we read with Hound) to how Claxon decodes it, sample by sample.
     let mut ref_wav_reader = hound::WavReader::new(cursor).unwrap();
 
-    let try_file = fs::File::open(fname).unwrap();
-    let try_buf_reader = io::BufReader::new(try_file);
-    let mut try_flac_reader = claxon::FlacReader::new(try_buf_reader).unwrap();
+    let mut flac_reader = claxon::FlacReader::open(fname).unwrap();
 
     // The streaminfo test will ensure that things like bit depth and
     // sample rate match, only the actual samples are compared here.
     let mut ref_samples = ref_wav_reader.samples::<i32>();
 
-    let samples = try_flac_reader.streaminfo().samples.unwrap();
-    let n_channels = try_flac_reader.streaminfo().channels;
-    let mut blocks = try_flac_reader.blocks();
+    let samples = flac_reader.streaminfo().samples.unwrap();
+    let n_channels = flac_reader.streaminfo().channels;
+    let mut blocks = flac_reader.blocks();
     let mut sample = 0u64;
     let mut b = 0u64;
     let mut buffer = Vec::new();
@@ -290,9 +281,7 @@ fn verify_vorbis_comment_p4() {
 
 #[test]
 fn test_flac_reader_get_tag_is_case_insensitive() {
-    let file = fs::File::open("testsamples/p4.flac").unwrap();
-    let buf_reader = io::BufReader::new(file);
-    let flac_reader = claxon::FlacReader::new(buf_reader).unwrap();
+    let flac_reader = claxon::FlacReader::open("testsamples/p4.flac").unwrap();
 
     // This file contains the following metadata:
     // METADATA block #2
@@ -323,9 +312,7 @@ fn test_flac_reader_get_tag_is_case_insensitive() {
 
 #[test]
 fn test_flac_reader_get_tag_returns_all_matches() {
-    let file = fs::File::open("testsamples/repeated_vorbis_comment.flac").unwrap();
-    let buf_reader = io::BufReader::new(file);
-    let flac_reader = claxon::FlacReader::new(buf_reader).unwrap();
+    let flac_reader = claxon::FlacReader::open("testsamples/repeated_vorbis_comment.flac").unwrap();
 
     // This file contains two FOO tags, `FOO=bar` and `FOO=baz`.
 
