@@ -146,7 +146,7 @@ fn compare_metaflac_vorbis_comment<P: AsRef<Path>>(fname: P) {
 
             let &(ref name, ref value_lines) = tags.next().unwrap();
             let mut value_lines_iter = value_lines.lines();
-            let value = value_lines_iter.next().unwrap();
+            let value = value_lines_iter.next().unwrap_or("");
 
             assert_eq!(name, mf_name);
             assert_eq!(value, mf_value);
