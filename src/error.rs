@@ -7,7 +7,6 @@
 
 //! The `error` module defines the error and result types.
 
-use std;
 use std::error;
 use std::fmt;
 use std::io;
@@ -100,17 +99,9 @@ impl From<io::Error> for Error {
 
 impl From<string::FromUtf8Error> for Error {
     fn from(_: string::FromUtf8Error) -> Error {
-        // Vendor strings are the only place where UTF-8 is parsed
-        // into a String.
-        Error::FormatError("Vorbis comment vendor string is not valid UTF-8")
-    }
-}
-
-impl From<std::str::Utf8Error> for Error {
-    fn from(_: std::str::Utf8Error) -> Error {
-        // Vorbis comment values are the only place where UTF-8 is parsed
-        // into a str.
-        Error::FormatError("Vorbis comment value is not valid UTF-8")
+        // Vendor strings and Vorbis cmments are the only place where UTF-8 is
+        // parsed into a String.
+        Error::FormatError("Vorbis comment or vendor string is not valid UTF-8")
     }
 }
 

@@ -19,7 +19,7 @@ fn main() {
 
         // We can use `tags()` to iterate over all tags. When looking for a
         // specific tag, `get_tag()` may be useful instead.
-        for &(ref name, ref value) in reader.tags() {
+        for (name, value) in reader.tags() {
             // Print comments in a format similar to what
             // `metaflac --block-type=VORBIS_COMMENT --list` would print.
             println!("{}: {}={}", fname, name, value);

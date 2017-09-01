@@ -10,6 +10,7 @@
 use error::{Error, Result, fmt_err};
 use input::ReadBytes;
 use std::str;
+use std::slice;
 
 #[derive(Clone, Copy)]
 struct MetadataBlockHeader {
@@ -71,7 +72,12 @@ pub struct VorbisComment {
     /// or `Lavf57.25.100`.
     pub vendor: String,
 
-    /// Name-value pairs of Vorbis comments, such as `("ARTIST", "Queen")`.
+    /// Name-value pairs of Vorbis comments, such as `ARTIST=Queen`.
+    ///
+    /// This struct stores a raw low-level representation of tags. Use
+    /// `FlacReader::tags()` for a friendlier iterator. The tuple consists of
+    /// the string in `"NAME=value"` format, and the index of the `'='` into
+    /// that string.
     ///
     /// The name is supposed to be interpreted case-insensitively, and is
     /// guaranteed to consist of ASCII characters. Claxon does not normalize
@@ -82,7 +88,7 @@ pub struct VorbisComment {
     /// be present on a collaboration track.
     ///
     /// See https://www.xiph.org/vorbis/doc/v-comment.html for more details.
-    pub comments: Vec<(String, String)>,
+    pub comments: Vec<(String, usize)>,
 }
 
 /// A metadata about the flac stream.
@@ -113,12 +119,42 @@ pub enum MetadataBlock {
     Reserved,
 }
 
+/// Iterates over Vorbis comments (FLAC tags) in a FLAC stream.
+///
+/// See `FlacReader::tags()` for more details.
+pub struct Tags<'a> {
+    /// The underlying iterator.
+    iter: slice::Iter<'a, (String, usize)>,
+}
+
+impl<'a> Tags<'a> {
+    /// Returns a new `Tags` iterator.
+    pub fn new(comments: &'a [(String, usize)]) -> Tags<'a> {
+        Tags {
+            iter: comments.iter(),
+        }
+    }
+}
+
+impl<'a> Iterator for Tags<'a> {
+    type Item = (&'a str, &'a str);
+
+    #[inline]
+    fn next(&mut self) -> Option<(&'a str, &'a str)> {
+        return self.iter.next().map(|&(ref comment, sep_idx)| {
+            (&comment[..sep_idx], &comment[sep_idx+1..])
+        })
+    }
+}
+
+// TODO: `Tags` could implement `ExactSizeIterator`.
+
 /// Iterates over Vorbis comments looking for a specific one; returns its values as `&str`.
 ///
 /// See `FlacReader::get_tag()` for more details.
 pub struct GetTag<'a> {
     /// The Vorbis comments to search through.
-    vorbis_comments: &'a [(String, String)],
+    vorbis_comments: &'a [(String, usize)],
     /// The tag to look for.
     needle: &'a str,
     /// The index of the (name, value) pair that should be inspected next.
@@ -127,7 +163,7 @@ pub struct GetTag<'a> {
 
 impl<'a> GetTag<'a> {
     /// Returns a new `GetTag` iterator.
-    pub fn new(vorbis_comments: &'a [(String, String)], needle: &'a str) -> GetTag<'a> {
+    pub fn new(vorbis_comments: &'a [(String, usize)], needle: &'a str) -> GetTag<'a> {
         GetTag {
             vorbis_comments: vorbis_comments,
             needle: needle,
@@ -143,11 +179,11 @@ impl<'a> Iterator for GetTag<'a> {
         use std::ascii::AsciiExt;
 
         while self.index < self.vorbis_comments.len() {
-            let pair = &self.vorbis_comments[self.index];
+            let (ref comment, sep_idx) = self.vorbis_comments[self.index];
             self.index += 1;
 
-            if pair.0.eq_ignore_ascii_case(self.needle) {
-                return Some(&pair.1)
+            if comment[..sep_idx].eq_ignore_ascii_case(self.needle) {
+                return Some(&comment[sep_idx + 1..])
             }
         }
 
@@ -406,7 +442,6 @@ fn read_vorbis_comment_block<R: ReadBytes>(input: &mut R, length: u32) -> Result
         }
 
         // For the same reason as above, setting the length is safe here.
-        // TODO: Might recycle this buffer for a small speedup.
         let mut comment_bytes = Vec::with_capacity(comment_len as usize);
         unsafe { comment_bytes.set_len(comment_len as usize); }
         try!(input.read_into(&mut comment_bytes));
@@ -414,22 +449,20 @@ fn read_vorbis_comment_block<R: ReadBytes>(input: &mut R, length: u32) -> Result
         bytes_left -= comment_len;
 
         if let Some(sep_index) = comment_bytes.iter().position(|&x| x == b'=') {
-            let name_bytes = &comment_bytes[..sep_index];
-            let value_bytes = &comment_bytes[sep_index + 1..];
+            {
+                let name_bytes = &comment_bytes[..sep_index];
 
-            // According to the Vorbis spec, the field name may consist of ascii
-            // bytes 0x20 through 0x7d, 0x3d (`=`) excluded. Verifying this has
-            // the advantage that if the check passes, the result is valid
-            // UTF-8, so the conversion to string will not fail.
-            if name_bytes.iter().any(|&x| x < 0x20 || x > 0x7d) {
-                return fmt_err("Vorbis comment field name contains invalid byte")
+                // According to the Vorbis spec, the field name may consist of ascii
+                // bytes 0x20 through 0x7d, 0x3d (`=`) excluded. Verifying this has
+                // the advantage that if the check passes, the result is valid
+                // UTF-8, so the conversion to string will not fail.
+                if name_bytes.iter().any(|&x| x < 0x20 || x > 0x7d) {
+                    return fmt_err("Vorbis comment field name contains invalid byte")
+                }
             }
-            // Unchecked is safe here; we checked for valid ascii above, and all
-            // ascii text is valid UTF-8.
-            let name = unsafe { str::from_utf8_unchecked(name_bytes) };
-            let value = try!(str::from_utf8(value_bytes));
 
-            comments.push((name.to_string(), value.to_string()));
+            let comment = try!(String::from_utf8(comment_bytes));
+            comments.push((comment, sep_index));
         } else {
             return fmt_err("Vorbis comment does not contain '='")
         }

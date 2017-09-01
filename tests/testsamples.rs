@@ -126,7 +126,7 @@ fn compare_metaflac_vorbis_comment<P: AsRef<Path>>(fname: P) {
         }
     }
 
-    let mut tags = reader.tags().iter();
+    let mut tags = reader.tags();
 
     // Loop through all of the comments.
     while let Some(line) = mf_lines.next() {
@@ -140,7 +140,7 @@ fn compare_metaflac_vorbis_comment<P: AsRef<Path>>(fname: P) {
             let mf_name = &mf_pair[..sep_index];
             let mf_value = &mf_pair[sep_index + 1..];
 
-            let &(ref name, ref value_lines) = tags.next().unwrap();
+            let (name, value_lines) = tags.next().unwrap();
             let mut value_lines_iter = value_lines.lines();
             let value = value_lines_iter.next().unwrap_or("");
 

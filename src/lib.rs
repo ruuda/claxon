@@ -220,11 +220,10 @@ impl<R: io::Read> FlacReader<R> {
     /// be present on a collaboration track.
     ///
     /// See https://www.xiph.org/vorbis/doc/v-comment.html for more details.
-    // TODO: Return Iterator<Item=(&str, &str)> instead?
-    pub fn tags(&self) -> &[(String, String)] {
+    pub fn tags<'a>(&'a self) -> metadata::Tags<'a> {
         match self.vorbis_comment.as_ref() {
-            Some(vc) => &vc.comments[..],
-            None => &[],
+            Some(vc) => metadata::Tags::new(&vc.comments[..]),
+            None => metadata::Tags::new(&[]),
         }
     }
 
@@ -241,7 +240,10 @@ impl<R: io::Read> FlacReader<R> {
     /// See also `tags()` for access to the raw tags.
     /// See https://www.xiph.org/vorbis/doc/v-comment.html for more details.
     pub fn get_tag<'a>(&'a self, tag_name: &'a str) -> metadata::GetTag<'a> {
-        metadata::GetTag::new(self.tags(), tag_name)
+        match self.vorbis_comment.as_ref() {
+            Some(vc) => metadata::GetTag::new(&vc.comments[..], tag_name),
+            None => metadata::GetTag::new(&[], tag_name),
+        }
     }
 
     /// Returns an iterator that decodes a single frame on every iteration.
