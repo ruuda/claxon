@@ -58,7 +58,9 @@ fn main() {
     let p10 = file_times_us[10 * file_times_us.len() / 100];
     let p50 = file_times_us[50 * file_times_us.len() / 100];
     let p90 = file_times_us[90 * file_times_us.len() / 100];
-    let p10t = bytes_per_sec[10 * bytes_per_sec.len() / 100];
+    let mean = file_times_us.iter().sum::<f64>() / (file_times_us.len() as f64);
+    let p10_mibs = bytes_per_sec[10 * bytes_per_sec.len() / 100] / (1024.0 * 1024.0);
 
-    println!("{:>6.2} {:>6.2} {:>6.2} {:>6.2}", p10, p50, p90, p10t / 1024.0 / 1024.0);
+    // Output numbers compatible with tools/compare_benches.r.
+    println!("{:>6.2} {:>6.2} {:>6.2} {:>6.2} {:>6.2}", p10, p50, p90, mean, p10_mibs);
 }
