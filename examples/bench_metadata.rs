@@ -31,24 +31,28 @@ fn main() {
         let path = entry.path();
         if path.is_file() && path.extension() == Some(OsStr::new("flac")) {
             let epoch = PreciseTime::now();
+            let mut bytes = 0;
 
-            let reader = claxon::FlacReader::open(path).unwrap();
+            // Read the file multiple times to amortize the walkdir cost.
+            for _ in 0..10 {
+                let reader = claxon::FlacReader::open(path).unwrap();
 
-            // Note that these are not optimized away even though the results
-            // are not used, because the expectation may fail.
-            reader.get_tag("DATE").next().expect("DATE");
-            reader.get_tag("ORIGINALDATE").next().expect("ORIGINALDATE");
-            reader.get_tag("TITLE").next().expect("TITLE");
-            reader.get_tag("ALBUM").next().expect("ALBUM");
-            reader.get_tag("ALBUMARTIST").next().expect("ALBUMARTIST");
-            reader.get_tag("MUSICBRAINZ_TRACKID").next().expect("MUSICBRAINZ_TRACKID");
-            reader.get_tag("MUSICBRAINZ_ALBUMID").next().expect("MUSICBRAINZ_ALBUMID");
-            reader.get_tag("MUSICBRAINZ_ARTISTID").next().expect("MUSICBRAINZ_ARTISTID");
+                // Note that these are not optimized away even though the results
+                // are not used, because the expectation may fail.
+                reader.get_tag("DATE").next().expect("DATE");
+                reader.get_tag("ORIGINALDATE").next().expect("ORIGINALDATE");
+                reader.get_tag("TITLE").next().expect("TITLE");
+                reader.get_tag("ALBUM").next().expect("ALBUM");
+                reader.get_tag("ALBUMARTIST").next().expect("ALBUMARTIST");
+                reader.get_tag("MUSICBRAINZ_TRACKID").next().expect("MUSICBRAINZ_TRACKID");
+                reader.get_tag("MUSICBRAINZ_ALBUMID").next().expect("MUSICBRAINZ_ALBUMID");
+                reader.get_tag("MUSICBRAINZ_ARTISTID").next().expect("MUSICBRAINZ_ARTISTID");
+                bytes += reader.into_inner().seek(SeekFrom::Current(0)).unwrap();
+            }
 
-            let bytes = reader.into_inner().seek(SeekFrom::Current(0)).unwrap();
             let duration_ns = epoch.to(PreciseTime::now()).num_nanoseconds().unwrap();
-            file_times_us.push(duration_ns as f64 / 1000.0);
-            bytes_per_sec.push(bytes as f64 / (duration_ns as f64 / 1.0e9));
+            file_times_us.push(duration_ns as f64 / 1000.0 / 10.0);
+            bytes_per_sec.push(bytes as f64 / (duration_ns as f64 / 1.0e9) / 10.0);
         }
     }
 
