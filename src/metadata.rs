@@ -155,6 +155,7 @@ impl<'a> Iterator for GetTag<'a> {
     }
 }
 
+#[inline]
 fn read_metadata_block_header<R: ReadBytes>(input: &mut R) -> Result<MetadataBlockHeader> {
     let byte = try!(input.read_u8());
 
@@ -184,6 +185,7 @@ fn read_metadata_block_header<R: ReadBytes>(input: &mut R) -> Result<MetadataBlo
 /// used to decode a single metadata block. For instance, the Ogg format embeds
 /// metadata blocks including their header verbatim in packets. This function
 /// can be used to decode that raw data.
+#[inline]
 pub fn read_metadata_block_with_header<R: ReadBytes>(input: &mut R)
                                                      -> Result<MetadataBlock> {
   let header = try!(read_metadata_block_header(input));
@@ -200,6 +202,7 @@ pub fn read_metadata_block_with_header<R: ReadBytes>(input: &mut R)
 /// used to decode a single metadata block. For instance, the MP4 format sports
 /// a “FLAC Specific Box” which contains the block type and the raw data. This
 /// function can be used to decode that raw data.
+#[inline]
 pub fn read_metadata_block<R: ReadBytes>(input: &mut R,
                                          block_type: u8,
                                          length: u32)
@@ -503,6 +506,7 @@ impl<R: ReadBytes> MetadataBlockReader<R> {
         }
     }
 
+    #[inline]
     fn read_next(&mut self) -> MetadataBlockResult {
         let header = try!(read_metadata_block_header(&mut self.input));
         let block = try!(read_metadata_block(&mut self.input, header.block_type, header.length));
@@ -514,6 +518,7 @@ impl<R: ReadBytes> MetadataBlockReader<R> {
 impl<R: ReadBytes> Iterator for MetadataBlockReader<R> {
     type Item = MetadataBlockResult;
 
+    #[inline]
     fn next(&mut self) -> Option<MetadataBlockResult> {
         if self.done {
             None
@@ -530,6 +535,7 @@ impl<R: ReadBytes> Iterator for MetadataBlockReader<R> {
         }
     }
 
+    #[inline]
     fn size_hint(&self) -> (usize, Option<usize>) {
         // When done, there will be no more blocks,
         // when not done, there will be at least one more.
