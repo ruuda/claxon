@@ -129,6 +129,7 @@ pub struct Tags<'a> {
 
 impl<'a> Tags<'a> {
     /// Returns a new `Tags` iterator.
+    #[inline]
     pub fn new(comments: &'a [(String, usize)]) -> Tags<'a> {
         Tags {
             iter: comments.iter(),
@@ -163,6 +164,7 @@ pub struct GetTag<'a> {
 
 impl<'a> GetTag<'a> {
     /// Returns a new `GetTag` iterator.
+    #[inline]
     pub fn new(vorbis_comments: &'a [(String, usize)], needle: &'a str) -> GetTag<'a> {
         GetTag {
             vorbis_comments: vorbis_comments,
@@ -175,6 +177,7 @@ impl<'a> GetTag<'a> {
 impl<'a> Iterator for GetTag<'a> {
     type Item = &'a str;
 
+    #[inline]
     fn next(&mut self) -> Option<&'a str> {
         use std::ascii::AsciiExt;
 
