@@ -1,6 +1,5 @@
 # Cargo files
 /target
-/Cargo.lock
 
 # Test files
 /testsamples/*.flac
