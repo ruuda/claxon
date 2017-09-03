@@ -39,14 +39,25 @@ fn main() {
 
                 // Note that these are not optimized away even though the results
                 // are not used, because the expectation may fail.
-                reader.get_tag("DATE").next().expect("DATE");
-                reader.get_tag("ORIGINALDATE").next().expect("ORIGINALDATE");
-                reader.get_tag("TITLE").next().expect("TITLE");
-                reader.get_tag("ALBUM").next().expect("ALBUM");
-                reader.get_tag("ALBUMARTIST").next().expect("ALBUMARTIST");
-                reader.get_tag("MUSICBRAINZ_TRACKID").next().expect("MUSICBRAINZ_TRACKID");
-                reader.get_tag("MUSICBRAINZ_ALBUMID").next().expect("MUSICBRAINZ_ALBUMID");
-                reader.get_tag("MUSICBRAINZ_ARTISTID").next().expect("MUSICBRAINZ_ARTISTID");
+                reader.get_tag("date").next().expect("date");
+                reader.get_tag("originaldate").next().expect("originaldate");
+                reader.get_tag("tracknumber").next().expect("tracknumber");
+                reader.get_tag("tracktotal").next().expect("tracktotal");
+                reader.get_tag("discnumber").next().expect("discnumber");
+                reader.get_tag("disctotal").next().expect("disctotal");
+
+                reader.get_tag("title").next().expect("title");
+                reader.get_tag("album").next().expect("album");
+                reader.get_tag("artist").next().expect("artist");
+                reader.get_tag("albumartist").next().expect("albumartist");
+                reader.get_tag("artistsort").next().expect("artistsort");
+                reader.get_tag("albumartistsort").next().expect("albumartistsort");
+
+                reader.get_tag("musicbrainz_trackid").next().expect("musicbrainz_trackid");
+                reader.get_tag("musicbrainz_albumid").next().expect("musicbrainz_albumid");
+                reader.get_tag("musicbrainz_artistid").next().expect("musicbrainz_artistid");
+                reader.get_tag("musicbrainz_albumartistid").next().expect("musicbrainz_albumartistid");
+
                 bytes += reader.into_inner().seek(SeekFrom::Current(0)).unwrap();
             }
 
