@@ -23,6 +23,7 @@ fn main() {
 
     let wd = walkdir::WalkDir::new("testsamples/extra")
         .follow_links(true)
+        .max_open(1024) // Prefer more file descriptors over allocating memory.
         .into_iter()
         .filter_map(|e| e.ok())
         .take(1024);
