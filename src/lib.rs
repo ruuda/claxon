@@ -136,8 +136,13 @@ fn read_stream_header<R: ReadBytes>(input: &mut R) -> Result<()> {
 impl<R: io::Read> FlacReader<R> {
     /// Attempts to create a reader that reads the FLAC format.
     ///
-    /// The header and metadata blocks are read immediately. Audio frames will
-    /// be read on demand.
+    /// The header and metadata blocks are read immediately. Audio frames
+    /// will be read on demand.
+    ///
+    /// Claxon rejects files that claim to contain excessively large metadata
+    /// blocks, to protect against denial of service attacks where a
+    /// small damaged or malicous file could cause gigabytes of memory
+    /// to be allocated. `Error::Unsupported` is returned in that case.
     pub fn new(reader: R) -> Result<FlacReader<R>> {
         let mut buf_reader = BufferedReader::new(reader);
 
