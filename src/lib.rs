@@ -263,6 +263,14 @@ impl<R: io::Read> FlacReader<R> {
 
     /// Returns an iterator over all samples.
     ///
+    /// The channel data is is interleaved. The iterator is streaming. That is,
+    /// if you call this method once, read a few samples, and call this method
+    /// again, the second iterator will not start again from the beginning of
+    /// the file. It will continue somewhere after where the first iterator
+    /// stopped, and it might skip some samples. (This is because FLAC divides
+    /// a stream into blocks, which have to be decoded entirely. If you drop the
+    /// iterator, you lose the unread samples in that block.)
+    ///
     /// This is a user-friendly interface that trades performance for ease of
     /// use. If performance is an issue, consider using `blocks()` instead.
     ///
@@ -273,14 +281,6 @@ impl<R: io::Read> FlacReader<R> {
     /// block can never fail, but a match on every sample is required
     /// nonetheless. For more control over when decoding happens, and less error
     /// handling overhead, use `blocks()`.
-    ///
-    /// The channel data is is interleaved. The iterator is streaming. That is,
-    /// if you call this method once, read a few samples, and call this method
-    /// again, the second iterator will not start again from the beginning of
-    /// the file. It will continue somewhere after where the first iterator
-    /// stopped, and it might skip some samples. (This is because FLAC divides
-    /// a stream into blocks, which have to be decoded entirely. If you drop the
-    /// iterator, you lose the unread samples in that block.)
     pub fn samples<'r>(&'r mut self) -> FlacSamples<&'r mut BufferedReader<R>> {
         FlacSamples {
             frame_reader: frame::FrameReader::new(&mut self.input),
