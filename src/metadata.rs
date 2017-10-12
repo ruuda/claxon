@@ -24,9 +24,17 @@ struct MetadataBlockHeader {
 pub struct StreamInfo {
     // TODO: "size" would better be called "duration" for clarity.
 
-    /// The minimum block size (in samples) used in the stream.
+    /// The minimum block size (in inter-channel samples) used in the stream.
+    ///
+    /// This number is independent of the number of channels. Divide by the
+    /// sample rate to get the minimum duration in seconds.
     pub min_block_size: u16,
-    /// The maximum block size (in samples) used in the stream.
+    /// The maximum block size (in inter-channel samples) used in the stream.
+    ///
+    /// This number is independent of the number of channels. Divide by the
+    /// sample rate to get the maximum duration in seconds. To avoid allocations
+    /// during decoding, a buffer of this size times the number of channels can
+    /// be allocated up front and passed into `FrameReader::read_next_or_eof()`.
     pub max_block_size: u16,
     /// The minimum frame size (in bytes) used in the stream.
     pub min_frame_size: Option<u32>,
