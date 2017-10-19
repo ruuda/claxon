@@ -6,7 +6,7 @@ Unreleased
 
 **Breaking changes**:
 
-- The unsued `Error::TooWide` variant has been removed.
+- The unused `Error::TooWide` variant has been removed.
 - Files with metadata blocks larger than 10 MiB are now rejected to protect
   against memory allocation denial of service attacks.
 
