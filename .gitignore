@@ -1,6 +1,5 @@
 # Cargo files
 /target
-/Cargo.lock
 
 # Test files
 /testsamples/*.flac
@@ -11,7 +10,10 @@
 /testsamples/extra/*.wav
 
 # Except for small test samples that are included verbatim
+!/testsamples/large_vendor_string.flac
+!/testsamples/large_vorbis_comment_block.flac
 !/testsamples/pop.flac
+!/testsamples/repeated_vorbis_comment.flac
 !/testsamples/short.flac
 !/testsamples/wasted_bits.flac
 

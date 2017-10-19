@@ -11,6 +11,7 @@ use std::error;
 use std::fmt;
 use std::io;
 use std::result;
+use std::string;
 
 /// An error that prevents succesful decoding of the FLAC stream.
 #[derive(Debug)]
@@ -20,10 +21,6 @@ pub enum Error {
 
     /// An ill-formed FLAC stream was encountered.
     FormatError(&'static str),
-
-    /// The audio stream has more bits per sample than the provided sample
-    /// buffer to decode into.
-    TooWide,
 
     /// A currently unsupported feature of the FLAC format was encountered.
     ///
@@ -36,14 +33,12 @@ pub enum Error {
 
 impl PartialEq for Error {
     fn eq(&self, other: &Error) -> bool {
-        use error::Error::{IoError, FormatError, TooWide, Unsupported};
+        use error::Error::{IoError, FormatError, Unsupported};
         match (self, other) {
             (&FormatError(r1), &FormatError(r2)) => r1 == r2,
-            (&TooWide, &TooWide) => true,
             (&Unsupported(f1), &Unsupported(f2)) => f1 == f2,
             (&IoError(_), _) => false,
             (&FormatError(_), _) => false,
-            (&TooWide, _) => false,
             (&Unsupported(_), _) => false,
         }
     }
@@ -56,10 +51,6 @@ impl fmt::Display for Error {
             Error::FormatError(reason) => {
                 try!(formatter.write_str("Ill-formed FLAC stream: "));
                 formatter.write_str(reason)
-            }
-            Error::TooWide => {
-                formatter.write_str("The audio stream has more bits per sample than the provided \
-                                     sample buffer to decode into.")
             }
             Error::Unsupported(feature) => {
                 try!(formatter.write_str("A currently unsupported feature of the FLAC format \
@@ -75,7 +66,6 @@ impl error::Error for Error {
         match *self {
             Error::IoError(ref err) => err.description(),
             Error::FormatError(reason) => reason,
-            Error::TooWide => "the sample has more bits than the destination type",
             Error::Unsupported(_) => "unsupported feature",
         }
     }
@@ -84,7 +74,6 @@ impl error::Error for Error {
         match *self {
             Error::IoError(ref err) => Some(err),
             Error::FormatError(_) => None,
-            Error::TooWide => None,
             Error::Unsupported(_) => None,
         }
     }
@@ -93,6 +82,14 @@ impl error::Error for Error {
 impl From<io::Error> for Error {
     fn from(err: io::Error) -> Error {
         Error::IoError(err)
+    }
+}
+
+impl From<string::FromUtf8Error> for Error {
+    fn from(_: string::FromUtf8Error) -> Error {
+        // Vendor strings and Vorbis cmments are the only place where UTF-8 is
+        // parsed into a String.
+        Error::FormatError("Vorbis comment or vendor string is not valid UTF-8")
     }
 }
 

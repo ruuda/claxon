@@ -13,7 +13,7 @@ use std::fs;
 use std::io;
 use std::path::Path;
 
-fn run_metaflac<P: AsRef<Path>>(fname: P) -> String {
+fn run_metaflac_streaminfo<P: AsRef<Path>>(fname: P) -> String {
     use std::process::Command;
 
     // Run metaflac on the specified file and print all streaminfo data.
@@ -27,6 +27,19 @@ fn run_metaflac<P: AsRef<Path>>(fname: P) -> String {
         .arg("--show-bps")
         .arg("--show-total-samples")
         .arg("--show-md5sum")
+        .arg(fname.as_ref().to_str().expect("unsupported filename"))
+        .output()
+        .expect("failed to run metaflac");
+    String::from_utf8(output.stdout).expect("metaflac wrote invalid UTF-8")
+}
+
+fn run_metaflac_vorbis_comment<P: AsRef<Path>>(fname: P) -> String {
+    use std::process::Command;
+
+    // Run metaflac on the specified file and print all Vorbis comment data.
+    let output = Command::new("metaflac")
+        .arg("--block-type=VORBIS_COMMENT")
+        .arg("--list")
         .arg(fname.as_ref().to_str().expect("unsupported filename"))
         .output()
         .expect("failed to run metaflac");
@@ -55,11 +68,8 @@ fn print_hex(seq: &[u8]) -> String {
 }
 
 fn read_streaminfo<P: AsRef<Path>>(fname: P) -> String {
-    // Use a buffered reader, this speeds up the test by 120%.
-    let file = fs::File::open(fname).unwrap();
-    let reader = io::BufReader::new(file);
-    let stream = claxon::FlacReader::new(reader).unwrap();
-    let streaminfo = stream.streaminfo();
+    let reader = claxon::FlacReader::open(fname).unwrap();
+    let streaminfo = reader.streaminfo();
 
     // Format the streaminfo in the same way that metaflac prints it.
     format!("{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n",
@@ -74,8 +84,8 @@ fn read_streaminfo<P: AsRef<Path>>(fname: P) -> String {
             print_hex(&streaminfo.md5sum)) // TODO implement LowerHex for &[u8] and submit a PR.
 }
 
-fn compare_metaflac<P: AsRef<Path>>(fname: P) {
-    let metaflac = run_metaflac(&fname);
+fn compare_metaflac_streaminfo<P: AsRef<Path>>(fname: P) {
+    let metaflac = run_metaflac_streaminfo(&fname);
     let streaminfo = read_streaminfo(&fname);
     let mut mf_lines = metaflac.lines();
     let mut si_lines = streaminfo.lines();
@@ -88,6 +98,68 @@ fn compare_metaflac<P: AsRef<Path>>(fname: P) {
     }
 }
 
+fn compare_metaflac_vorbis_comment<P: AsRef<Path>>(fname: P) {
+    let metaflac = run_metaflac_vorbis_comment(&fname);
+    let reader = claxon::FlacReader::open(fname).unwrap();
+
+    let mut mf_lines = metaflac.lines();
+
+    // Search for the vendor string in the metaflac output.
+    while let Some(line) = mf_lines.next() {
+        let prefix = "  vendor string: ";
+        if line.starts_with(prefix) {
+            let mf_vendor_string = &line[prefix.len()..];
+
+            // If the vendor string starts with a null byte, metaflac will not
+            // print it -- my guess is because metaflac is written in C and uses
+            // C-style string manipulation. In that case we skip it.
+            match reader.vendor() {
+                Some(x) if x.starts_with('\0') => {
+                    assert_eq!("", mf_vendor_string);
+                    break
+                }
+                _ => {}
+            }
+
+            assert_eq!(reader.vendor(), Some(mf_vendor_string));
+            break
+        }
+    }
+
+    let mut tags = reader.tags();
+
+    // Loop through all of the comments.
+    while let Some(line) = mf_lines.next() {
+        let prefix = "    comment[";
+        if line.starts_with(prefix) {
+            let mf_line = &line[prefix.len()..];
+            let prefix_sep_index = mf_line.find(' ').unwrap();
+            let mf_pair = &mf_line[prefix_sep_index + 1..];
+
+            let sep_index = mf_pair.find('=').unwrap();
+            let mf_name = &mf_pair[..sep_index];
+            let mf_value = &mf_pair[sep_index + 1..];
+
+            let (name, value_lines) = tags.next().unwrap();
+            let mut value_lines_iter = value_lines.lines();
+            let value = value_lines_iter.next().unwrap_or("");
+
+            assert_eq!(name, mf_name);
+            assert_eq!(value, mf_value);
+
+            // If there are newlines, then we also need to read those as
+            // separate lines from the metaflac untput. This does assume that
+            // the newline count that Claxon read is correct, and because of the
+            // behavior of the `.lines()` iterator this does not accurately
+            // verify carriage returns, but we could not anyway, because
+            // metaflac does not escape them.
+            while let Some(actual_line) = value_lines_iter.next() {
+                assert_eq!(actual_line, mf_lines.next().unwrap());
+            }
+        }
+    }
+}
+
 fn compare_decoded_stream<P: AsRef<Path>>(fname: P) {
     let wav = decode_file(&fname);
     let cursor = io::Cursor::new(wav);
@@ -96,17 +168,15 @@ fn compare_decoded_stream<P: AsRef<Path>>(fname: P) {
     // we read with Hound) to how Claxon decodes it, sample by sample.
     let mut ref_wav_reader = hound::WavReader::new(cursor).unwrap();
 
-    let try_file = fs::File::open(fname).unwrap();
-    let try_buf_reader = io::BufReader::new(try_file);
-    let mut try_flac_reader = claxon::FlacReader::new(try_buf_reader).unwrap();
+    let mut flac_reader = claxon::FlacReader::open(fname).unwrap();
 
     // The streaminfo test will ensure that things like bit depth and
     // sample rate match, only the actual samples are compared here.
     let mut ref_samples = ref_wav_reader.samples::<i32>();
 
-    let samples = try_flac_reader.streaminfo().samples.unwrap();
-    let n_channels = try_flac_reader.streaminfo().channels;
-    let mut blocks = try_flac_reader.blocks();
+    let samples = flac_reader.streaminfo().samples.unwrap();
+    let n_channels = flac_reader.streaminfo().channels;
+    let mut blocks = flac_reader.blocks();
     let mut sample = 0u64;
     let mut b = 0u64;
     let mut buffer = Vec::new();
@@ -146,42 +216,110 @@ fn compare_decoded_stream<P: AsRef<Path>>(fname: P) {
 
 #[test]
 fn verify_streaminfo_p0() {
-    compare_metaflac("testsamples/p0.flac");
+    compare_metaflac_streaminfo("testsamples/p0.flac");
 }
 
 #[test]
 fn verify_streaminfo_p1() {
-    compare_metaflac("testsamples/p1.flac");
+    compare_metaflac_streaminfo("testsamples/p1.flac");
 }
 
 #[test]
 fn verify_streaminfo_p2() {
-    compare_metaflac("testsamples/p2.flac");
+    compare_metaflac_streaminfo("testsamples/p2.flac");
 }
 
 #[test]
 fn verify_streaminfo_p3() {
-    compare_metaflac("testsamples/p3.flac");
+    compare_metaflac_streaminfo("testsamples/p3.flac");
 }
 
 #[test]
 fn verify_streaminfo_p4() {
-    compare_metaflac("testsamples/p4.flac");
+    compare_metaflac_streaminfo("testsamples/p4.flac");
 }
 
 #[test]
 fn verify_streaminfo_pop() {
-    compare_metaflac("testsamples/pop.flac");
+    compare_metaflac_streaminfo("testsamples/pop.flac");
 }
 
 #[test]
 fn verify_streaminfo_short() {
-    compare_metaflac("testsamples/short.flac");
+    compare_metaflac_streaminfo("testsamples/short.flac");
 }
 
 #[test]
 fn verify_streaminfo_wasted_bits() {
-    compare_metaflac("testsamples/wasted_bits.flac");
+    compare_metaflac_streaminfo("testsamples/wasted_bits.flac");
+}
+
+#[test]
+fn verify_vorbis_comment_p0() {
+    compare_metaflac_vorbis_comment("testsamples/p0.flac");
+}
+
+#[test]
+fn verify_vorbis_comment_p1() {
+    compare_metaflac_vorbis_comment("testsamples/p1.flac");
+}
+
+#[test]
+fn verify_vorbis_comment_p2() {
+    compare_metaflac_vorbis_comment("testsamples/p2.flac");
+}
+
+#[test]
+fn verify_vorbis_comment_p3() {
+    compare_metaflac_vorbis_comment("testsamples/p3.flac");
+}
+
+#[test]
+fn verify_vorbis_comment_p4() {
+    compare_metaflac_vorbis_comment("testsamples/p4.flac");
+}
+
+#[test]
+fn test_flac_reader_get_tag_is_case_insensitive() {
+    let flac_reader = claxon::FlacReader::open("testsamples/p4.flac").unwrap();
+
+    // This file contains the following metadata:
+    // METADATA block #2
+    //   type: 4 (VORBIS_COMMENT)
+    //   is last: false
+    //   length: 241
+    //   vendor string: reference libFLAC 1.1.0 20030126
+    //   comments: 5
+    //     comment[0]: REPLAYGAIN_TRACK_PEAK=0.69879150
+    //     comment[1]: REPLAYGAIN_TRACK_GAIN=-4.00 dB
+    //     comment[2]: REPLAYGAIN_ALBUM_PEAK=0.69879150
+    //     comment[3]: REPLAYGAIN_ALBUM_GAIN=-3.68 dB
+    //     comment[4]: Comment=Encoded by FLAC v1.1.1a with FLAC Frontend v1.7.1
+
+    let mut replaygain_upper = flac_reader.get_tag("REPLAYGAIN_TRACK_GAIN");
+    assert_eq!(replaygain_upper.next(), Some("-4.00 dB"));
+    assert_eq!(replaygain_upper.next(), None);
+
+    // The lookup should be case-insensitive.
+    let mut replaygain_lower = flac_reader.get_tag("replaygain_track_gain");
+    assert_eq!(replaygain_lower.next(), Some("-4.00 dB"));
+    assert_eq!(replaygain_lower.next(), None);
+
+    // Non-existing tags should not be found.
+    let mut foobar = flac_reader.get_tag("foobar");
+    assert_eq!(foobar.next(), None);
+}
+
+#[test]
+fn test_flac_reader_get_tag_returns_all_matches() {
+    let flac_reader = claxon::FlacReader::open("testsamples/repeated_vorbis_comment.flac").unwrap();
+
+    // This file contains two FOO tags, `FOO=bar` and `FOO=baz`.
+
+    let mut foo = flac_reader.get_tag("FOO");
+    assert_eq!(foo.next(), Some("bar"));
+    assert_eq!(foo.next(), Some("baz"));
+    assert_eq!(foo.next(), None);
 }
 
 #[test]
@@ -227,6 +365,31 @@ fn verify_decoded_stream_wasted_bits() {
 }
 
 #[test]
+fn verify_limits_on_vendor_string() {
+    // This file claims to have a vendor string which would not fit in the
+    // block.
+    let file = fs::File::open("testsamples/large_vendor_string.flac").unwrap();
+    match claxon::FlacReader::new(file) {
+        Ok(..) => panic!("This file should fail to load"),
+        Err(err) => {
+            assert_eq!(err, claxon::Error::FormatError("vendor string too long"))
+        }
+    }
+}
+
+#[test]
+fn verify_limits_on_vorbis_comment_block() {
+    // This file claims to have a very large Vorbis comment block, which could
+    // make the decoder go OOM.
+    let file = fs::File::open("testsamples/large_vorbis_comment_block.flac").unwrap();
+    match claxon::FlacReader::new(file) {
+        Ok(..) => panic!("This file should fail to load"),
+        Err(claxon::Error::Unsupported(..)) => { }
+        Err(..) => panic!("Expected 'Unsupported' error."),
+    }
+}
+
+#[test]
 fn verify_extra_samples() {
     use std::ffi::OsStr;
 
@@ -246,7 +409,8 @@ fn verify_extra_samples() {
         if path.is_file() && path.extension() == Some(OsStr::new("flac")) {
             print!("    comparing {} ...", path.to_str()
                                                .expect("unsupported filename"));
-            compare_metaflac(&path);
+            compare_metaflac_streaminfo(&path);
+            compare_metaflac_vorbis_comment(&path);
             compare_decoded_stream(&path);
             println!(" ok");
         }

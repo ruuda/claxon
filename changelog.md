@@ -1,6 +1,22 @@
 Changelog
 =========
 
+Unreleased
+----------
+
+**Breaking changes**:
+
+- The unsued `Error::TooWide` variant has been removed.
+- Files with metadata blocks larger than 10 MiB are now rejected to protect
+  against memory allocation denial of service attacks.
+
+Release highlights:
+
+- Functionality for reading FLAC embedded in an ogg or mp4 container has been
+  added, together with new examples.
+- Support for reading metadata (Vorbis comments, also known as FLAC tags) has
+  been added.
+
 0.3.1
 -----
 

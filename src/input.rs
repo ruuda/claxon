@@ -106,6 +106,15 @@ pub trait ReadBytes {
         let b3 = try!(self.read_u8()) as u32;
         Ok(b0 << 24 | b1 << 16 | b2 << 8 | b3)
     }
+
+    /// Reads four bytes and interprets them as a little-endian 32-bit unsigned integer.
+    fn read_le_u32(&mut self) -> io::Result<u32> {
+        let b0 = try!(self.read_u8()) as u32;
+        let b1 = try!(self.read_u8()) as u32;
+        let b2 = try!(self.read_u8()) as u32;
+        let b3 = try!(self.read_u8()) as u32;
+        Ok(b3 << 24 | b2 << 16 | b1 << 8 | b0)
+    }
 }
 
 impl<R: io::Read> ReadBytes for BufferedReader<R>
@@ -354,6 +363,22 @@ fn verify_read_be_u32_cursor() {
     assert_eq!(cursor.read_be_u32().ok(), Some(2));
     assert_eq!(cursor.read_be_u32().ok(), Some(2_147_614_697));
     assert!(cursor.read_be_u32().is_err());
+}
+
+#[test]
+fn verify_read_le_u32_buffered_reader() {
+    let mut reader = BufferedReader::new(io::Cursor::new(vec![2u8, 0, 0, 0, 0xe9, 0xff, 0x01, 0x80, 0]));
+    assert_eq!(reader.read_le_u32().ok(), Some(2));
+    assert_eq!(reader.read_le_u32().ok(), Some(2_147_614_697));
+    assert!(reader.read_le_u32().is_err());
+}
+
+#[test]
+fn verify_read_le_u32_cursor() {
+    let mut reader = io::Cursor::new(vec![2u8, 0, 0, 0, 0xe9, 0xff, 0x01, 0x80, 0]);
+    assert_eq!(reader.read_le_u32().ok(), Some(2));
+    assert_eq!(reader.read_le_u32().ok(), Some(2_147_614_697));
+    assert!(reader.read_le_u32().is_err());
 }
 
 /// Left shift that does not panic when shifting by the integer width.

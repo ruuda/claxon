@@ -53,6 +53,16 @@
 //! # }
 //! ```
 //!
+//! Retrieving the artist metadata:
+//!
+//! ```
+//! # use claxon;
+//! let reader = claxon::FlacReader::open("testsamples/pop.flac").unwrap();
+//! for artist in reader.get_tag("ARTIST") {
+//!     println!("{}", artist);
+//! }
+//! ```
+//!
 //! For more examples, see the [examples](https://github.com/ruuda/claxon/tree/master/examples)
 //! directory in the crate.
 
@@ -65,7 +75,7 @@ use std::path;
 use error::fmt_err;
 use frame::FrameReader;
 use input::{BufferedReader, ReadBytes};
-use metadata::{MetadataBlock, MetadataBlockReader, StreamInfo};
+use metadata::{MetadataBlock, MetadataBlockReader, StreamInfo, VorbisComment};
 
 mod crc;
 mod error;
@@ -82,6 +92,7 @@ pub use frame::Block;
 /// TODO: Add an example.
 pub struct FlacReader<R: io::Read> {
     streaminfo: StreamInfo,
+    vorbis_comment: Option<VorbisComment>,
     #[allow(dead_code)] // TODO: Expose metadata nicely.
     metadata_blocks: Vec<MetadataBlock>,
     input: BufferedReader<R>,
@@ -125,8 +136,13 @@ fn read_stream_header<R: ReadBytes>(input: &mut R) -> Result<()> {
 impl<R: io::Read> FlacReader<R> {
     /// Attempts to create a reader that reads the FLAC format.
     ///
-    /// The header and metadata blocks are read immediately. Audio frames will
-    /// be read on demand.
+    /// The header and metadata blocks are read immediately. Audio frames
+    /// will be read on demand.
+    ///
+    /// Claxon rejects files that claim to contain excessively large metadata
+    /// blocks, to protect against denial of service attacks where a
+    /// small damaged or malicous file could cause gigabytes of memory
+    /// to be allocated. `Error::Unsupported` is returned in that case.
     pub fn new(reader: R) -> Result<FlacReader<R>> {
         let mut buf_reader = BufferedReader::new(reader);
 
@@ -135,7 +151,7 @@ impl<R: io::Read> FlacReader<R> {
 
         // Start a new scope, because the input reader must be available again
         // for the frame reader next.
-        let (streaminfo, metadata_blocks) = {
+        let (streaminfo, vorbis_comment, metadata_blocks) = {
             // Next are one or more metadata blocks. The flac specification
             // dictates that the streaminfo block is the first block. The metadata
             // block reader will yield at least one element, so the unwrap is safe.
@@ -146,21 +162,36 @@ impl<R: io::Read> FlacReader<R> {
                 _ => return fmt_err("streaminfo block missing"),
             };
 
+            let mut vorbis_comment = None;
+
             // There might be more metadata blocks, read and store them.
             let mut metadata_blocks = Vec::new();
             for block_result in metadata_iter {
-                match block_result {
-                    Err(error) => return Err(error),
-                    Ok(block) => metadata_blocks.push(block),
+                match try!(block_result) {
+                    MetadataBlock::VorbisComment(vc) => {
+                        // The Vorbis comment block need not be present, but
+                        // when it is, it must be unique.
+                        if vorbis_comment.is_some() {
+                            return fmt_err("encountered second Vorbis comment block")
+                        } else {
+                            vorbis_comment = Some(vc);
+                        }
+                    }
+                    MetadataBlock::StreamInfo(..) => {
+                        return fmt_err("encountered second streaminfo block")
+                    }
+                    // Other blocks are currently not handled.
+                    block => metadata_blocks.push(block),
                 }
             }
 
-            (streaminfo, metadata_blocks)
+            (streaminfo, vorbis_comment, metadata_blocks)
         };
 
         // The flac reader will contain the reader that will read frames.
         let flac_reader = FlacReader {
             streaminfo: streaminfo,
+            vorbis_comment: vorbis_comment,
             metadata_blocks: metadata_blocks,
             input: buf_reader,
         };
@@ -175,6 +206,51 @@ impl<R: io::Read> FlacReader<R> {
         self.streaminfo
     }
 
+    /// Returns the vendor string of the Vorbis comment block, if present.
+    ///
+    /// This string usually contains the name and version of the program that
+    /// encoded the FLAC stream, such as `reference libFLAC 1.3.2 20170101`
+    /// or `Lavf57.25.100`.
+    pub fn vendor(&self) -> Option<&str> {
+        self.vorbis_comment.as_ref().map(|vc| &vc.vendor[..])
+    }
+
+    /// Returns name-value pairs of Vorbis comments, such as `("ARTIST", "Queen")`.
+    ///
+    /// The name is supposed to be interpreted case-insensitively, and is
+    /// guaranteed to consist of ASCII characters. Claxon does not normalize
+    /// the casing of the name. Use `get_tag()` to do a case-insensitive lookup.
+    ///
+    /// Names need not be unique. For instance, multiple `ARTIST` comments might
+    /// be present on a collaboration track.
+    ///
+    /// See https://www.xiph.org/vorbis/doc/v-comment.html for more details.
+    pub fn tags<'a>(&'a self) -> metadata::Tags<'a> {
+        match self.vorbis_comment.as_ref() {
+            Some(vc) => metadata::Tags::new(&vc.comments[..]),
+            None => metadata::Tags::new(&[]),
+        }
+    }
+
+    /// Look up a Vorbis comment such as `ARTIST` in a case-insensitive way.
+    ///
+    /// Returns an iterator,  because tags may occur more than once. There could
+    /// be multiple `ARTIST` tags on a collaboration track, for instance.
+    ///
+    /// Note that tag names are ASCII and never contain `'='`; trying to look up
+    /// a non-ASCII tag will return no results. Furthermore, the Vorbis comment
+    /// spec dictates that tag names should be handled case-insensitively, so
+    /// this method performs a case-insensitive lookup.
+    ///
+    /// See also `tags()` for access to the raw tags.
+    /// See https://www.xiph.org/vorbis/doc/v-comment.html for more details.
+    pub fn get_tag<'a>(&'a self, tag_name: &'a str) -> metadata::GetTag<'a> {
+        match self.vorbis_comment.as_ref() {
+            Some(vc) => metadata::GetTag::new(&vc.comments[..], tag_name),
+            None => metadata::GetTag::new(&[], tag_name),
+        }
+    }
+
     /// Returns an iterator that decodes a single frame on every iteration.
     /// TODO: It is not an iterator.
     ///
@@ -187,6 +263,14 @@ impl<R: io::Read> FlacReader<R> {
 
     /// Returns an iterator over all samples.
     ///
+    /// The channel data is is interleaved. The iterator is streaming. That is,
+    /// if you call this method once, read a few samples, and call this method
+    /// again, the second iterator will not start again from the beginning of
+    /// the file. It will continue somewhere after where the first iterator
+    /// stopped, and it might skip some samples. (This is because FLAC divides
+    /// a stream into blocks, which have to be decoded entirely. If you drop the
+    /// iterator, you lose the unread samples in that block.)
+    ///
     /// This is a user-friendly interface that trades performance for ease of
     /// use. If performance is an issue, consider using `blocks()` instead.
     ///
@@ -197,14 +281,6 @@ impl<R: io::Read> FlacReader<R> {
     /// block can never fail, but a match on every sample is required
     /// nonetheless. For more control over when decoding happens, and less error
     /// handling overhead, use `blocks()`.
-    ///
-    /// The channel data is is interleaved. The iterator is streaming. That is,
-    /// if you call this method once, read a few samples, and call this method
-    /// again, the second iterator will not start again from the beginning of
-    /// the file. It will continue somewhere after where the first iterator
-    /// stopped, and it might skip some samples. (This is because FLAC divides
-    /// a stream into blocks, which have to be decoded entirely. If you drop the
-    /// iterator, you lose the unread samples in that block.)
     pub fn samples<'r>(&'r mut self) -> FlacSamples<&'r mut BufferedReader<R>> {
         FlacSamples {
             frame_reader: frame::FrameReader::new(&mut self.input),
