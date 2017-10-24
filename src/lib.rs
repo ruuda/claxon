@@ -98,6 +98,26 @@ pub struct FlacReader<R: io::Read> {
     input: BufferedReader<R>,
 }
 
+/// Controls what metadata `FlacReader` reads when constructed.
+///
+/// The FLAC format contains a number of metadata blocks before the start of
+/// audio data. Reading these is wasteful if the data is never used. The
+/// `FlacReaderOptions` indicate which blocks to look for. As soon as all
+/// desired blocks have been read, a `FlacReader` is returned without reading
+/// remaining metadata blocks.
+pub struct FlacReaderOptions {
+    /// When true, read metadata blocks at least until a Vorbis comment block is found.
+    ///
+    /// When false, the `FlacReader` may be constructed without reading a
+    /// Vorbis comment block, even if the stream contains one. Consequently,
+    /// `FlacReader::tags()` and other tag-related methods may not return tag
+    /// data.
+    pub find_vorbis_comment: bool,
+
+    /// When true, read metadata blocks at least until a seek table block is found.
+    pub find_seek_table: bool,
+}
+
 /// An iterator that yields samples read from a `FlacReader`.
 pub struct FlacSamples<R: ReadBytes> {
     frame_reader: FrameReader<R>,
@@ -175,6 +195,7 @@ impl<R: io::Read> FlacReader<R> {
                             return fmt_err("encountered second Vorbis comment block")
                         } else {
                             vorbis_comment = Some(vc);
+                            break;
                         }
                     }
                     MetadataBlock::StreamInfo(..) => {
