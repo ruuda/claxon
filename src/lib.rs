@@ -113,13 +113,11 @@ enum FlacReaderState<T> {
 ///
 /// A few use cases:
 ///
-/// * For a `FlacReader` that can read audio samples, set `read_until_samples`
-///   to true.
-/// * To read only the streaminfo, as quickly as possible, set both
-///   `read_vorbis_comment` and `read_until_samples` to false.
+/// * To read only the streaminfo, as quickly as possible, set
+///   `read_vorbis_comment` to false and `metadata_only` to true.
 ///   The resulting reader cannot be used to read audio data.
-/// * To read the streaminfo and tags, set `read_vorbis_comment` to true and
-///   `read_until_samples` to false. The resulting reader cannot be used to
+/// * To read only the streaminfo and tags, set `read_vorbis_comment` to true
+///   and `metadata_only` to true. The resulting reader cannot be used to
 ///   read audio data.
 pub struct FlacReaderOptions {
     /// When true, read metadata blocks at least until a Vorbis comment block is found.
@@ -128,13 +126,18 @@ pub struct FlacReaderOptions {
     /// Vorbis comment block, even if the stream contains one. Consequently,
     /// `FlacReader::tags()` and other tag-related methods will not return tag
     /// data.
+    ///
+    /// Defaults to true.
     pub read_vorbis_comment: bool,
 
-    /// When true, read all metadata blocks, up to the point where audio data starts.
+    /// When true, return a reader as soon as all desired metadata has been read.
     ///
-    /// When false, the `FlacReader` is returned as soon as possible, but it
-    /// will be unable to read audio samples.
-    pub read_until_samples: bool,
+    /// If this is set, the `FlacReader` will not be able to read audio samples.
+    /// When reading audio is not desired anyway, enabling `metadata_only` can
+    /// save a lot of expensive reads.
+    ///
+    /// Defaults to false.
+    pub metadata_only: bool,
 }
 
 /// An iterator that yields samples read from a `FlacReader`.
@@ -298,7 +301,7 @@ impl<R: io::Read> FlacReader<R> {
         match self.input {
             FlacReaderState::Full(ref mut inp) => FrameReader::new(inp),
             FlacReaderState::MetadataOnly(..) =>
-                panic!("FlacReaderOptions::read_until_samples must be set \
+                panic!("FlacReaderOptions::metadata_only must be false \
                        to be able to use FlacReader::blocks()"),
         }
     }
@@ -335,7 +338,7 @@ impl<R: io::Read> FlacReader<R> {
                 }
             }
             FlacReaderState::MetadataOnly(..) => {
-                panic!("FlacReaderOptions::read_until_samples must be set \
+                panic!("FlacReaderOptions::metadata_only must be false \
                        to be able to use FlacReader::samples()")
             }
         }
