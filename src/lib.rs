@@ -93,9 +93,14 @@ pub use frame::Block;
 pub struct FlacReader<R: io::Read> {
     streaminfo: StreamInfo,
     vorbis_comment: Option<VorbisComment>,
-    #[allow(dead_code)] // TODO: Expose metadata nicely.
-    metadata_blocks: Vec<MetadataBlock>,
-    input: BufferedReader<R>,
+    input: FlacReaderState<BufferedReader<R>>,
+}
+
+enum FlacReaderState<T> {
+    /// When the reader is positioned at the beginning of a frame.
+    Full(T),
+    /// When the reader might not be positioned at the beginning of a frame.
+    MetadataOnly(T),
 }
 
 /// Controls what metadata `FlacReader` reads when constructed.
@@ -105,17 +110,31 @@ pub struct FlacReader<R: io::Read> {
 /// `FlacReaderOptions` indicate which blocks to look for. As soon as all
 /// desired blocks have been read, a `FlacReader` is returned without reading
 /// remaining metadata blocks.
+///
+/// A few use cases:
+///
+/// * For a `FlacReader` that can read audio samples, set `read_until_samples`
+///   to true.
+/// * To read only the streaminfo, as quickly as possible, set both
+///   `read_vorbis_comment` and `read_until_samples` to false.
+///   The resulting reader cannot be used to read audio data.
+/// * To read the streaminfo and tags, set `read_vorbis_comment` to true and
+///   `read_until_samples` to false. The resulting reader cannot be used to
+///   read audio data.
 pub struct FlacReaderOptions {
     /// When true, read metadata blocks at least until a Vorbis comment block is found.
     ///
-    /// When false, the `FlacReader` may be constructed without reading a
+    /// When false, the `FlacReader` will be constructed without reading a
     /// Vorbis comment block, even if the stream contains one. Consequently,
-    /// `FlacReader::tags()` and other tag-related methods may not return tag
+    /// `FlacReader::tags()` and other tag-related methods will not return tag
     /// data.
-    pub find_vorbis_comment: bool,
+    pub read_vorbis_comment: bool,
 
-    /// When true, read metadata blocks at least until a seek table block is found.
-    pub find_seek_table: bool,
+    /// When true, read all metadata blocks, up to the point where audio data starts.
+    ///
+    /// When false, the `FlacReader` is returned as soon as possible, but it
+    /// will be unable to read audio samples.
+    pub read_until_samples: bool,
 }
 
 /// An iterator that yields samples read from a `FlacReader`.
@@ -171,7 +190,7 @@ impl<R: io::Read> FlacReader<R> {
 
         // Start a new scope, because the input reader must be available again
         // for the frame reader next.
-        let (streaminfo, vorbis_comment, metadata_blocks) = {
+        let (streaminfo, vorbis_comment) = {
             // Next are one or more metadata blocks. The flac specification
             // dictates that the streaminfo block is the first block. The metadata
             // block reader will yield at least one element, so the unwrap is safe.
@@ -185,7 +204,6 @@ impl<R: io::Read> FlacReader<R> {
             let mut vorbis_comment = None;
 
             // There might be more metadata blocks, read and store them.
-            let mut metadata_blocks = Vec::new();
             for block_result in metadata_iter {
                 match try!(block_result) {
                     MetadataBlock::VorbisComment(vc) => {
@@ -195,26 +213,24 @@ impl<R: io::Read> FlacReader<R> {
                             return fmt_err("encountered second Vorbis comment block")
                         } else {
                             vorbis_comment = Some(vc);
-                            break;
                         }
                     }
                     MetadataBlock::StreamInfo(..) => {
                         return fmt_err("encountered second streaminfo block")
                     }
                     // Other blocks are currently not handled.
-                    block => metadata_blocks.push(block),
+                    _block => {}
                 }
             }
 
-            (streaminfo, vorbis_comment, metadata_blocks)
+            (streaminfo, vorbis_comment)
         };
 
         // The flac reader will contain the reader that will read frames.
         let flac_reader = FlacReader {
             streaminfo: streaminfo,
             vorbis_comment: vorbis_comment,
-            metadata_blocks: metadata_blocks,
-            input: buf_reader,
+            input: FlacReaderState::Full(buf_reader),
         };
 
         Ok(flac_reader)
@@ -279,7 +295,12 @@ impl<R: io::Read> FlacReader<R> {
     /// happens. The representation of the decoded audio is somewhat specific to
     /// the FLAC format. For a higher-level interface, see `samples()`.
     pub fn blocks<'r>(&'r mut self) -> FrameReader<&'r mut BufferedReader<R>> {
-        FrameReader::new(&mut self.input)
+        match self.input {
+            FlacReaderState::Full(ref mut inp) => FrameReader::new(inp),
+            FlacReaderState::MetadataOnly(..) =>
+                panic!("FlacReaderOptions::read_until_samples must be set \
+                       to be able to use FlacReader::blocks()"),
+        }
     }
 
     /// Returns an iterator over all samples.
@@ -303,12 +324,20 @@ impl<R: io::Read> FlacReader<R> {
     /// nonetheless. For more control over when decoding happens, and less error
     /// handling overhead, use `blocks()`.
     pub fn samples<'r>(&'r mut self) -> FlacSamples<&'r mut BufferedReader<R>> {
-        FlacSamples {
-            frame_reader: frame::FrameReader::new(&mut self.input),
-            block: Block::empty(),
-            sample: 0,
-            channel: 0,
-            has_failed: false,
+        match self.input {
+            FlacReaderState::Full(ref mut inp) => {
+                FlacSamples {
+                    frame_reader: frame::FrameReader::new(inp),
+                    block: Block::empty(),
+                    sample: 0,
+                    channel: 0,
+                    has_failed: false,
+                }
+            }
+            FlacReaderState::MetadataOnly(..) => {
+                panic!("FlacReaderOptions::read_until_samples must be set \
+                       to be able to use FlacReader::samples()")
+            }
         }
     }
 
@@ -317,7 +346,10 @@ impl<R: io::Read> FlacReader<R> {
     /// Because the reader employs buffering internally, anything in the buffer
     /// will be lost.
     pub fn into_inner(self) -> R {
-        self.input.into_inner()
+        match self.input {
+            FlacReaderState::Full(inp) => inp.into_inner(),
+            FlacReaderState::MetadataOnly(inp) => inp.into_inner(),
+        }
     }
 }
 
