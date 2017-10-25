@@ -108,18 +108,27 @@ enum FlacReaderState<T> {
 /// The FLAC format contains a number of metadata blocks before the start of
 /// audio data. Reading these is wasteful if the data is never used. The
 /// `FlacReaderOptions` indicate which blocks to look for. As soon as all
-/// desired blocks have been read, a `FlacReader` is returned without reading
-/// remaining metadata blocks.
+/// desired blocks have been read, `FlacReader::new_ext()` returns without
+/// reading remaining metadata blocks.
 ///
 /// A few use cases:
 ///
-/// * To read only the streaminfo, as quickly as possible, set
-///   `read_vorbis_comment` to false and `metadata_only` to true.
-///   The resulting reader cannot be used to read audio data.
-/// * To read only the streaminfo and tags, set `read_vorbis_comment` to true
-///   and `metadata_only` to true. The resulting reader cannot be used to
+/// * To read only the streaminfo, as quickly as possible, set `metadata_only`
+///   to true and `read_vorbis_comment` to false. The resulting reader cannot be
+///   used to read audio data.
+/// * To read only the streaminfo and tags, set `metadata_only` and
+///   `read_vorbis_comment` both to true. The resulting reader cannot be used to
 ///   read audio data.
 pub struct FlacReaderOptions {
+    /// When true, return a reader as soon as all desired metadata has been read.
+    ///
+    /// If this is set, the `FlacReader` will not be able to read audio samples.
+    /// When reading audio is not desired anyway, enabling `metadata_only` can
+    /// save a lot of expensive reads.
+    ///
+    /// Defaults to false.
+    pub metadata_only: bool,
+
     /// When true, read metadata blocks at least until a Vorbis comment block is found.
     ///
     /// When false, the `FlacReader` will be constructed without reading a
@@ -129,15 +138,15 @@ pub struct FlacReaderOptions {
     ///
     /// Defaults to true.
     pub read_vorbis_comment: bool,
+}
 
-    /// When true, return a reader as soon as all desired metadata has been read.
-    ///
-    /// If this is set, the `FlacReader` will not be able to read audio samples.
-    /// When reading audio is not desired anyway, enabling `metadata_only` can
-    /// save a lot of expensive reads.
-    ///
-    /// Defaults to false.
-    pub metadata_only: bool,
+impl Default for FlacReaderOptions {
+    fn default() -> FlacReaderOptions {
+        FlacReaderOptions {
+            read_vorbis_comment: true,
+            metadata_only: false,
+        }
+    }
 }
 
 /// An iterator that yields samples read from a `FlacReader`.
@@ -186,6 +195,11 @@ impl<R: io::Read> FlacReader<R> {
     /// small damaged or malicous file could cause gigabytes of memory
     /// to be allocated. `Error::Unsupported` is returned in that case.
     pub fn new(reader: R) -> Result<FlacReader<R>> {
+        FlacReader::new_ext(reader, FlacReaderOptions::default())
+    }
+
+    /// TODO.
+    pub fn new_ext(reader: R, options: FlacReaderOptions) -> Result<FlacReader<R>> {
         let mut buf_reader = BufferedReader::new(reader);
 
         // A flac stream first of all starts with a stream header.
