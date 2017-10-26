@@ -381,12 +381,53 @@ fn verify_limits_on_vendor_string() {
 fn verify_limits_on_vorbis_comment_block() {
     // This file claims to have a very large Vorbis comment block, which could
     // make the decoder go OOM.
-    let file = fs::File::open("testsamples/large_vorbis_comment_block.flac").unwrap();
-    match claxon::FlacReader::new(file) {
+    match claxon::FlacReader::open("testsamples/large_vorbis_comment_block.flac") {
         Ok(..) => panic!("This file should fail to load"),
         Err(claxon::Error::Unsupported(..)) => { }
         Err(..) => panic!("Expected 'Unsupported' error."),
     }
+}
+
+#[test]
+fn metadata_only_still_reads_vorbis_comment_block() {
+    let opts = claxon::FlacReaderOptions {
+        metadata_only: true,
+        read_vorbis_comment: true,
+    };
+    let reader = claxon::FlacReader::open_ext("testsamples/short.flac", opts).unwrap();
+    assert_eq!(reader.vendor(), Some("reference libFLAC 1.3.2 20170101"));
+}
+
+#[test]
+fn no_read_vorbis_comment_block_does_not_contain_vendor_string() {
+    let opts = claxon::FlacReaderOptions {
+        metadata_only: true,
+        read_vorbis_comment: false,
+    };
+    let reader = claxon::FlacReader::open_ext("testsamples/short.flac", opts).unwrap();
+    assert_eq!(reader.vendor(), None);
+}
+
+#[test]
+#[should_panic]
+fn samples_panics_when_metadata_only_is_set() {
+    let opts = claxon::FlacReaderOptions {
+        metadata_only: true,
+        read_vorbis_comment: true,
+    };
+    let mut reader = claxon::FlacReader::open_ext("testsamples/short.flac", opts).unwrap();
+    let _samples = reader.samples();
+}
+
+#[test]
+#[should_panic]
+fn blocks_panics_when_metadata_only_is_set() {
+    let opts = claxon::FlacReaderOptions {
+        metadata_only: true,
+        read_vorbis_comment: true,
+    };
+    let mut reader = claxon::FlacReader::open_ext("testsamples/short.flac", opts).unwrap();
+    let _blocks = reader.blocks();
 }
 
 #[test]

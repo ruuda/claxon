@@ -119,6 +119,7 @@ enum FlacReaderState<T> {
 /// * To read only the streaminfo and tags, set `metadata_only` and
 ///   `read_vorbis_comment` both to true. The resulting reader cannot be used to
 ///   read audio data.
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub struct FlacReaderOptions {
     /// When true, return a reader as soon as all desired metadata has been read.
     ///
@@ -146,6 +147,21 @@ impl Default for FlacReaderOptions {
             read_vorbis_comment: true,
             metadata_only: false,
         }
+    }
+}
+
+impl FlacReaderOptions {
+    /// Return whether any metadata blocks need to be read.
+    fn has_desired_blocks(&self) -> bool {
+        // If we do not want only metadata, we want everything. Hence there are
+        // desired blocks left.
+        if !self.metadata_only {
+            return true
+        }
+
+        // Should be the or of all read_* fields, of which vorbis_comment is the
+        // only one at the moment.
+        self.read_vorbis_comment
     }
 }
 
@@ -185,7 +201,7 @@ fn read_stream_header<R: ReadBytes>(input: &mut R) -> Result<()> {
 }
 
 impl<R: io::Read> FlacReader<R> {
-    /// Attempts to create a reader that reads the FLAC format.
+    /// Create a reader that reads the FLAC format.
     ///
     /// The header and metadata blocks are read immediately. Audio frames
     /// will be read on demand.
@@ -198,9 +214,18 @@ impl<R: io::Read> FlacReader<R> {
         FlacReader::new_ext(reader, FlacReaderOptions::default())
     }
 
-    /// TODO.
+    /// Create a reader that reads the FLAC format, with reader options.
+    ///
+    /// The header and metadata blocks are read immediately, but only as much as
+    /// specified in the options. See `FlacReaderOptions` for more details.
+    ///
+    /// Claxon rejects files that claim to contain excessively large metadata
+    /// blocks, to protect against denial of service attacks where a
+    /// small damaged or malicous file could cause gigabytes of memory
+    /// to be allocated. `Error::Unsupported` is returned in that case.
     pub fn new_ext(reader: R, options: FlacReaderOptions) -> Result<FlacReader<R>> {
         let mut buf_reader = BufferedReader::new(reader);
+        let mut opts_current = options;
 
         // A flac stream first of all starts with a stream header.
         try!(read_stream_header(&mut buf_reader));
@@ -231,6 +256,9 @@ impl<R: io::Read> FlacReader<R> {
                         } else {
                             vorbis_comment = Some(vc);
                         }
+
+                        // We have one, no new one is desired.
+                        opts_current.read_vorbis_comment = false;
                     }
                     MetadataBlock::StreamInfo(..) => {
                         return fmt_err("encountered second streaminfo block")
@@ -238,16 +266,37 @@ impl<R: io::Read> FlacReader<R> {
                     // Other blocks are currently not handled.
                     _block => {}
                 }
+
+                // Early-out reading metadata once all desired blocks have been
+                // collected.
+                if !opts_current.has_desired_blocks() {
+                    break
+                }
+            }
+
+            // TODO: Rather than discarding afterwards, never parse it in the
+            // first place; treat it like padding in the MetadataBlockReader.
+            if !options.read_vorbis_comment {
+                vorbis_comment = None;
             }
 
             (streaminfo, vorbis_comment)
+        };
+
+        // Even if we might have read all metadata blocks, only set the state to
+        // "full" if `metadata_only` was false: this results in more predictable
+        // behavior.
+        let state = if options.metadata_only {
+            FlacReaderState::MetadataOnly(buf_reader)
+        } else {
+            FlacReaderState::Full(buf_reader)
         };
 
         // The flac reader will contain the reader that will read frames.
         let flac_reader = FlacReader {
             streaminfo: streaminfo,
             vorbis_comment: vorbis_comment,
-            input: FlacReaderState::Full(buf_reader),
+            input: state,
         };
 
         Ok(flac_reader)
@@ -379,6 +428,18 @@ impl FlacReader<fs::File> {
     pub fn open<P: AsRef<path::Path>>(filename: P) -> Result<FlacReader<fs::File>> {
         let file = try!(fs::File::open(filename));
         FlacReader::new(file)
+    }
+
+    /// Attemps to create a reader that reads from the specified file.
+    ///
+    /// This is a convenience constructor that opens a `File`, and constructs a
+    /// `FlacReader` from it. There is no need to wrap the file in a
+    /// `BufReader`, as the `FlacReader` employs buffering already.
+    pub fn open_ext<P: AsRef<path::Path>>(filename: P,
+                                          options: FlacReaderOptions)
+                                          -> Result<FlacReader<fs::File>> {
+        let file = try!(fs::File::open(filename));
+        FlacReader::new_ext(file, options)
     }
 }
 
