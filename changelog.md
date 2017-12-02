@@ -1,8 +1,10 @@
 Changelog
 =========
 
-Unreleased
-----------
+0.4.0
+-----
+
+Released 2017-12-02.
 
 **Breaking changes**:
 
@@ -12,10 +14,13 @@ Unreleased
 
 Release highlights:
 
-- Functionality for reading FLAC embedded in an ogg or mp4 container has been
-  added, together with new examples.
 - Support for reading metadata (Vorbis comments, also known as FLAC tags) has
   been added.
+- Claxon can now avoid reading metadata blocks when reading them is not desired,
+  see the new `FlacReader::new_ext()` constructor.
+- Functionality for reading FLAC embedded in an ogg or mp4 container has been
+  added, together with new examples. This functionality is in an early stage and
+  will likely change in future versions.
 
 0.3.1
 -----
