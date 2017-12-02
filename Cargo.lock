@@ -1,14 +1,3 @@
-[root]
-name = "claxon"
-version = "0.3.1"
-dependencies = [
- "hound 3.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "mp4parse 0.8.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "ogg 0.5.1 (registry+https://github.com/rust-lang/crates.io-index)",
- "time 0.1.38 (registry+https://github.com/rust-lang/crates.io-index)",
- "walkdir 1.0.7 (registry+https://github.com/rust-lang/crates.io-index)",
-]
-
 [[package]]
 name = "bitreader"
 version = "0.3.1"
@@ -20,8 +9,19 @@ version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
+name = "claxon"
+version = "0.3.1"
+dependencies = [
+ "hound 3.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "mp4parse 0.8.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "ogg 0.5.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "time 0.1.38 (registry+https://github.com/rust-lang/crates.io-index)",
+ "walkdir 1.0.7 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
 name = "hound"
-version = "3.1.0"
+version = "3.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
@@ -109,7 +109,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 [metadata]
 "checksum bitreader 0.3.1 (registry+https://github.com/rust-lang/crates.io-index)" = "a13e712f6e04f0e507a913abf5e008ba2a342ec26d9fac34ba0766bd77ced5b8"
 "checksum byteorder 1.1.0 (registry+https://github.com/rust-lang/crates.io-index)" = "ff81738b726f5d099632ceaffe7fb65b90212e8dce59d518729e7e8634032d3d"
-"checksum hound 3.1.0 (registry+https://github.com/rust-lang/crates.io-index)" = "d751b836ac593fc578456297bea26218d15ef07c3086c70fca97ba5402e562ec"
+"checksum hound 3.3.0 (registry+https://github.com/rust-lang/crates.io-index)" = "2fce9b1b615fbfc7e0f91609d4d37cbad1df43cd6e2b25b0d09bb1f38eef1be9"
 "checksum kernel32-sys 0.2.2 (registry+https://github.com/rust-lang/crates.io-index)" = "7507624b29483431c0ba2d82aece8ca6cdba9382bff4ddd0f7490560c056098d"
 "checksum libc 0.2.30 (registry+https://github.com/rust-lang/crates.io-index)" = "2370ca07ec338939e356443dac2296f581453c35fe1e3a3ed06023c49435f915"
 "checksum mp4parse 0.8.0 (registry+https://github.com/rust-lang/crates.io-index)" = "99942c1e9fa8b6fc9b63c6eb65bc6d442df3bcd8b8889de5b436f5527fd81adf"
