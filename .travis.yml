@@ -1,11 +1,12 @@
 language: rust
 
 rust:
+  # Test every third release since the first supported version, so we don't
+  # waste so many resources.
   - 1.13.0
-  - 1.14.0
-  - 1.15.1
   - 1.16.0
-  - 1.17.0
+  - 1.19.0
+  - 1.21.0
   - beta
   - nightly
 
