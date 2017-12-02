@@ -21,6 +21,7 @@ Release highlights:
 - Functionality for reading FLAC embedded in an ogg or mp4 container has been
   added, together with new examples. This functionality is in an early stage and
   will likely change in future versions.
+- Ensures compatibility with Rust 1.13 through 1.22.
 
 0.3.1
 -----
