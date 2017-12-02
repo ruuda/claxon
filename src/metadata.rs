@@ -188,8 +188,6 @@ impl<'a> Iterator for GetTag<'a> {
 
     #[inline]
     fn next(&mut self) -> Option<&'a str> {
-        use std::ascii::AsciiExt;
-
         while self.index < self.vorbis_comments.len() {
             let (ref comment, sep_idx) = self.vorbis_comments[self.index];
             self.index += 1;
