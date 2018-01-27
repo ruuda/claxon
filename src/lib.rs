@@ -327,7 +327,7 @@ impl<R: io::Read> FlacReader<R> {
     /// Names need not be unique. For instance, multiple `ARTIST` comments might
     /// be present on a collaboration track.
     ///
-    /// See https://www.xiph.org/vorbis/doc/v-comment.html for more details.
+    /// See <https://www.xiph.org/vorbis/doc/v-comment.html> for more details.
     pub fn tags<'a>(&'a self) -> metadata::Tags<'a> {
         match self.vorbis_comment.as_ref() {
             Some(vc) => metadata::Tags::new(&vc.comments[..]),
@@ -346,7 +346,7 @@ impl<R: io::Read> FlacReader<R> {
     /// this method performs a case-insensitive lookup.
     ///
     /// See also `tags()` for access to the raw tags.
-    /// See https://www.xiph.org/vorbis/doc/v-comment.html for more details.
+    /// See <https://www.xiph.org/vorbis/doc/v-comment.html> for more details.
     pub fn get_tag<'a>(&'a self, tag_name: &'a str) -> metadata::GetTag<'a> {
         match self.vorbis_comment.as_ref() {
             Some(vc) => metadata::GetTag::new(&vc.comments[..], tag_name),

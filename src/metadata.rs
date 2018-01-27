@@ -56,7 +56,7 @@ pub struct StreamInfo {
 /// A seek point in the seek table.
 #[derive(Clone, Copy)]
 pub struct SeekPoint {
-    /// Sample number of the first sample in the target frame, or 2^64 - 1 for a placeholder.
+    /// Sample number of the first sample in the target frame, or 2<sup>64</sup> - 1 for a placeholder.
     pub sample: u64,
     /// Offset in bytes from the first byte of the first frame header to the first byte of the
     /// target frame's header.
@@ -96,7 +96,7 @@ pub struct VorbisComment {
     /// Names need not be unique. For instance, multiple `ARTIST` comments might
     /// be present on a collaboration track.
     ///
-    /// See https://www.xiph.org/vorbis/doc/v-comment.html for more details.
+    /// See <https://www.xiph.org/vorbis/doc/v-comment.html> for more details.
     pub comments: Vec<(String, usize)>,
 }
 
