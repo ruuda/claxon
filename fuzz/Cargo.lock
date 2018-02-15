@@ -1,28 +1,35 @@
-[root]
+[[package]]
+name = "arbitrary"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+
+[[package]]
+name = "cc"
+version = "1.0.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+
+[[package]]
+name = "claxon"
+version = "0.4.0"
+
+[[package]]
 name = "claxon-fuzz"
 version = "0.0.1"
 dependencies = [
- "claxon 0.3.1",
+ "claxon 0.4.0",
  "libfuzzer-sys 0.1.0 (git+https://github.com/rust-fuzz/libfuzzer-sys.git)",
 ]
 
 [[package]]
-name = "claxon"
-version = "0.3.1"
-
-[[package]]
-name = "gcc"
-version = "0.3.43"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-
-[[package]]
 name = "libfuzzer-sys"
 version = "0.1.0"
-source = "git+https://github.com/rust-fuzz/libfuzzer-sys.git#36a3928eef5c3c38eb0f251962395bb510c39d46"
+source = "git+https://github.com/rust-fuzz/libfuzzer-sys.git#737524f7de1e85342b8b6cd1c01edc71018183ba"
 dependencies = [
- "gcc 0.3.43 (registry+https://github.com/rust-lang/crates.io-index)",
+ "arbitrary 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "cc 1.0.4 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [metadata]
-"checksum gcc 0.3.43 (registry+https://github.com/rust-lang/crates.io-index)" = "c07c758b972368e703a562686adb39125707cc1ef3399da8c019fc6c2498a75d"
+"checksum arbitrary 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)" = "baa5f4eaa3a3603a0d83861560ab55dfa6c8dd094b05604e5d006b41ffaeb1d3"
+"checksum cc 1.0.4 (registry+https://github.com/rust-lang/crates.io-index)" = "deaf9ec656256bb25b404c51ef50097207b9cbb29c933d31f92cae5a8a0ffee0"
 "checksum libfuzzer-sys 0.1.0 (git+https://github.com/rust-fuzz/libfuzzer-sys.git)" = "<none>"
