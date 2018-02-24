@@ -9,9 +9,9 @@
 
 use error::{Error, Result, fmt_err};
 use input::ReadBytes;
-use std::str;
-use std::slice;
 use std::fmt;
+use std::slice;
+use std::str;
 
 #[derive(Clone, Copy)]
 struct MetadataBlockHeader {
@@ -126,10 +126,59 @@ impl fmt::Debug for PictureData {
     }
 }
 
+/// The picture kind: front cover, leaflet, etc.
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
+pub enum PictureKind {
+    /// Front cover.
+    FrontCover = 3,
+    /// Back cover.
+    BackCover = 4,
+    /// Leaflet page.
+    LeafletPage = 5,
+    /// Media (e.g. label side of CD).
+    Media = 6,
+    /// Lead artist, lead performer, or soloist.
+    LeadArtist = 7,
+    /// Artist or performer.
+    Artist = 8,
+    /// Conductor.
+    Conductor = 9,
+    /// Band or orchestra.
+    Band = 10,
+    /// Composer.
+    Composer = 11,
+    /// Lyricist or text writer.
+    Lyricist = 12,
+    /// Recording location.
+    RecordingLocation = 13,
+    /// Picture taken during recording.
+    DuringRecording = 14,
+    /// Picture taken during performance.
+    DuringPerformance = 15,
+    /// A screen capture of a movie or video.
+    VideoScreenCapture = 16,
+    /// Bright colored fish, presumably a xiph.org joke.
+    BrightColoredFish = 17,
+    /// Illustration.
+    Illustration = 18,
+    /// Band or artist logotype.
+    BandLogotype = 19,
+    /// Publisher or studio logotype.
+    PublisherLogotype = 20,
+    /// 32x32 pixels png file icon.
+    FileIcon32x32 = 1,
+    /// Other file icon.
+    FileIconOther = 2,
+    /// Other.
+    Other = 0,
+}
 
 /// Picture metadata (e.g. cover art).
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Picture {
+    /// The picture kind, also called picture type.
+    pub kind: PictureKind,
+
     /// MIME type of the picture.
     ///
     /// The type can also be `-->`, in which case the data should be interpreted
@@ -584,8 +633,34 @@ fn read_picture_block<R: ReadBytes>(input: &mut R, length: u32) -> Result<Pictur
         return fmt_err("picture block is too short")
     }
 
-    // TODO: Make an enum and expose the picture type.
-    let _picture_type = try!(input.read_be_u32());
+    let picture_type = try!(input.read_be_u32());
+
+    let kind = match picture_type {
+        0 => PictureKind::Other,
+        1 => PictureKind::FileIcon32x32,
+        2 => PictureKind::FileIconOther,
+        3 => PictureKind::FrontCover,
+        4 => PictureKind::BackCover,
+        5 => PictureKind::LeafletPage,
+        6 => PictureKind::Media,
+        7 => PictureKind::LeadArtist,
+        8 => PictureKind::Artist,
+        9 => PictureKind::Conductor,
+        10 => PictureKind::Band,
+        11 => PictureKind::Composer,
+        12 => PictureKind::Lyricist,
+        13 => PictureKind::RecordingLocation,
+        14 => PictureKind::DuringRecording,
+        15 => PictureKind::DuringPerformance,
+        16 => PictureKind::VideoScreenCapture,
+        17 => PictureKind::BrightColoredFish,
+        18 => PictureKind::Illustration,
+        19 => PictureKind::BandLogotype,
+        20 => PictureKind::PublisherLogotype,
+        // Picture types up to 20 are valid, others are reserved.
+        _ => return fmt_err("invalid picture type"),
+    };
+
     let mime_len = try!(input.read_be_u32());
 
     // The mime type string must fit within the picture block. Also put a limit
@@ -669,6 +744,7 @@ fn read_picture_block<R: ReadBytes>(input: &mut R, length: u32) -> Result<Pictur
 
     // TODO Implement recording only offset.
     let picture = Picture {
+        kind: kind,
         mime_type: mime_type,
         description: description,
         width: width,
