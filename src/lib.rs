@@ -75,7 +75,7 @@ use std::path;
 use error::fmt_err;
 use frame::FrameReader;
 use input::{BufferedReader, ReadBytes};
-use metadata::{MetadataBlock, MetadataBlockReader, Picture, StreamInfo, VorbisComment};
+use metadata::{MetadataBlock, MetadataBlockReader, Picture, PictureKind, StreamInfo, VorbisComment};
 
 mod crc;
 mod error;
@@ -110,30 +110,32 @@ pub enum ReadPicture {
     /// Do not read picture metadata at all.
     Skip,
 
-    /// Record the offset of the first picture in the stream.
+    /// Record the offset of the first front cover picture in the stream.
     ///
     /// Claxon will skip over the image itself to avoid allocating memory, but
     /// record the offset and length in the stream. The picture can be extracted
     /// at a later time by seeking to the offset.
     ///
-    /// If multiple picture blocks are present, this will only record the first
-    /// one.
-    AnyAsOffset,
+    /// If multiple front cover pictures are present, this will only
+    /// record the first one. Pictures that have a different kind than
+    /// `PictureKind::FrontCover` are skipped altogether.
+    CoverAsOffset,
 
     /// Record the offset of all pictures in the stream.
     ///
-    /// Unlike `AnyAsOffset`, all picture blocks are recorded.
+    /// Unlike `CoverAsOffset`, all picture blocks are recorded.
     AllAsOffset,
 
-    /// Read the first picture into a `Vec`.
+    /// Read the first front cover picture into a `Vec`.
     ///
-    /// If multiple picture blocks are present, this will only read the first
-    /// one.
-    AnyAsVec,
+    /// If multiple front cover pictures are present, this will only
+    /// read the first one. Pictures that have a different kind than
+    /// `PictureKind::FrontCover` are skipped altogether.
+    CoverAsVec,
 
     /// Read all pictures into `Vec`s.
     ///
-    /// Unlike `AnyAsVec`, all picture blocks are read.
+    /// Unlike `CoverAsVec`, all picture blocks are read.
     AllAsVec,
 }
 
@@ -177,9 +179,9 @@ pub struct FlacReaderOptions {
     /// When not `Skip`, read metadata blocks at least until a picture block is found.
     ///
     /// When `Skip`, the `FlacReader` will be constructed without reading a
-    /// picture block, even if the stream contains one. When `AnyAsOffset` or
-    /// `AnyAsVec`, the `FlacReader` will be constructed with at most one
-    /// picture, even if the stream contained more.
+    /// picture block, even if the stream contains one. When `CoverAsOffset` or
+    /// `CoverAsVec`, the `FlacReader` will be constructed with at most one
+    /// picture, the front cover, even if the stream contained more.
     ///
     /// Defaults to `ReadPicture::AllAsVec`.
     pub read_picture: ReadPicture,
@@ -293,7 +295,7 @@ impl<R: io::Read> FlacReader<R> {
             let mut metadata_iter = MetadataBlockReader::new(&mut buf_reader);
             metadata_iter.read_picture_as_vec = match options.read_picture {
                 ReadPicture::AllAsVec => true,
-                ReadPicture::AnyAsVec => true,
+                ReadPicture::CoverAsVec => true,
                 _ => false,
             };
             let streaminfo_block = try!(metadata_iter.next().unwrap());
@@ -323,8 +325,20 @@ impl<R: io::Read> FlacReader<R> {
                         return fmt_err("encountered second streaminfo block")
                     }
                     MetadataBlock::Picture(p) => {
-                        // TODO: Update reader options.
-                        pictures.push(p);
+                        match opts_current.read_picture {
+                            ReadPicture::CoverAsVec | ReadPicture::CoverAsOffset => {
+                                // If this was the cover that we were looking
+                                // for, there is no need to read further images.
+                                if p.kind == PictureKind::FrontCover {
+                                    pictures.push(p);
+                                    opts_current.read_picture = ReadPicture::Skip;
+                                }
+                            }
+                            ReadPicture::AllAsVec | ReadPicture::AllAsOffset => {
+                                pictures.push(p);
+                            }
+                            ReadPicture::Skip => {}
+                        }
                     }
                     // Other blocks are currently not handled.
                     _block => {}
