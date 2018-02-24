@@ -149,7 +149,6 @@ pub struct Picture {
     pub data: PictureData,
 }
 
-
 /// A metadata about the flac stream.
 pub enum MetadataBlock {
     /// A stream info block.
@@ -173,7 +172,7 @@ pub enum MetadataBlock {
     /// A CUE sheet block.
     CueSheet, // TODO
     /// A picture block.
-    Picture, // TODO
+    Picture(Picture),
     /// A block with a reserved block type, not supported by this library.
     Reserved,
 }
@@ -343,9 +342,8 @@ pub fn read_metadata_block<R: ReadBytes>(input: &mut R,
             Ok(MetadataBlock::Padding { length: length })
         }
         6 => {
-            // TODO: implement picture reading. For now, pretend it is padding.
-            try!(input.skip(length));
-            Ok(MetadataBlock::Padding { length: length })
+            let picture = try!(read_picture_block(input, length));
+            Ok(MetadataBlock::Picture(picture))
         }
         127 => {
             // This code is invalid to avoid confusion with a frame sync code.
@@ -586,7 +584,8 @@ fn read_picture_block<R: ReadBytes>(input: &mut R, length: u32) -> Result<Pictur
         return fmt_err("picture block is too short")
     }
 
-    let picture_type = try!(input.read_be_u32());
+    // TODO: Make an enum and expose the picture type.
+    let _picture_type = try!(input.read_be_u32());
     let mime_len = try!(input.read_be_u32());
 
     // The mime type string must fit within the picture block. Also put a limit
