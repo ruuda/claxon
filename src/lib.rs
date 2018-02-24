@@ -75,7 +75,7 @@ use std::path;
 use error::fmt_err;
 use frame::FrameReader;
 use input::{BufferedReader, ReadBytes};
-use metadata::{MetadataBlock, MetadataBlockReader, StreamInfo, VorbisComment};
+use metadata::{MetadataBlock, MetadataBlockReader, Picture, StreamInfo, VorbisComment};
 
 mod crc;
 mod error;
@@ -93,6 +93,7 @@ pub use frame::Block;
 pub struct FlacReader<R: io::Read> {
     streaminfo: StreamInfo,
     vorbis_comment: Option<VorbisComment>,
+    pictures: Vec<Picture>,
     input: FlacReaderState<BufferedReader<R>>,
 }
 
@@ -281,6 +282,8 @@ impl<R: io::Read> FlacReader<R> {
         // A flac stream first of all starts with a stream header.
         try!(read_stream_header(&mut buf_reader));
 
+        let mut pictures = Vec::new();
+
         // Start a new scope, because the input reader must be available again
         // for the frame reader next.
         let (streaminfo, vorbis_comment) = {
@@ -319,6 +322,10 @@ impl<R: io::Read> FlacReader<R> {
                     MetadataBlock::StreamInfo(..) => {
                         return fmt_err("encountered second streaminfo block")
                     }
+                    MetadataBlock::Picture(p) => {
+                        // TODO: Update reader options.
+                        pictures.push(p);
+                    }
                     // Other blocks are currently not handled.
                     _block => {}
                 }
@@ -352,6 +359,7 @@ impl<R: io::Read> FlacReader<R> {
         let flac_reader = FlacReader {
             streaminfo: streaminfo,
             vorbis_comment: vorbis_comment,
+            pictures: pictures,
             input: state,
         };
 
