@@ -288,6 +288,11 @@ impl<R: io::Read> FlacReader<R> {
             // dictates that the streaminfo block is the first block. The metadata
             // block reader will yield at least one element, so the unwrap is safe.
             let mut metadata_iter = MetadataBlockReader::new(&mut buf_reader);
+            metadata_iter.read_picture_as_vec = match options.read_picture {
+                ReadPicture::AllAsVec => true,
+                ReadPicture::AnyAsVec => true,
+                _ => false,
+            };
             let streaminfo_block = try!(metadata_iter.next().unwrap());
             let streaminfo = match streaminfo_block {
                 MetadataBlock::StreamInfo(info) => info,
