@@ -429,6 +429,7 @@ fn verify_limits_on_vorbis_comment_block() {
 fn metadata_only_still_reads_vorbis_comment_block() {
     let opts = claxon::FlacReaderOptions {
         metadata_only: true,
+        read_picture: claxon::ReadPicture::Skip,
         read_vorbis_comment: true,
     };
     let reader = claxon::FlacReader::open_ext("testsamples/short.flac", opts).unwrap();
@@ -439,6 +440,7 @@ fn metadata_only_still_reads_vorbis_comment_block() {
 fn no_read_vorbis_comment_block_does_not_contain_vendor_string() {
     let opts = claxon::FlacReaderOptions {
         metadata_only: true,
+        read_picture: claxon::ReadPicture::Skip,
         read_vorbis_comment: false,
     };
     let reader = claxon::FlacReader::open_ext("testsamples/short.flac", opts).unwrap();
@@ -450,6 +452,7 @@ fn no_read_vorbis_comment_block_does_not_contain_vendor_string() {
 fn samples_panics_when_metadata_only_is_set() {
     let opts = claxon::FlacReaderOptions {
         metadata_only: true,
+        read_picture: claxon::ReadPicture::Skip,
         read_vorbis_comment: true,
     };
     let mut reader = claxon::FlacReader::open_ext("testsamples/short.flac", opts).unwrap();
@@ -461,6 +464,7 @@ fn samples_panics_when_metadata_only_is_set() {
 fn blocks_panics_when_metadata_only_is_set() {
     let opts = claxon::FlacReaderOptions {
         metadata_only: true,
+        read_picture: claxon::ReadPicture::Skip,
         read_vorbis_comment: true,
     };
     let mut reader = claxon::FlacReader::open_ext("testsamples/short.flac", opts).unwrap();

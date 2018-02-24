@@ -103,6 +103,39 @@ enum FlacReaderState<T> {
     MetadataOnly(T),
 }
 
+/// Determines how to read picture metadata.
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum ReadPicture {
+    /// Do not read picture metadata at all.
+    Skip,
+
+    /// Record the offset of the first picture in the stream.
+    ///
+    /// Claxon will skip over the image itself to avoid allocating memory, but
+    /// record the offset and length in the stream. The picture can be extracted
+    /// at a later time by seeking to the offset.
+    ///
+    /// If multiple picture blocks are present, this will only record the first
+    /// one.
+    AnyAsOffset,
+
+    /// Record the offset of all pictures in the stream.
+    ///
+    /// Unlike `AnyAsOffset`, all picture blocks are recorded.
+    AllAsOffset,
+
+    /// Read the first picture into a `Vec`.
+    ///
+    /// If multiple picture blocks are present, this will only read the first
+    /// one.
+    AnyAsVec,
+
+    /// Read all pictures into `Vec`s.
+    ///
+    /// Unlike `AnyAsVec`, all picture blocks are read.
+    AllAsVec,
+}
+
 /// Controls what metadata `FlacReader` reads when constructed.
 ///
 /// The FLAC format contains a number of metadata blocks before the start of
@@ -114,11 +147,11 @@ enum FlacReaderState<T> {
 /// A few use cases:
 ///
 /// * To read only the streaminfo, as quickly as possible, set `metadata_only`
-///   to true and `read_vorbis_comment` to false. The resulting reader cannot be
-///   used to read audio data.
+///   to true, `read_vorbis_comment` to false, and `read_picture` to `Skip`.
+///   The resulting reader cannot be used to read audio data.
 /// * To read only the streaminfo and tags, set `metadata_only` and
-///   `read_vorbis_comment` both to true. The resulting reader cannot be used to
-///   read audio data.
+///   `read_vorbis_comment` both to true, but `read_picture` to `Skip`. The
+///   resulting reader cannot be used to read audio data.
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub struct FlacReaderOptions {
     /// When true, return a reader as soon as all desired metadata has been read.
@@ -139,13 +172,24 @@ pub struct FlacReaderOptions {
     ///
     /// Defaults to true.
     pub read_vorbis_comment: bool,
+
+    /// When not `Skip`, read metadata blocks at least until a picture block is found.
+    ///
+    /// When `Skip`, the `FlacReader` will be constructed without reading a
+    /// picture block, even if the stream contains one. When `AnyAsOffset` or
+    /// `AnyAsVec`, the `FlacReader` will be constructed with at most one
+    /// picture, even if the stream contained more.
+    ///
+    /// Defaults to `ReadPicture::AllAsVec`.
+    pub read_picture: ReadPicture,
 }
 
 impl Default for FlacReaderOptions {
     fn default() -> FlacReaderOptions {
         FlacReaderOptions {
-            read_vorbis_comment: true,
             metadata_only: false,
+            read_vorbis_comment: true,
+            read_picture: ReadPicture::AllAsVec,
         }
     }
 }
@@ -159,9 +203,12 @@ impl FlacReaderOptions {
             return true
         }
 
-        // Should be the or of all read_* fields, of which vorbis_comment is the
-        // only one at the moment.
-        self.read_vorbis_comment
+        let pictures_left = match self.read_picture {
+            ReadPicture::Skip => false,
+            _ => true,
+        };
+
+        self.read_vorbis_comment || pictures_left
     }
 }
 
