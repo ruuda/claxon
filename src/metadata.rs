@@ -650,6 +650,10 @@ fn read_picture_block<R: ReadBytes>(input: &mut R, length: u32) -> Result<Pictur
         return fmt_err("picture data does not fit the picture block")
     }
 
+    // The largers picture in my personal collection is 13_318_155 bytes; the
+    // 95th percentile is 3_672_912 bytes. Having larger cover art embedded kind
+    // of defeats the purpose, as the cover art would be larger than the audio
+    // data for the typical track. Hence a 100 MiB limit should be reasonable.
     if data_len > 100 * 1024 * 1024 {
         let msg = "pictures larger than 100 MiB are not supported";
         return Err(Error::Unsupported(msg))
