@@ -418,6 +418,11 @@ impl<R: io::Read> FlacReader<R> {
         }
     }
 
+    /// Returns the pictures embedded in the stream.
+    pub fn pictures(&self) -> &[Picture] {
+        &self.pictures[..]
+    }
+
     /// Returns an iterator that decodes a single frame on every iteration.
     /// TODO: It is not an iterator.
     ///
