@@ -103,7 +103,7 @@ pub struct VorbisComment {
 
 /// Either the picture data itself, or its offset and length.
 #[derive(Clone, Eq, PartialEq)]
-pub enum PictureData {
+enum PictureData {
     /// The picture data itself, inline in the `Picture` struct.
     ///
     /// Inline pictures are produced when `ReaderOptions::read_picture` is set
@@ -121,7 +121,7 @@ impl fmt::Debug for PictureData {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
             PictureData::Inline(..) => write!(f, "PictureData::Inline(..)"),
-            PictureData::Offset(o, l) => write!(f, "PictureData::Offset({}, {})", o, l)
+            PictureData::Offset(off, len) => write!(f, "PictureData::Offset({}, {})", off, len)
         }
     }
 }
@@ -195,7 +195,48 @@ pub struct Picture {
     pub height: u32,
 
     /// Either inline picture data, or offset and length in the stream.
-    pub data: PictureData,
+    data: PictureData,
+}
+
+impl Picture {
+    /// Returns the picture data.
+    ///
+    /// Panics if `ReaderOptions::read_pictures` was not set to `AsVec`.
+    pub fn data(&self) -> &[u8] {
+        match self.data {
+            PictureData::Inline(ref vec) => &vec[..],
+            PictureData::Offset(..) => panic!("Picture data was not read, only offsets."),
+        }
+    }
+
+    /// Returns the offset of the picture data in the stream.
+    ///
+    /// Panics if `ReaderOptions::read_pictures` was not set to `AsOffset`.
+    // TODO: Actually, providing the offset would be possible in either case.
+    pub fn offset(&self) -> u64 {
+        match self.data {
+            PictureData::Inline(..) => panic!("Picture offset was not recorded, only data."),
+            PictureData::Offset(o, _) => o,
+        }
+    }
+
+    /// Returns the length of the picture data in bytes.
+    pub fn len(&self) -> usize {
+        match self.data {
+            PictureData::Inline(ref vec) => vec.len(),
+            PictureData::Offset(_, len) => len as usize,
+        }
+    }
+
+    /// Returns the picture data.
+    ///
+    /// Panics if `ReaderOptions::read_pictures` was not set to `AsVec`.
+    pub fn into_vec(self) -> Vec<u8> {
+        match self.data {
+            PictureData::Inline(vec) => vec,
+            PictureData::Offset(..) => panic!("Picture data was not read, only offsets."),
+        }
+    }
 }
 
 /// A metadata about the flac stream.
