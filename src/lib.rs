@@ -437,6 +437,11 @@ impl<R: io::Read> FlacReader<R> {
         &self.pictures[..]
     }
 
+    /// Take ownership of the pictures in the stream, destroying the reader.
+    pub fn into_pictures(self) -> Vec<Picture> {
+        self.pictures
+    }
+
     /// Returns an iterator that decodes a single frame on every iteration.
     /// TODO: It is not an iterator.
     ///
