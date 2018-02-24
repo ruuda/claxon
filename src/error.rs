@@ -87,9 +87,9 @@ impl From<io::Error> for Error {
 
 impl From<string::FromUtf8Error> for Error {
     fn from(_: string::FromUtf8Error) -> Error {
-        // Vendor strings and Vorbis comments are the only place where UTF-8 is
-        // parsed into a String.
-        Error::FormatError("Vorbis comment or vendor string is not valid UTF-8")
+        // These are the only places where UTF-8 is parsed into a String.
+        Error::FormatError("Vorbis comment, vendor string, or picture \
+                            description is not valid UTF-8")
     }
 }
 

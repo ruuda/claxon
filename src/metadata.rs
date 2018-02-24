@@ -100,6 +100,42 @@ pub struct VorbisComment {
     pub comments: Vec<(String, usize)>,
 }
 
+/// Either the picture data itself, or its offset and length.
+pub enum PictureData {
+    /// The picture data itself, inline in the `Picture` struct.
+    ///
+    /// Inline pictures are produced when `ReaderOptions::read_picture` is set
+    /// to `ReadPicture::AnyAsVec` or `ReadPicture::AllAsVec` (the default).
+    Inline(Vec<u8>),
+
+    /// The offset and length of the picture data in the stream, in bytes.
+    ///
+    /// Offsets are recorded when `ReaderOptions::read_picture` is set
+    /// to `ReadPicture::AnyAsOffset` or `ReadPicture::AllAsOffset`.
+    Offset { offset: u64, length: u64 },
+}
+
+pub struct Picture {
+    /// MIME type of the picture.
+    ///
+    /// The type can also be `-->`, in which case the data should be interpreted
+    /// as a URL rather than the actual picture data.
+    pub mime_type: String,
+
+    /// A description of the picture. Often empty in practice.
+    pub description: String,
+
+    /// The width of the picture in pixels.
+    pub width: u32,
+
+    /// The height of the picture in pixels.
+    pub height: u32,
+
+    /// Either inline picture data, or offset and length in the stream.
+    pub data: PictureData,
+}
+
+
 /// A metadata about the flac stream.
 pub enum MetadataBlock {
     /// A stream info block.
@@ -431,7 +467,7 @@ fn read_vorbis_comment_block<R: ReadBytes>(input: &mut R, length: u32) -> Result
     if vendor_len > length - 8 { return fmt_err("vendor string too long") }
     let mut vendor_bytes = Vec::with_capacity(vendor_len as usize);
 
-    // We can safely set the lenght of the vector here; the uninitialized memory
+    // We can safely set the length of the vector here; the uninitialized memory
     // is not exposed. If `read_into` succeeds, it will have overwritten all
     // bytes. If not, an error is returned and the memory is never exposed.
     unsafe { vendor_bytes.set_len(vendor_len as usize); }
@@ -548,6 +584,102 @@ fn read_application_block<R: ReadBytes>(input: &mut R, length: u32) -> Result<(u
     Ok((id, data))
 }
 
+fn read_picture_block<R: ReadBytes>(input: &mut R, length: u32) -> Result<Picture> {
+    if length < 32 {
+        // We expect at a minimum 8 all of the 32-bit fields.
+        return fmt_err("picture block is too short")
+    }
+
+    let picture_type = try!(input.read_be_u32());
+    let mime_len = try!(input.read_be_u32());
+
+    // The mime type string must fit within the picture block. Also put a limit
+    // on the length, to ensure we don't allocate large strings, in order to
+    // prevent denial of service attacks.
+    if mime_len > length - 32 { return fmt_err("picture MIME type string too long") }
+    if mime_len > 256 {
+        let msg = "picture MIME types larger than 256 bytes are not supported";
+        return Err(Error::Unsupported(msg))
+    }
+    let mut mime_bytes = Vec::with_capacity(mime_len as usize);
+
+    // We can safely set the length of the vector here; the uninitialized memory
+    // is not exposed. If `read_into` succeeds, it will have overwritten all
+    // bytes. If not, an error is returned and the memory is never exposed.
+    unsafe { mime_bytes.set_len(mime_len as usize); }
+    try!(input.read_into(&mut mime_bytes));
+
+    // According to the spec, the MIME type string must consist of printable
+    // ASCII characters in the range 0x20-0x7e; validate that. This also means
+    // that we don't have to check for valid UTF-8 to turn it into a string.
+    if mime_bytes.iter().any(|&b| b < 0x20 || b > 0x7e) {
+        return fmt_err("picture mime type string contains invalid characters")
+    }
+    let mime_type = unsafe { String::from_utf8_unchecked(mime_bytes) };
+
+    let description_len = try!(input.read_be_u32());
+
+    // The description must fit within the picture block. Also put a limit
+    // on the length, to ensure we don't allocate large strings, in order to
+    // prevent denial of service attacks.
+    if description_len > length - 32 { return fmt_err("picture description too long") }
+    if description_len > 256 {
+        let msg = "picture descriptions larger than 256 bytes are not supported";
+        return Err(Error::Unsupported(msg))
+    }
+    let mut description_bytes = Vec::with_capacity(description_len as usize);
+
+    // We can safely set the length of the vector here; the uninitialized memory
+    // is not exposed. If `read_into` succeeds, it will have overwritten all
+    // bytes. If not, an error is returned and the memory is never exposed.
+    unsafe { description_bytes.set_len(description_len as usize); }
+    try!(input.read_into(&mut description_bytes));
+    let description = try!(String::from_utf8(description_bytes));
+
+    // Next are a few fields with pixel metadata. It seems a bit weird to me
+    // that FLAC stores the bits per pixel, and especially the number of indexed
+    // colors. Perhaps the idea was to allow choosing which picture to decode,
+    // but peeking the image data itself would be better anyway. I have no use
+    // case for these fields, so they are not exposed, to keep the API cleaner,
+    // and to save a few bytes of memory.
+    let width = try!(input.read_be_u32());
+    let height = try!(input.read_be_u32());
+    let _bits_per_pixel = try!(input.read_be_u32());
+    let _num_indexed_colors = try!(input.read_be_u32());
+
+    let data_len = try!(input.read_be_u32());
+
+    // The length field is redundant, because we already have the size of the
+    // block. The picture should fill up the remainder of the block.
+    if data_len > length - 32 - mime_len - description_len {
+        return fmt_err("picture data does not fit the picture block")
+    }
+
+    if data_len > 100 * 1024 * 1024 {
+        let msg = "pictures larger than 100 MiB are not supported";
+        return Err(Error::Unsupported(msg))
+    }
+
+    let mut data_bytes = Vec::with_capacity(data_len as usize);
+
+    // We can safely set the length of the vector here; the uninitialized memory
+    // is not exposed. If `read_into` succeeds, it will have overwritten all
+    // bytes. If not, an error is returned and the memory is never exposed.
+    unsafe { data_bytes.set_len(data_len as usize); }
+    try!(input.read_into(&mut data_bytes));
+
+    // TODO Implement recording only offset.
+    let picture = Picture {
+        mime_type: mime_type,
+        description: description,
+        width: width,
+        height: height,
+        data: PictureData::Inline(data_bytes),
+    };
+
+    Ok(picture)
+}
+
 /// Reads metadata blocks from a stream and exposes them as an iterator.
 ///
 /// It is assumed that the next byte that the reader will read, is the first
@@ -557,6 +689,8 @@ fn read_application_block<R: ReadBytes>(input: &mut R, length: u32) -> Result<(u
 pub struct MetadataBlockReader<R: ReadBytes> {
     input: R,
     done: bool,
+    /// When true, read pictures into `Vec`s, otherwise record their offsets.
+    pub read_picture_as_vec: bool,
 }
 
 /// Either a `MetadataBlock` or an `Error`.
@@ -568,6 +702,7 @@ impl<R: ReadBytes> MetadataBlockReader<R> {
         MetadataBlockReader {
             input: input,
             done: false,
+            read_picture_as_vec: true,
         }
     }
 
