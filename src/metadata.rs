@@ -11,6 +11,7 @@ use error::{Error, Result, fmt_err};
 use input::ReadBytes;
 use std::str;
 use std::slice;
+use std::fmt;
 
 #[derive(Clone, Copy)]
 struct MetadataBlockHeader {
@@ -101,6 +102,7 @@ pub struct VorbisComment {
 }
 
 /// Either the picture data itself, or its offset and length.
+#[derive(Clone, Eq, PartialEq)]
 pub enum PictureData {
     /// The picture data itself, inline in the `Picture` struct.
     ///
@@ -112,9 +114,21 @@ pub enum PictureData {
     ///
     /// Offsets are recorded when `ReaderOptions::read_picture` is set
     /// to `ReadPicture::AnyAsOffset` or `ReadPicture::AllAsOffset`.
-    Offset { offset: u64, length: u64 },
+    Offset(u64, u64),
 }
 
+impl fmt::Debug for PictureData {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            PictureData::Inline(..) => write!(f, "PictureData::Inline(..)"),
+            PictureData::Offset(o, l) => write!(f, "PictureData::Offset({}, {})", o, l)
+        }
+    }
+}
+
+
+/// Picture metadata (e.g. cover art).
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Picture {
     /// MIME type of the picture.
     ///
