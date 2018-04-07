@@ -135,6 +135,10 @@ impl<R: ReadBytes> ReadBytes for Crc8Reader<R> {
         }
     }
 
+    fn read(&mut self, _buffer: &mut [u8]) -> io::Result<usize> {
+        panic!("CRC reader does not support read.");
+    }
+
     fn read_into(&mut self, _buffer: &mut [u8]) -> io::Result<()> {
         panic!("CRC reader does not support read_into.");
     }
@@ -165,6 +169,10 @@ impl<R: ReadBytes> ReadBytes for Crc16Reader<R> {
             Ok(None) => Ok(None),
             Err(err) => Err(err),
         }
+    }
+
+    fn read(&mut self, _buffer: &mut [u8]) -> io::Result<usize> {
+        panic!("CRC reader does not support read.");
     }
 
     fn read_into(&mut self, _buffer: &mut [u8]) -> io::Result<()> {
