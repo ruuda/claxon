@@ -56,6 +56,33 @@ impl<R: io::Read> BufferedReader<R> {
     }
 }
 
+/// A reader that exposes a bounded part of the underlying reader.
+///
+/// In a few places, the FLAC format embeds foreign data as-is:
+///
+///  * A picture block embeds e.g. a jpeg or png image.
+///  * An application block stores arbitrary application-specific bytes.
+///
+/// The `EmbeddedReader` exposes this embedded data, without allowing to read
+/// past the bounds of the embedded data. After dealing with the embedded data,
+/// the `FlacReader` continues to read the FLAC format.
+///
+/// Note that because `FlacReader` employs buffering internally, this reader is
+/// buffered. There is no need to wrap it in an `io::BufReader`.
+pub struct EmbeddedReader<'a, R: 'a + io::Read> {
+    reader: &'a mut BufferedReader<R>,
+    cursor: usize,
+    len: usize,
+}
+
+impl<'a, R: 'a + io::Read> io::Read for EmbeddedReader<'a, R> {
+    #[inline]
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        self.reader.read(buf)
+    }
+}
+
+// TODO: Implement io::BufRead for EmbeddedReader.
 
 /// Provides convenience methods to make input less cumbersome.
 pub trait ReadBytes {
@@ -64,6 +91,11 @@ pub trait ReadBytes {
 
     /// Reads a single byte, not failing on EOF.
     fn read_u8_or_eof(&mut self) -> io::Result<Option<u8>>;
+
+    /// Read into the buffer, returns how many bytes were read.
+    ///
+    /// This is equivalent to `io::Read::read()`.
+    fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize>;
 
     /// Reads until the provided buffer is full.
     fn read_into(&mut self, buffer: &mut [u8]) -> io::Result<()>;
@@ -154,6 +186,19 @@ impl<R: io::Read> ReadBytes for BufferedReader<R>
         Ok(Some(try!(self.read_u8())))
     }
 
+    fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
+        // Replenish the buffer if it was empty.
+        if self.num_valid == 0 {
+            self.pos = 0;
+            self.num_valid = try!(self.inner.read(&mut self.buf)) as u32;
+        }
+
+        let n = cmp::min(self.num_valid as usize, buffer.len() as usize);
+        buffer[..n].copy_from_slice(&self.buf[self.pos as usize..self.pos as usize + n]);
+        self.num_valid -= n as u32;
+        Ok(n)
+    }
+
     fn read_into(&mut self, buffer: &mut [u8]) -> io::Result<()> {
         let mut bytes_left = buffer.len();
 
@@ -212,6 +257,10 @@ impl<'r, R: ReadBytes> ReadBytes for &'r mut R {
         (*self).read_u8_or_eof()
     }
 
+    fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
+        (*self).read(buffer)
+    }
+
     fn read_into(&mut self, buffer: &mut [u8]) -> io::Result<()> {
         (*self).read_into(buffer)
     }
@@ -243,6 +292,10 @@ impl<T: AsRef<[u8]>> ReadBytes for io::Cursor<T> {
         }
     }
 
+    fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
+        self.read(buffer)
+    }
+
     fn read_into(&mut self, buffer: &mut [u8]) -> io::Result<()> {
         let pos = self.position();
         if pos + buffer.len() as u64 <= self.get_ref().as_ref().len() as u64 {
@@ -266,6 +319,8 @@ impl<T: AsRef<[u8]>> ReadBytes for io::Cursor<T> {
         }
     }
 }
+
+// TODO: Add tests for BufferedReader::read().
 
 #[test]
 fn verify_read_into_buffered_reader() {
