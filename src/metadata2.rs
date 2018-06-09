@@ -7,11 +7,14 @@
 
 //! The `metadata` module deals with metadata at the beginning of a FLAC stream.
 
+use std::io;
+
 use error::{Error, Result, fmt_err};
-use input::ReadBytes;
+use input::{BufferedReader, ReadBytes};
+
 
 /// A metadata about the FLAC stream.
-pub enum MetadataBlock<'a, R: 'a + ReadBytes> {
+pub enum MetadataBlock<'a, R: 'a + io::Read> {
     /// The stream info block.
     StreamInfo(StreamInfo),
 
@@ -76,33 +79,99 @@ pub struct StreamInfo {
     pub md5sum: [u8; 16],
 }
 
-struct ApplicationBlock<'a, R: 'a + ReadBytes> {
+pub struct ApplicationBlock<'a, R: 'a + io::Read> {
     /// The application id, registered with Xiph.org.
     ///
-    /// [The list of registered ids can be found on xiph.org][ids].
+    /// [The list of registered ids can be found on Xiph.org][ids].
     /// 
     /// [ids]: https://xiph.org/flac/id.html
     pub id: u32,
-    reader: &'a mut R,
+    reader: &'a mut BufferedReader<R>,
     len: u32,
 }
 
-struct LazySeekTable<'a, R: 'a + ReadBytes> {
-    reader: &'a mut R,
+macro_rules! lazy_block_impl {
+    ($struct: ident) => {
+        impl <'a, R: 'a + io::Read> $struct<'a, R> {
+            /// Skip over this metadata block without parsing anything.
+            pub fn discard(mut self) -> io::Result<()> {
+                try!(self.reader.skip(self.len));
+                self.len = 0;
+                Ok(())
+            }
+        }
+
+        impl<'a, R: 'a + io::Read> Drop for $struct<'a, R> {
+            fn drop(&mut self) {
+                if self.len != 0 {
+                    panic!("{} was dropped, call .discard() or .get() instead.", stringify!($struct))
+                }
+            }
+        }
+    }
+}
+
+/// An unparsed seek table.
+///
+/// This struct must be consumed in one of two ways:
+///
+///  * Call `discard()` to skip over the block.
+///  * Call `get()` to read and parse the seek table. (Not implemented yet.)
+///
+/// **Dropping this struct without calling either will panic.**
+#[must_use = "Discard using discard() or consume with get()."]
+pub struct LazySeekTable<'a, R: 'a + io::Read> {
+    reader: &'a mut BufferedReader<R>,
     len: u32,
 }
 
-struct LazyVorbisComment<'a, R: 'a + ReadBytes> {
-    reader: &'a mut R,
+lazy_block_impl!(LazySeekTable);
+
+/// An unparsed Vorbis comment (also called FLAC tags) block.
+///
+/// This struct must be consumed in one of two ways:
+///
+///  * Call `discard()` to skip over the block.
+///  * Call `get()` to read and parse the Vorbis comments.
+///
+/// **Dropping this struct without calling either will panic.**
+#[must_use = "Discard using discard() or consume with get()."]
+pub struct LazyVorbisComment<'a, R: 'a + io::Read> {
+    reader: &'a mut BufferedReader<R>,
     len: u32,
 }
 
-struct LazyCueSheet<'a, R: 'a + ReadBytes> {
-    reader: &'a mut R,
+lazy_block_impl!(LazyVorbisComment);
+
+/// An unparsed CUE sheet block.
+///
+/// This struct must be consumed in one of two ways:
+///
+///  * Call `discard()` to skip over the block.
+///  * Call `get()` to read and parse the CUE sheet. (Not implemented yet.)
+///
+/// **Dropping this struct without calling either will panic.**
+#[must_use = "Discard using discard() or consume with get()."]
+pub struct LazyCueSheet<'a, R: 'a + io::Read> {
+    reader: &'a mut BufferedReader<R>,
     len: u32,
 }
 
-struct LazyPicture<'a, R: 'a + ReadBytes> {
-    reader: &'a mut R,
+lazy_block_impl!(LazyCueSheet);
+
+/// An unparsed picture block.
+///
+/// This struct must be consumed in one of two ways:
+///
+///  * Call `discard()` to skip over the block.
+///  * Call `get()` to read and parse the picture metadata, and to expose the
+///    inner picture data.
+///
+/// **Dropping this struct without calling either will panic.**
+#[must_use = "Discard using discard() or consume with get()."]
+pub struct LazyPicture<'a, R: 'a + io::Read> {
+    reader: &'a mut BufferedReader<R>,
     len: u32,
 }
+
+lazy_block_impl!(LazyPicture);
