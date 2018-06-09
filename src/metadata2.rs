@@ -10,11 +10,11 @@
 use std::io;
 
 use error::{Error, Result, fmt_err};
-use input::{BufferedReader, ReadBytes};
-
+use input::{BufferedReader, EmbeddedReader, ReadBytes};
 
 /// A metadata about the FLAC stream.
-pub enum MetadataBlock<'a, R: 'a + io::Read> {
+// TODO: Relax ReadBytes to io::Read.
+pub enum MetadataBlock<'a, R: 'a + ReadBytes> {
     /// The stream info block.
     StreamInfo(StreamInfo),
 
@@ -79,15 +79,22 @@ pub struct StreamInfo {
     pub md5sum: [u8; 16],
 }
 
-pub struct ApplicationBlock<'a, R: 'a + io::Read> {
+/// A metadata block that holds application-specific data.
+// TODO: Relax ReadBytes to io::Read.
+pub struct ApplicationBlock<'a, R: 'a + ReadBytes> {
     /// The application id, registered with Xiph.org.
     ///
     /// [The list of registered ids can be found on Xiph.org][ids].
     /// 
     /// [ids]: https://xiph.org/flac/id.html
     pub id: u32,
-    reader: &'a mut BufferedReader<R>,
-    len: u32,
+
+    /// A reader that exposes the embedded application-specific data.
+    ///
+    /// The reader is constrained to the application data, and will return EOF
+    /// when that data ends. The reader can safely be dropped even if it was not
+    /// consumed until the end.
+    pub reader: EmbeddedReader<'a, R>,
 }
 
 /// A seek point in the seek table.
@@ -212,8 +219,13 @@ pub struct PictureMetadata {
 pub struct Picture<'a, R: 'a + io::Read> {
     /// Metadata about the picture, such as its kind and dimensions.
     pub metadata: PictureMetadata,
-    reader: &'a mut BufferedReader<R>,
-    len: u32,
+
+    /// A reader that exposes the embedded picture data.
+    ///
+    /// The reader is constrained to the picture data, and will return EOF
+    /// when the picture data ends. The reader can safely be dropped even if
+    /// it was not consumed until the end.
+    pub reader: EmbeddedReader<'a, R>
 }
 
 macro_rules! lazy_block_impl {
@@ -310,6 +322,114 @@ pub struct LazyPicture<'a, R: 'a + io::Read> {
 }
 
 lazy_block_impl!(LazyPicture);
+
+#[inline]
+fn read_metadata_block_header<R: ReadBytes>(input: &mut R) -> Result<MetadataBlockHeader> {
+    let byte = try!(input.read_u8());
+
+    // The first bit specifies whether this is the last block, the next 7 bits
+    // specify the type of the metadata block to follow.
+    let is_last = (byte >> 7) == 1;
+    let block_type = byte & 0b0111_1111;
+
+    // The length field is 24 bits, or 3 bytes.
+    let length = try!(input.read_be_u24());
+
+    let header = MetadataBlockHeader {
+        is_last: is_last,
+        block_type: block_type,
+        length: length,
+    };
+    Ok(header)
+}
+
+/// Read a single metadata block header and body from the input.
+///
+/// When reading a regular flac stream, there is no need to use this function
+/// directly; constructing a `FlacReader` will read the header and its metadata
+/// blocks.
+///
+/// When a flac stream is embedded in a container format, this function can be
+/// used to decode a single metadata block. For instance, the Ogg format embeds
+/// metadata blocks including their header verbatim in packets. This function
+/// can be used to decode that raw data.
+#[inline]
+pub fn read_metadata_block_with_header<'a, R>(input: &'a mut R) -> Result<MetadataBlock<'a, R>>
+where R: 'a + io::Read {
+  let header = try!(read_metadata_block_header(input));
+  read_metadata_block(input, header.block_type, header.length)
+}
+
+/// Read a single metadata block of the given type and length from the input.
+///
+/// When reading a regular flac stream, there is no need to use this function
+/// directly; constructing a `FlacReader` will read the header and its metadata
+/// blocks.
+///
+/// When a flac stream is embedded in a container format, this function can be
+/// used to decode a single metadata block. For instance, the MP4 format sports
+/// a “FLAC Specific Box” which contains the block type and the raw data. This
+/// function can be used to decode that raw data.
+#[inline]
+pub fn read_metadata_block<'a, R>(input: &mut R,
+                                  block_type: u8,
+                                  length: u32)
+                                  -> Result<MetadataBlock<'a, R>>
+where R: 'a + io::Read {
+    match block_type {
+        0 => {
+            // The streaminfo block has a fixed size of 34 bytes.
+            if length == 34 {
+                let streaminfo = try!(read_streaminfo_block(input));
+                Ok(MetadataBlock::StreamInfo(streaminfo))
+            } else {
+                fmt_err("invalid streaminfo metadata block length")
+            }
+        }
+        1 => {
+            try!(input.skip(length));
+            Ok(MetadataBlock::Padding(length))
+        }
+        2 => {
+            let (id, data) = try!(read_application_block(input, length));
+            Ok(MetadataBlock::Application {
+                id: id,
+                data: data,
+            })
+        }
+        3 => {
+            // TODO: implement seektable reading. For now, pretend it is padding.
+            try!(input.skip(length));
+            Ok(MetadataBlock::Padding { length: length })
+        }
+        4 => {
+            let vorbis_comment = try!(read_vorbis_comment_block(input, length));
+            Ok(MetadataBlock::VorbisComment(vorbis_comment))
+        }
+        5 => {
+            // TODO: implement CUE sheet reading. For now, pretend it is padding.
+            try!(input.skip(length));
+            Ok(MetadataBlock::Padding { length: length })
+        }
+        6 => {
+            let picture = try!(read_picture_block(input, length));
+            Ok(MetadataBlock::Picture(picture))
+        }
+        127 => {
+            // This code is invalid to avoid confusion with a frame sync code.
+            fmt_err("invalid metadata block type")
+        }
+        _ => {
+            // Any other block type is 'reserved' at the moment of writing. The
+            // reference implementation reads it as an 'unknown' block. That is
+            // one way of handling it, but maybe there should be some kind of
+            // 'strict' mode (configurable at compile time?) so that this can
+            // be an error if desired.
+            try!(input.skip(length));
+            Ok(MetadataBlock::Reserved)
+        }
+    }
+}
 
 fn read_streaminfo_block<R: ReadBytes>(input: &mut R) -> Result<StreamInfo> {
     let min_block_size = try!(input.read_be_u16());
@@ -501,7 +621,7 @@ fn read_padding_block<R: ReadBytes>(input: &mut R, length: u32) -> Result<()> {
     Ok(try!(input.skip(length)))
 }
 
-fn read_application_block<R: ReadBytes>(input: &mut R, length: u32) -> Result<(u32, Vec<u8>)> {
+fn read_application_block<'a, R: 'a + ReadBytes>(input: &'a mut R, length: u32) -> Result<ApplicationBlock<'a, R>> {
     if length < 4 {
         return fmt_err("application block length must be at least 4 bytes")
     }
@@ -509,6 +629,10 @@ fn read_application_block<R: ReadBytes>(input: &mut R, length: u32) -> Result<(u
     // Reject large application blocks to avoid memory-based denial-
     // of-service attacks. See also the more elaborate motivation in
     // `read_vorbis_comment_block()`.
+    // TODO: Now that we expose an EmbeddedReader, this is no longer a concern
+    // for Claxon. However, it might still be a concern for users who have not
+    // considered the issue of an incorrect length field in the header. Should
+    // we enfore this in the API somehow?
     if length > 10 * 1024 * 1024 {
         let msg = "application blocks larger than 10 MiB are not supported";
         return Err(Error::Unsupported(msg))
@@ -516,16 +640,17 @@ fn read_application_block<R: ReadBytes>(input: &mut R, length: u32) -> Result<(u
 
     let id = try!(input.read_be_u32());
 
-    // Four bytes of the block have been used for the ID, the rest is payload.
-    // Create a vector of uninitialized memory, and read the block into it. The
-    // uninitialized memory is never exposed: read_into will either fill the
-    // buffer completely, or return an err, in which case the memory is not
-    // exposed.
-    let mut data = Vec::with_capacity(length as usize - 4);
-    unsafe { data.set_len(length as usize - 4); }
-    try!(input.read_into(&mut data));
+    let application = Application {
+        id: id,
+        reader: EmbeddedReader {
+            input: input,
+            cursor: 0,
+            // The application id took 4 bytes, the remainder is data.
+            len: length - 4,
+        },
+    };
 
-    Ok((id, data))
+    Ok((application))
 }
 
 /*
@@ -655,3 +780,10 @@ fn read_picture_block<R: ReadBytes>(input: &mut R, length: u32) -> Result<Pictur
 }
 
 */
+
+#[derive(Clone, Copy)]
+struct MetadataBlockHeader {
+    is_last: bool,
+    block_type: u8,
+    length: u32,
+}

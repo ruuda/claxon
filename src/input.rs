@@ -69,8 +69,8 @@ impl<R: io::Read> BufferedReader<R> {
 ///
 /// Note that because `FlacReader` employs buffering internally, this reader is
 /// buffered. There is no need to wrap it in an `io::BufReader`.
-pub struct EmbeddedReader<'a, R: 'a + io::Read> {
-    reader: &'a mut BufferedReader<R>,
+pub struct EmbeddedReader<'a, R> {
+    input: &'a mut R,
     cursor: usize,
     len: usize,
 }
@@ -78,7 +78,7 @@ pub struct EmbeddedReader<'a, R: 'a + io::Read> {
 impl<'a, R: 'a + io::Read> io::Read for EmbeddedReader<'a, R> {
     #[inline]
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        self.reader.read(buf)
+        self.input.read(buf)
     }
 }
 
