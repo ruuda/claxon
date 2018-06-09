@@ -1,6 +1,22 @@
 Changelog
 =========
 
+Unreleased
+----------
+
+**Breaking changes**:
+
+- The `metadata` module has been redesigned: reading metadata is now done
+  through an iterator. Foreign data in metadata blocks is exposed through the
+  new `input::EmbeddedReader` to avoid unnecessary copies. Blocks without fixed
+  size are returned as lazy blocks with a `discard()` and `get()` method. This
+  way heap allocations can be avoided if the consumer is not interested in the
+  contents of the metadata block.
+
+New features:
+
+- Claxon can now read picture metadata blocks.
+
 0.4.0
 -----
 
