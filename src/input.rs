@@ -17,10 +17,10 @@ use std::io;
 
 /// Similar to `std::io::BufRead`, but more performant.
 ///
-/// There is no simple way to wrap a standard `BufRead` such that it can compute
-/// checksums on consume. This is really something that needs a less restrictive
-/// interface. Apart from enabling checksum computations, this buffered reader
-/// has some convenience functions.
+/// The API of the standard `BufRead` precludes computing checksums on consume,
+/// which is essential for performance when reading the FLAC format. Apart from
+/// enabling checksum computations, this buffered reader has a few convenience
+/// functions.
 pub struct BufferedReader<R: io::Read> {
     /// The wrapped reader.
     inner: R,
