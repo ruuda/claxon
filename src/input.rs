@@ -303,7 +303,7 @@ impl<T: AsRef<[u8]>> ReadBytes for io::Cursor<T> {
     }
 
     fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
-        self.read(buffer)
+        (self as &mut io::Read).read(buffer)
     }
 
     fn read_into(&mut self, buffer: &mut [u8]) -> io::Result<()> {
