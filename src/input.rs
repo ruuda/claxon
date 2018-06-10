@@ -66,6 +66,18 @@ impl<R: io::Read> BufferedReader<R> {
     }
 }
 
+impl<R: io::Read> io::Read for BufferedReader<R> {
+    #[inline]
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        self.read(buf)
+    }
+
+    #[inline]
+    fn read_exact(&mut self, buf: &mut [u8]) -> io::Result<()> {
+        self.read_into(buf)
+    }
+}
+
 /// A reader that exposes a bounded part of the underlying reader.
 ///
 /// In a few places, the FLAC format embeds foreign data as-is:
@@ -79,7 +91,7 @@ impl<R: io::Read> BufferedReader<R> {
 ///
 /// Note that because `FlacReader` employs buffering internally, this reader is
 /// buffered. There is no need to wrap it in an `io::BufReader`.
-pub struct EmbeddedReader<'a, R> {
+pub struct EmbeddedReader<'a, R: 'a> {
     input: &'a mut R,
     cursor: usize,
     len: usize,
@@ -88,6 +100,7 @@ pub struct EmbeddedReader<'a, R> {
 impl<'a, R: 'a + io::Read> io::Read for EmbeddedReader<'a, R> {
     #[inline]
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        // TODO: Update cursor, take bounds into account.
         self.input.read(buf)
     }
 }
@@ -108,6 +121,8 @@ pub trait ReadBytes {
     fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize>;
 
     /// Reads until the provided buffer is full.
+    ///
+    /// This equivalent to `io::Read::read_exact()`.
     fn read_into(&mut self, buffer: &mut [u8]) -> io::Result<()>;
 
     /// Skips over the specified number of bytes.
@@ -256,7 +271,7 @@ impl<R: io::Read> ReadBytes for BufferedReader<R>
     }
 }
 
-impl<'r, R: ReadBytes> ReadBytes for &'r mut R {
+/*impl<'r, R: ReadBytes> ReadBytes for &'r mut R {
 
     #[inline(always)]
     fn read_u8(&mut self) -> io::Result<u8> {
@@ -278,8 +293,49 @@ impl<'r, R: ReadBytes> ReadBytes for &'r mut R {
     fn skip(&mut self, amount: u32) -> io::Result<()> {
         (*self).skip(amount)
     }
+}*/
+
+impl<R: io::Read> ReadBytes for R {
+    fn read_u8(&mut self) -> io::Result<u8> {
+        let mut buffer = [0_u8];
+        try!(self.read_exact(&mut buffer));
+        Ok(buffer[0])
+    }
+
+    fn read_u8_or_eof(&mut self) -> io::Result<Option<u8>> {
+        let mut buffer = [0_u8];
+        match try!((self as io::Read).read(&mut buffer)) {
+            0 => Ok(None),
+            1 => Ok(Some(buffer[0])),
+            _ => unreachable!(),
+        }
+    }
+
+    fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
+        (self as io::Read).read(buffer)
+    }
+
+    fn read_into(&mut self, buffer: &mut [u8]) -> io::Result<()> {
+        (self as io::Read).read_exact(buffer)
+    }
+
+    fn skip(&mut self, amount: u32) -> io::Result<()> {
+        // Skip by reading into a buffer and discarding the result.
+        // TODO: Once specialization is a thing, we could use `seek` instead
+        // if the reader happens to implement `io::Seek` as well.
+
+        // Safe because the uninitialized memory is never exposed.
+        let buffer: [u8; 512] = unsafe { mem::uninitialized() };
+        let mut n_read = 0_u64;
+        while n_read < amount as u64 {
+            let n_left = amount as u64 - n_read;
+            n_read += try!((self as io::Read).read(&mut buffer[..n_left.min(512)]));
+        }
+        Ok(())
+    }
 }
 
+/*
 impl<T: AsRef<[u8]>> ReadBytes for io::Cursor<T> {
 
     fn read_u8(&mut self) -> io::Result<u8> {
@@ -328,7 +384,7 @@ impl<T: AsRef<[u8]>> ReadBytes for io::Cursor<T> {
             Err(io::Error::new(io::ErrorKind::UnexpectedEof, "unexpected eof"))
         }
     }
-}
+}*/
 
 // TODO: Add tests for BufferedReader::read().
 
