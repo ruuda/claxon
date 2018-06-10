@@ -13,8 +13,7 @@ use error::{Error, Result, fmt_err};
 use input::{BufferedReader, EmbeddedReader, ReadBytes};
 
 /// A metadata about the FLAC stream.
-// TODO: Relax ReadBytes to io::Read.
-pub enum MetadataBlock<'a, R: 'a + ReadBytes> {
+pub enum MetadataBlock<'a, R: 'a + io::Read> {
     /// The stream info block.
     StreamInfo(StreamInfo),
 
@@ -80,8 +79,7 @@ pub struct StreamInfo {
 }
 
 /// A metadata block that holds application-specific data.
-// TODO: Relax ReadBytes to io::Read.
-pub struct ApplicationBlock<'a, R: 'a + ReadBytes> {
+pub struct ApplicationBlock<'a, R: 'a + io::Read> {
     /// The application id, registered with Xiph.org.
     ///
     /// [The list of registered ids can be found on Xiph.org][ids].
@@ -324,7 +322,7 @@ pub struct LazyPicture<'a, R: 'a + io::Read> {
 lazy_block_impl!(LazyPicture);
 
 #[inline]
-fn read_metadata_block_header<R: ReadBytes>(input: &mut R) -> Result<MetadataBlockHeader> {
+fn read_metadata_block_header<R: io::Read>(input: &mut R) -> Result<MetadataBlockHeader> {
     let byte = try!(input.read_u8());
 
     // The first bit specifies whether this is the last block, the next 7 bits
@@ -391,16 +389,17 @@ where R: 'a + io::Read {
             Ok(MetadataBlock::Padding(length))
         }
         2 => {
-            let (id, data) = try!(read_application_block(input, length));
-            Ok(MetadataBlock::Application {
-                id: id,
-                data: data,
-            })
+            read_application_block(input, length)
         }
         3 => {
             // TODO: implement seektable reading. For now, pretend it is padding.
-            try!(input.skip(length));
-            Ok(MetadataBlock::Padding { length: length })
+            //try!(input.skip(length));
+            let lazy_seek_table = LazySeekTable {
+                reader: &mut input,
+                len: length
+
+            };
+            Ok(MetadataBlock::SeekTable(lazy_seek_table))
         }
         4 => {
             let vorbis_comment = try!(read_vorbis_comment_block(input, length));
@@ -431,7 +430,7 @@ where R: 'a + io::Read {
     }
 }
 
-fn read_streaminfo_block<R: ReadBytes>(input: &mut R) -> Result<StreamInfo> {
+fn read_streaminfo_block<R: io::Read>(input: &mut R) -> Result<StreamInfo> {
     let min_block_size = try!(input.read_be_u16());
     let max_block_size = try!(input.read_be_u16());
 
@@ -512,7 +511,7 @@ fn read_streaminfo_block<R: ReadBytes>(input: &mut R) -> Result<StreamInfo> {
     Ok(stream_info)
 }
 
-fn read_vorbis_comment_block<R: ReadBytes>(input: &mut R, length: u32) -> Result<VorbisComment> {
+fn read_vorbis_comment_block<R: io::Read>(input: &mut R, length: u32) -> Result<VorbisComment> {
     if length < 8 {
         // We expect at a minimum a 32-bit vendor string length, and a 32-bit
         // comment count.
@@ -612,7 +611,7 @@ fn read_vorbis_comment_block<R: ReadBytes>(input: &mut R, length: u32) -> Result
     Ok(vorbis_comment)
 }
 
-fn read_padding_block<R: ReadBytes>(input: &mut R, length: u32) -> Result<()> {
+fn read_padding_block<R: io::Read>(input: &mut R, length: u32) -> Result<()> {
     // The specification dictates that all bits of the padding block must be 0.
     // However, the reference implementation does not issue an error when this
     // is not the case, and frankly, when you are going to skip over these
@@ -621,7 +620,7 @@ fn read_padding_block<R: ReadBytes>(input: &mut R, length: u32) -> Result<()> {
     Ok(try!(input.skip(length)))
 }
 
-fn read_application_block<'a, R: 'a + ReadBytes>(input: &'a mut R, length: u32) -> Result<ApplicationBlock<'a, R>> {
+fn read_application_block<'a, R: 'a + io::Read>(input: &'a mut R, length: u32) -> Result<ApplicationBlock<'a, R>> {
     if length < 4 {
         return fmt_err("application block length must be at least 4 bytes")
     }
@@ -655,7 +654,7 @@ fn read_application_block<'a, R: 'a + ReadBytes>(input: &'a mut R, length: u32) 
 
 /*
 
-fn read_picture_block<R: ReadBytes>(input: &mut R, length: u32) -> Result<Picture> {
+fn read_picture_block<R: io::Read>(input: &mut R, length: u32) -> Result<Picture> {
     if length < 32 {
         // We expect at a minimum 8 all of the 32-bit fields.
         return fmt_err("picture block is too short")
