@@ -217,7 +217,7 @@ impl FlacReaderOptions {
 }
 
 /// An iterator that yields samples read from a `FlacReader`.
-pub struct FlacSamples<R: ReadBytes> {
+pub struct FlacSamples<R: io::Read> {
     frame_reader: FrameReader<R>,
     block: Block,
     sample: u32,
@@ -555,7 +555,7 @@ impl FlacReader<fs::File> {
     }
 }
 
-impl<R: ReadBytes> Iterator for FlacSamples<R> {
+impl<R: io::Read> Iterator for FlacSamples<R> {
     type Item = Result<i32>;
 
     fn next(&mut self) -> Option<Result<i32>> {

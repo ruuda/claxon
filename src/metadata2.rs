@@ -233,7 +233,7 @@ macro_rules! lazy_block_impl {
             pub fn discard(mut self) -> io::Result<()> {
                 let len = self.len;
                 self.len = 0;
-                self.reader.skip(len)
+                self.input.skip(len)
             }
         }
 
@@ -257,7 +257,7 @@ macro_rules! lazy_block_impl {
 /// **Dropping this struct without calling either will panic.**
 #[must_use = "Discard using discard() or consume with get()."]
 pub struct LazySeekTable<'a, R: 'a + io::Read> {
-    reader: &'a mut BufferedReader<R>,
+    input: &'a mut R,
     len: u32,
 }
 
@@ -273,7 +273,7 @@ lazy_block_impl!(LazySeekTable);
 /// **Dropping this struct without calling either will panic.**
 #[must_use = "Discard using discard() or consume with get()."]
 pub struct LazyVorbisComment<'a, R: 'a + io::Read> {
-    reader: &'a mut BufferedReader<R>,
+    input: &'a mut R,
     len: u32,
 }
 
@@ -284,7 +284,7 @@ impl <'a, R: 'a + io::Read> LazyVorbisComment<'a, R> {
     pub fn get(mut self) -> Result<VorbisComment> {
         let len = self.len;
         self.len = 0;
-        read_vorbis_comment_block(self.reader, len)
+        read_vorbis_comment_block(self.input, len)
     }
 }
 
@@ -298,7 +298,7 @@ impl <'a, R: 'a + io::Read> LazyVorbisComment<'a, R> {
 /// **Dropping this struct without calling either will panic.**
 #[must_use = "Discard using discard() or consume with get()."]
 pub struct LazyCueSheet<'a, R: 'a + io::Read> {
-    reader: &'a mut BufferedReader<R>,
+    input: &'a mut R,
     len: u32,
 }
 
@@ -315,7 +315,7 @@ lazy_block_impl!(LazyCueSheet);
 /// **Dropping this struct without calling either will panic.**
 #[must_use = "Discard using discard() or consume with get()."]
 pub struct LazyPicture<'a, R: 'a + io::Read> {
-    reader: &'a mut BufferedReader<R>,
+    input: &'a mut R,
     len: u32,
 }
 
@@ -369,7 +369,7 @@ where R: 'a + io::Read {
 /// a “FLAC Specific Box” which contains the block type and the raw data. This
 /// function can be used to decode that raw data.
 #[inline]
-pub fn read_metadata_block<'a, R>(input: &mut R,
+pub fn read_metadata_block<'a, R>(input: &'a mut R,
                                   block_type: u8,
                                   length: u32)
                                   -> Result<MetadataBlock<'a, R>>
@@ -389,43 +389,47 @@ where R: 'a + io::Read {
             Ok(MetadataBlock::Padding(length))
         }
         2 => {
-            read_application_block(input, length)
+            let application_block = try!(read_application_block(input, length));
+            Ok(MetadataBlock::Application(application_block))
         }
         3 => {
-            // TODO: implement seektable reading. For now, pretend it is padding.
-            //try!(input.skip(length));
             let lazy_seek_table = LazySeekTable {
-                reader: &mut input,
+                input: input,
                 len: length
-
             };
             Ok(MetadataBlock::SeekTable(lazy_seek_table))
         }
         4 => {
-            let vorbis_comment = try!(read_vorbis_comment_block(input, length));
-            Ok(MetadataBlock::VorbisComment(vorbis_comment))
+            let lazy_vorbis_comment = LazyVorbisComment {
+                input: input,
+                len: length,
+            };
+            Ok(MetadataBlock::VorbisComment(lazy_vorbis_comment))
         }
         5 => {
-            // TODO: implement CUE sheet reading. For now, pretend it is padding.
-            try!(input.skip(length));
-            Ok(MetadataBlock::Padding { length: length })
+            let lazy_cue_sheet = LazyCueSheet {
+                input: input,
+                len: length,
+            };
+            Ok(MetadataBlock::CueSheet(lazy_cue_sheet))
         }
         6 => {
-            let picture = try!(read_picture_block(input, length));
-            Ok(MetadataBlock::Picture(picture))
+            let lazy_picture = LazyPicture {
+                input: input,
+                len: length,
+            };
+            Ok(MetadataBlock::Picture(lazy_picture))
         }
         127 => {
             // This code is invalid to avoid confusion with a frame sync code.
             fmt_err("invalid metadata block type")
         }
         _ => {
-            // Any other block type is 'reserved' at the moment of writing. The
-            // reference implementation reads it as an 'unknown' block. That is
-            // one way of handling it, but maybe there should be some kind of
-            // 'strict' mode (configurable at compile time?) so that this can
-            // be an error if desired.
+            // Any other block type is 'reserved' at the moment of writing.
+            // TODO: Add test to ensure that after a reserved block, the next
+            // block can be read properly.
             try!(input.skip(length));
-            Ok(MetadataBlock::Reserved)
+            fmt_err("invalid metadata block, encountered reserved block type")
         }
     }
 }
@@ -639,7 +643,7 @@ fn read_application_block<'a, R: 'a + io::Read>(input: &'a mut R, length: u32) -
 
     let id = try!(input.read_be_u32());
 
-    let application = Application {
+    let application = ApplicationBlock {
         id: id,
         reader: EmbeddedReader {
             input: input,
@@ -649,12 +653,10 @@ fn read_application_block<'a, R: 'a + io::Read>(input: &'a mut R, length: u32) -
         },
     };
 
-    Ok((application))
+    Ok(application)
 }
 
-/*
-
-fn read_picture_block<R: io::Read>(input: &mut R, length: u32) -> Result<Picture> {
+fn read_picture_block<R: io::Read>(input: &mut R, length: u32) -> Result<Picture<R>> {
     if length < 32 {
         // We expect at a minimum 8 all of the 32-bit fields.
         return fmt_err("picture block is too short")
@@ -772,13 +774,10 @@ fn read_picture_block<R: io::Read>(input: &mut R, length: u32) -> Result<Picture
             height: height,
         },
         reader: unimplemented!(),
-        len: data_len,
     };
 
     Ok(picture)
 }
-
-*/
 
 #[derive(Clone, Copy)]
 struct MetadataBlockHeader {

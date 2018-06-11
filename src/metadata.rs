@@ -7,11 +7,13 @@
 
 //! The `metadata` module deals with metadata at the beginning of a FLAC stream.
 
-use error::{Error, Result, fmt_err};
-use input::ReadBytes;
 use std::fmt;
+use std::io;
 use std::slice;
 use std::str;
+
+use error::{Error, Result, fmt_err};
+use input::ReadBytes;
 
 #[derive(Clone, Copy)]
 struct MetadataBlockHeader {
@@ -350,7 +352,7 @@ impl<'a> Iterator for GetTag<'a> {
 }
 
 #[inline]
-fn read_metadata_block_header<R: ReadBytes>(input: &mut R) -> Result<MetadataBlockHeader> {
+fn read_metadata_block_header<R: io::Read>(input: &mut R) -> Result<MetadataBlockHeader> {
     let byte = try!(input.read_u8());
 
     // The first bit specifies whether this is the last block, the next 7 bits
@@ -380,7 +382,7 @@ fn read_metadata_block_header<R: ReadBytes>(input: &mut R) -> Result<MetadataBlo
 /// metadata blocks including their header verbatim in packets. This function
 /// can be used to decode that raw data.
 #[inline]
-pub fn read_metadata_block_with_header<R: ReadBytes>(input: &mut R)
+pub fn read_metadata_block_with_header<R: io::Read>(input: &mut R)
                                                      -> Result<MetadataBlock> {
   let header = try!(read_metadata_block_header(input));
   read_metadata_block(input, header.block_type, header.length)
@@ -397,10 +399,10 @@ pub fn read_metadata_block_with_header<R: ReadBytes>(input: &mut R)
 /// a “FLAC Specific Box” which contains the block type and the raw data. This
 /// function can be used to decode that raw data.
 #[inline]
-pub fn read_metadata_block<R: ReadBytes>(input: &mut R,
-                                         block_type: u8,
-                                         length: u32)
-                                         -> Result<MetadataBlock> {
+pub fn read_metadata_block<R: io::Read>(input: &mut R,
+                                        block_type: u8,
+                                        length: u32)
+                                        -> Result<MetadataBlock> {
     match block_type {
         0 => {
             // The streaminfo block has a fixed size of 34 bytes.
@@ -456,7 +458,7 @@ pub fn read_metadata_block<R: ReadBytes>(input: &mut R,
     }
 }
 
-fn read_streaminfo_block<R: ReadBytes>(input: &mut R) -> Result<StreamInfo> {
+fn read_streaminfo_block<R: io::Read>(input: &mut R) -> Result<StreamInfo> {
     let min_block_size = try!(input.read_be_u16());
     let max_block_size = try!(input.read_be_u16());
 
@@ -537,7 +539,7 @@ fn read_streaminfo_block<R: ReadBytes>(input: &mut R) -> Result<StreamInfo> {
     Ok(stream_info)
 }
 
-fn read_vorbis_comment_block<R: ReadBytes>(input: &mut R, length: u32) -> Result<VorbisComment> {
+fn read_vorbis_comment_block<R: io::Read>(input: &mut R, length: u32) -> Result<VorbisComment> {
     if length < 8 {
         // We expect at a minimum a 32-bit vendor string length, and a 32-bit
         // comment count.
@@ -650,7 +652,7 @@ fn read_vorbis_comment_block<R: ReadBytes>(input: &mut R, length: u32) -> Result
     Ok(vorbis_comment)
 }
 
-fn read_padding_block<R: ReadBytes>(input: &mut R, length: u32) -> Result<()> {
+fn read_padding_block<R: io::Read>(input: &mut R, length: u32) -> Result<()> {
     // The specification dictates that all bits of the padding block must be 0.
     // However, the reference implementation does not issue an error when this
     // is not the case, and frankly, when you are going to skip over these
@@ -659,7 +661,7 @@ fn read_padding_block<R: ReadBytes>(input: &mut R, length: u32) -> Result<()> {
     Ok(try!(input.skip(length)))
 }
 
-fn read_application_block<R: ReadBytes>(input: &mut R, length: u32) -> Result<(u32, Vec<u8>)> {
+fn read_application_block<R: io::Read>(input: &mut R, length: u32) -> Result<(u32, Vec<u8>)> {
     if length < 4 {
         return fmt_err("application block length must be at least 4 bytes")
     }
@@ -686,7 +688,7 @@ fn read_application_block<R: ReadBytes>(input: &mut R, length: u32) -> Result<(u
     Ok((id, data))
 }
 
-fn read_picture_block<R: ReadBytes>(input: &mut R, length: u32) -> Result<Picture> {
+fn read_picture_block<R: io::Read>(input: &mut R, length: u32) -> Result<Picture> {
     if length < 32 {
         // We expect at a minimum 8 all of the 32-bit fields.
         return fmt_err("picture block is too short")
@@ -820,7 +822,7 @@ fn read_picture_block<R: ReadBytes>(input: &mut R, length: u32) -> Result<Pictur
 /// byte of a metadata block header. This means that the iterator will yield at
 /// least a single value. If the iterator ever yields an error, then no more
 /// data will be read thereafter, and the next value will be `None`.
-pub struct MetadataBlockReader<R: ReadBytes> {
+pub struct MetadataBlockReader<R: io::Read> {
     input: R,
     done: bool,
     /// When true, read pictures into `Vec`s, otherwise record their offsets.
@@ -830,7 +832,7 @@ pub struct MetadataBlockReader<R: ReadBytes> {
 /// Either a `MetadataBlock` or an `Error`.
 pub type MetadataBlockResult = Result<MetadataBlock>;
 
-impl<R: ReadBytes> MetadataBlockReader<R> {
+impl<R: io::Read> MetadataBlockReader<R> {
     /// Creates a metadata block reader that will yield at least one element.
     pub fn new(input: R) -> MetadataBlockReader<R> {
         MetadataBlockReader {
@@ -849,7 +851,7 @@ impl<R: ReadBytes> MetadataBlockReader<R> {
     }
 }
 
-impl<R: ReadBytes> Iterator for MetadataBlockReader<R> {
+impl<R: io::Read> Iterator for MetadataBlockReader<R> {
     type Item = MetadataBlockResult;
 
     #[inline]
