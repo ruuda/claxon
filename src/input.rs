@@ -36,7 +36,6 @@ pub struct BufferedReader<R: io::Read> {
 }
 
 impl<R: io::Read> BufferedReader<R> {
-
     /// Wrap the reader in a new buffered reader.
     pub fn new(inner: R) -> BufferedReader<R> {
         // Use a large-ish buffer size, such that system call overhead is
@@ -68,13 +67,43 @@ impl<R: io::Read> BufferedReader<R> {
 
 impl<R: io::Read> io::Read for BufferedReader<R> {
     #[inline]
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        self.read(buf)
+    fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
+        // Replenish the buffer if it was empty.
+        if self.num_valid == 0 {
+            self.pos = 0;
+            self.num_valid = try!(self.inner.read(&mut self.buf)) as u32;
+        }
+
+        let n = cmp::min(self.num_valid as usize, buffer.len() as usize);
+        buffer[..n].copy_from_slice(&self.buf[self.pos as usize..self.pos as usize + n]);
+        self.num_valid -= n as u32;
+        Ok(n)
     }
 
     #[inline]
-    fn read_exact(&mut self, buf: &mut [u8]) -> io::Result<()> {
-        self.read_into(buf)
+    fn read_exact(&mut self, buffer: &mut [u8]) -> io::Result<()> {
+        let mut bytes_left = buffer.len();
+
+        while bytes_left > 0 {
+            let from = buffer.len() - bytes_left;
+            let count = cmp::min(bytes_left, (self.num_valid - self.pos) as usize);
+            buffer[from..from + count].copy_from_slice(
+                &self.buf[self.pos as usize..self.pos as usize + count]);
+            bytes_left -= count;
+            self.pos += count as u32;
+
+            if bytes_left > 0 {
+                // Replenish the buffer if there is more to be read.
+                self.pos = 0;
+                self.num_valid = try!(self.inner.read(&mut self.buf)) as u32;
+                if self.num_valid == 0 {
+                    return Err(io::Error::new(io::ErrorKind::UnexpectedEof,
+                                              "Expected more bytes."))
+                }
+            }
+        }
+
+        Ok(())
     }
 }
 
@@ -92,9 +121,10 @@ impl<R: io::Read> io::Read for BufferedReader<R> {
 /// Note that because `FlacReader` employs buffering internally, this reader is
 /// buffered. There is no need to wrap it in an `io::BufReader`.
 pub struct EmbeddedReader<'a, R: 'a> {
-    input: &'a mut R,
-    cursor: usize,
-    len: usize,
+    // TODO: Make the fields private and add a proper constructor instead.
+    pub input: &'a mut R,
+    pub cursor: u32,
+    pub len: u32,
 }
 
 impl<'a, R: 'a + io::Read> io::Read for EmbeddedReader<'a, R> {
@@ -108,30 +138,54 @@ impl<'a, R: 'a + io::Read> io::Read for EmbeddedReader<'a, R> {
 // TODO: Implement io::BufRead for EmbeddedReader.
 
 /// Provides convenience methods to make input less cumbersome.
-pub trait ReadBytes {
-    /// Reads a single byte, failing on EOF.
-    fn read_u8(&mut self) -> io::Result<u8>;
-
-    /// Reads a single byte, not failing on EOF.
-    fn read_u8_or_eof(&mut self) -> io::Result<Option<u8>>;
-
-    /// Read into the buffer, returns how many bytes were read.
-    ///
-    /// This is equivalent to `io::Read::read()`.
-    fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize>;
-
+pub trait ReadBytes : io::Read {
     /// Reads until the provided buffer is full.
     ///
     /// This equivalent to `io::Read::read_exact()`.
-    fn read_into(&mut self, buffer: &mut [u8]) -> io::Result<()>;
+    #[deprecated = "Use io::Read::read_exact instead."]
+    fn read_into(&mut self, buffer: &mut [u8]) -> io::Result<()> {
+        self.read_exact(buffer)
+    }
 
     /// Skips over the specified number of bytes.
     ///
     /// For a buffered reader, this can help a lot by just bumping a pointer.
-    fn skip(&mut self, amount: u32) -> io::Result<()>;
+    fn skip(&mut self, amount: u32) -> io::Result<()> {
+        // Skip by reading into a buffer and discarding the result.
+        // TODO: Once specialization is a thing, we could use `seek` instead
+        // if the reader happens to implement `io::Seek` as well.
+
+        // Safe because the uninitialized memory is never exposed.
+        use std::mem;
+        let mut buffer: [u8; 512] = unsafe { mem::uninitialized() };
+        let mut n_read = 0_usize;
+        while n_read < amount as usize {
+            let n_left = amount as usize - n_read;
+            n_read += try!(self.read(&mut buffer[..n_left.min(512)]));
+        }
+        Ok(())
+    }
+
+    /// Reads a single byte, failing on EOF.
+    fn read_u8(&mut self) -> io::Result<u8> {
+        let mut buffer = [0_u8];
+        try!(self.read_exact(&mut buffer));
+        Ok(buffer[0])
+    }
+
+    /// Reads a single byte, not failing on EOF.
+    fn read_u8_or_eof(&mut self) -> io::Result<Option<u8>> {
+        let mut buffer = [0_u8];
+        match try!(self.read(&mut buffer)) {
+            0 => Ok(None),
+            1 => Ok(Some(buffer[0])),
+            _ => unreachable!(),
+        }
+    }
 
     /// Reads two bytes and interprets them as a big-endian 16-bit unsigned integer.
     fn read_be_u16(&mut self) -> io::Result<u16> {
+        // TODO: Can read into a slice in a single call. Also below.
         let b0 = try!(self.read_u8()) as u16;
         let b1 = try!(self.read_u8()) as u16;
         Ok(b0 << 8 | b1)
@@ -174,8 +228,7 @@ pub trait ReadBytes {
     }
 }
 
-impl<R: io::Read> ReadBytes for BufferedReader<R>
-{
+impl<R: io::Read> ReadBytes for BufferedReader<R> {
     #[inline(always)]
     fn read_u8(&mut self) -> io::Result<u8> {
         if self.pos == self.num_valid {
@@ -211,44 +264,6 @@ impl<R: io::Read> ReadBytes for BufferedReader<R>
         Ok(Some(try!(self.read_u8())))
     }
 
-    fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
-        // Replenish the buffer if it was empty.
-        if self.num_valid == 0 {
-            self.pos = 0;
-            self.num_valid = try!(self.inner.read(&mut self.buf)) as u32;
-        }
-
-        let n = cmp::min(self.num_valid as usize, buffer.len() as usize);
-        buffer[..n].copy_from_slice(&self.buf[self.pos as usize..self.pos as usize + n]);
-        self.num_valid -= n as u32;
-        Ok(n)
-    }
-
-    fn read_into(&mut self, buffer: &mut [u8]) -> io::Result<()> {
-        let mut bytes_left = buffer.len();
-
-        while bytes_left > 0 {
-            let from = buffer.len() - bytes_left;
-            let count = cmp::min(bytes_left, (self.num_valid - self.pos) as usize);
-            buffer[from..from + count].copy_from_slice(
-                &self.buf[self.pos as usize..self.pos as usize + count]);
-            bytes_left -= count;
-            self.pos += count as u32;
-
-            if bytes_left > 0 {
-                // Replenish the buffer if there is more to be read.
-                self.pos = 0;
-                self.num_valid = try!(self.inner.read(&mut self.buf)) as u32;
-                if self.num_valid == 0 {
-                    return Err(io::Error::new(io::ErrorKind::UnexpectedEof,
-                                              "Expected more bytes."))
-                }
-            }
-        }
-
-        Ok(())
-    }
-
     fn skip(&mut self, mut amount: u32) -> io::Result<()> {
         while amount > 0 {
             let num_left = self.num_valid - self.pos;
@@ -271,7 +286,14 @@ impl<R: io::Read> ReadBytes for BufferedReader<R>
     }
 }
 
-/*impl<'r, R: ReadBytes> ReadBytes for &'r mut R {
+impl<'r, R: io::Read> ReadBytes for &'r mut R {
+    fn read_into(&mut self, buffer: &mut [u8]) -> io::Result<()> {
+        (*self).read_exact(buffer)
+    }
+
+    fn skip(&mut self, amount: u32) -> io::Result<()> {
+        (*self).skip(amount)
+    }
 
     #[inline(always)]
     fn read_u8(&mut self) -> io::Result<u8> {
@@ -282,56 +304,24 @@ impl<R: io::Read> ReadBytes for BufferedReader<R>
         (*self).read_u8_or_eof()
     }
 
-    fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
-        (*self).read(buffer)
+    fn read_be_u16(&mut self) -> io::Result<u16> {
+        (*self).read_be_u16()
     }
 
-    fn read_into(&mut self, buffer: &mut [u8]) -> io::Result<()> {
-        (*self).read_into(buffer)
+    fn read_be_u16_or_eof(&mut self) -> io::Result<Option<u16>> {
+        (*self).read_be_u16_or_eof()
     }
 
-    fn skip(&mut self, amount: u32) -> io::Result<()> {
-        (*self).skip(amount)
-    }
-}*/
-
-impl<R: io::Read> ReadBytes for R {
-    fn read_u8(&mut self) -> io::Result<u8> {
-        let mut buffer = [0_u8];
-        try!(self.read_exact(&mut buffer));
-        Ok(buffer[0])
+    fn read_be_u24(&mut self) -> io::Result<u32> {
+        (*self).read_be_u24()
     }
 
-    fn read_u8_or_eof(&mut self) -> io::Result<Option<u8>> {
-        let mut buffer = [0_u8];
-        match try!((self as io::Read).read(&mut buffer)) {
-            0 => Ok(None),
-            1 => Ok(Some(buffer[0])),
-            _ => unreachable!(),
-        }
+    fn read_be_u32(&mut self) -> io::Result<u32> {
+        (*self).read_be_u32()
     }
 
-    fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
-        (self as io::Read).read(buffer)
-    }
-
-    fn read_into(&mut self, buffer: &mut [u8]) -> io::Result<()> {
-        (self as io::Read).read_exact(buffer)
-    }
-
-    fn skip(&mut self, amount: u32) -> io::Result<()> {
-        // Skip by reading into a buffer and discarding the result.
-        // TODO: Once specialization is a thing, we could use `seek` instead
-        // if the reader happens to implement `io::Seek` as well.
-
-        // Safe because the uninitialized memory is never exposed.
-        let buffer: [u8; 512] = unsafe { mem::uninitialized() };
-        let mut n_read = 0_u64;
-        while n_read < amount as u64 {
-            let n_left = amount as u64 - n_read;
-            n_read += try!((self as io::Read).read(&mut buffer[..n_left.min(512)]));
-        }
-        Ok(())
+    fn read_le_u32(&mut self) -> io::Result<u32> {
+        (*self).read_le_u32()
     }
 }
 

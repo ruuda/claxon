@@ -8,6 +8,7 @@
 //! The `frame` module deals with the frames that make up a FLAC stream.
 
 use std::i32;
+use std::io;
 
 use crc::{Crc8Reader, Crc16Reader};
 use error::{Error, Result, fmt_err};
@@ -61,7 +62,7 @@ impl FrameHeader {
 /// Reads a variable-length integer encoded as what is called "UTF-8" coding
 /// in the specification. (It is not real UTF-8.) This function can read
 /// integers encoded in this way up to 36-bit integers.
-fn read_var_length_int<R: ReadBytes>(input: &mut R) -> Result<u64> {
+fn read_var_length_int<R: io::Read>(input: &mut R) -> Result<u64> {
     // The number of consecutive 1s followed by a 0 is the number of additional
     // bytes to read.
     let first = try!(input.read_u8());
@@ -128,7 +129,7 @@ fn verify_read_var_length_int() {
                Error::FormatError("invalid variable-length integer"));
 }
 
-fn read_frame_header_or_eof<R: ReadBytes>(input: &mut R) -> Result<Option<FrameHeader>> {
+fn read_frame_header_or_eof<R: io::Read>(input: &mut R) -> Result<Option<FrameHeader>> {
     // The frame header includes a CRC-8 at the end. It can be computed
     // automatically while reading, by wrapping the input reader in a reader
     // that computes the CRC.
@@ -600,7 +601,7 @@ fn verify_block_stereo_samples_iterator() {
 ///
 /// TODO: for now, it is assumes that the reader starts at a frame header;
 /// no searching for a sync code is performed at the moment.
-pub struct FrameReader<R: ReadBytes> {
+pub struct FrameReader<R: io::Read> {
     input: R,
 }
 
@@ -647,7 +648,7 @@ fn ensure_buffer_len_returns_buffer_with_new_len() {
     }
 }
 
-impl<R: ReadBytes> FrameReader<R> {
+impl<R: io::Read> FrameReader<R> {
     /// Creates a new frame reader that will yield at least one element.
     pub fn new(input: R) -> FrameReader<R> {
         FrameReader {
