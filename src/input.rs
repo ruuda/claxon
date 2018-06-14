@@ -47,6 +47,17 @@ impl<R: io::Read> BufferedReader<R> {
         }
     }
 
+    /// Construct a buffered reader with buffer size (for testing only).
+    fn with_capacity(inner: R, capacity: usize) -> BufferedReader<R> {
+        let buf = vec![0; capacity].into_boxed_slice();
+        BufferedReader {
+            inner: inner,
+            buf: buf,
+            pos: 0,
+            num_valid: 0,
+        }
+    }
+
     /// Destroys the buffered reader, returning the wrapped reader.
     ///
     /// Anything in the buffer will be lost.
@@ -64,9 +75,10 @@ impl<R: io::Read> io::Read for BufferedReader<R> {
             self.num_valid = try!(self.inner.read(&mut self.buf)) as u32;
         }
 
-        let n = cmp::min(self.num_valid as usize, buffer.len() as usize);
+        let n = cmp::min(self.num_valid as usize, buffer.len());
         buffer[..n].copy_from_slice(&self.buf[self.pos as usize..self.pos as usize + n]);
         self.num_valid -= n as u32;
+        self.pos += n as u32;
         Ok(n)
     }
 
@@ -76,11 +88,12 @@ impl<R: io::Read> io::Read for BufferedReader<R> {
 
         while bytes_left > 0 {
             let from = buffer.len() - bytes_left;
-            let count = cmp::min(bytes_left, (self.num_valid - self.pos) as usize);
+            let count = cmp::min(bytes_left, self.num_valid as usize);
             buffer[from..from + count].copy_from_slice(
                 &self.buf[self.pos as usize..self.pos as usize + count]);
             bytes_left -= count;
             self.pos += count as u32;
+            self.num_valid -= count as u32;
 
             if bytes_left > 0 {
                 // Replenish the buffer if there is more to be read.
@@ -335,15 +348,20 @@ impl<T: AsRef<[u8]>> ReadBytes for io::Cursor<T> {
 
 #[test]
 fn verify_read_into_buffered_reader() {
-    let mut reader = BufferedReader::new(io::Cursor::new(vec![2u8, 3, 5, 7, 11, 13, 17, 19, 23]));
-    let mut buf1 = [0u8; 3];
-    let mut buf2 = [0u8; 5];
-    let mut buf3 = [0u8; 2];
-    reader.read_into(&mut buf1).ok().unwrap();
-    reader.read_into(&mut buf2).ok().unwrap();
-    assert!(reader.read_into(&mut buf3).is_err());
-    assert_eq!(&buf1[..], &[2u8, 3, 5]);
-    assert_eq!(&buf2[..], &[7u8, 11, 13, 17, 19]);
+    for &buf_len in &[1, 2, 3, 5, 7, 19usize] {
+        let mut reader = BufferedReader::with_capacity(
+            io::Cursor::new(vec![2u8, 3, 5, 7, 11, 13, 17, 19, 23]),
+            buf_len
+        );
+        let mut buf1 = [0u8; 3];
+        let mut buf2 = [0u8; 5];
+        let mut buf3 = [0u8; 2];
+        reader.read_into(&mut buf1).ok().unwrap();
+        reader.read_into(&mut buf2).ok().unwrap();
+        assert!(reader.read_into(&mut buf3).is_err());
+        assert_eq!(&buf1[..], &[2u8, 3, 5]);
+        assert_eq!(&buf2[..], &[7u8, 11, 13, 17, 19]);
+    }
 }
 
 #[test]
@@ -361,14 +379,19 @@ fn verify_read_into_cursor() {
 
 #[test]
 fn verify_read_u8_buffered_reader() {
-    let mut reader = BufferedReader::new(io::Cursor::new(vec![0u8, 2, 129, 89, 122]));
-    assert_eq!(reader.read_u8().unwrap(), 0);
-    assert_eq!(reader.read_u8().unwrap(), 2);
-    assert_eq!(reader.read_u8().unwrap(), 129);
-    assert_eq!(reader.read_u8().unwrap(), 89);
-    assert_eq!(reader.read_u8_or_eof().unwrap(), Some(122));
-    assert_eq!(reader.read_u8_or_eof().unwrap(), None);
-    assert!(reader.read_u8().is_err());
+    for &buf_len in &[1, 2, 3, 5, 7, 19usize] {
+        let mut reader = BufferedReader::with_capacity(
+            io::Cursor::new(vec![0u8, 2, 129, 89, 122]),
+            buf_len
+        );
+        assert_eq!(reader.read_u8().unwrap(), 0);
+        assert_eq!(reader.read_u8().unwrap(), 2);
+        assert_eq!(reader.read_u8().unwrap(), 129);
+        assert_eq!(reader.read_u8().unwrap(), 89);
+        assert_eq!(reader.read_u8_or_eof().unwrap(), Some(122));
+        assert_eq!(reader.read_u8_or_eof().unwrap(), None);
+        assert!(reader.read_u8().is_err());
+    }
 }
 
 #[test]
@@ -385,10 +408,15 @@ fn verify_read_u8_cursor() {
 
 #[test]
 fn verify_read_be_u16_buffered_reader() {
-    let mut reader = BufferedReader::new(io::Cursor::new(vec![0u8, 2, 129, 89, 122]));
-    assert_eq!(reader.read_be_u16().ok(), Some(2));
-    assert_eq!(reader.read_be_u16().ok(), Some(33113));
-    assert!(reader.read_be_u16().is_err());
+    for &buf_len in &[1, 2, 3, 5, 7, 19usize] {
+        let mut reader = BufferedReader::with_capacity(
+            io::Cursor::new(vec![0u8, 2, 129, 89, 122]),
+            buf_len
+        );
+        assert_eq!(reader.read_be_u16().ok(), Some(2));
+        assert_eq!(reader.read_be_u16().ok(), Some(33113));
+        assert!(reader.read_be_u16().is_err());
+    }
 }
 
 #[test]
@@ -401,10 +429,15 @@ fn verify_read_be_u16_cursor() {
 
 #[test]
 fn verify_read_be_u24_buffered_reader() {
-    let mut reader = BufferedReader::new(io::Cursor::new(vec![0u8, 0, 2, 0x8f, 0xff, 0xf3, 122]));
-    assert_eq!(reader.read_be_u24().ok(), Some(2));
-    assert_eq!(reader.read_be_u24().ok(), Some(9_437_171));
-    assert!(reader.read_be_u24().is_err());
+    for &buf_len in &[1, 2, 3, 5, 7, 19usize] {
+        let mut reader = BufferedReader::with_capacity(
+            io::Cursor::new(vec![0u8, 0, 2, 0x8f, 0xff, 0xf3, 122]),
+            buf_len
+        );
+        assert_eq!(reader.read_be_u24().ok(), Some(2));
+        assert_eq!(reader.read_be_u24().ok(), Some(9_437_171));
+        assert!(reader.read_be_u24().is_err());
+    }
 }
 
 #[test]
@@ -417,10 +450,15 @@ fn verify_read_be_u24_cursor() {
 
 #[test]
 fn verify_read_be_u32_buffered_reader() {
-    let mut reader = BufferedReader::new(io::Cursor::new(vec![0u8, 0, 0, 2, 0x80, 0x01, 0xff, 0xe9, 0]));
-    assert_eq!(reader.read_be_u32().ok(), Some(2));
-    assert_eq!(reader.read_be_u32().ok(), Some(2_147_614_697));
-    assert!(reader.read_be_u32().is_err());
+    for &buf_len in &[1, 2, 3, 5, 7, 19usize] {
+        let mut reader = BufferedReader::with_capacity(
+            io::Cursor::new(vec![0u8, 0, 0, 2, 0x80, 0x01, 0xff, 0xe9, 0]),
+            buf_len
+        );
+        assert_eq!(reader.read_be_u32().ok(), Some(2));
+        assert_eq!(reader.read_be_u32().ok(), Some(2_147_614_697));
+        assert!(reader.read_be_u32().is_err());
+    }
 }
 
 #[test]
@@ -433,10 +471,15 @@ fn verify_read_be_u32_cursor() {
 
 #[test]
 fn verify_read_le_u32_buffered_reader() {
-    let mut reader = BufferedReader::new(io::Cursor::new(vec![2u8, 0, 0, 0, 0xe9, 0xff, 0x01, 0x80, 0]));
-    assert_eq!(reader.read_le_u32().ok(), Some(2));
-    assert_eq!(reader.read_le_u32().ok(), Some(2_147_614_697));
-    assert!(reader.read_le_u32().is_err());
+    for &buf_len in &[1, 2, 3, 5, 7, 19usize] {
+        let mut reader = BufferedReader::with_capacity(
+            io::Cursor::new(vec![2u8, 0, 0, 0, 0xe9, 0xff, 0x01, 0x80, 0]),
+            buf_len
+        );
+        assert_eq!(reader.read_le_u32().ok(), Some(2));
+        assert_eq!(reader.read_le_u32().ok(), Some(2_147_614_697));
+        assert!(reader.read_le_u32().is_err());
+    }
 }
 
 #[test]
