@@ -6,7 +6,6 @@
 // A copy of the License has been included in the root of the repository.
 
 use std::io;
-use input::ReadBytes;
 
 // These tables were taken from the tables in crc.c in libflac.
 
@@ -112,77 +111,39 @@ impl<R> Crc16Reader<R> {
     }
 }
 
-impl<R> io::Read for Crc8Reader<R> {
-    fn read(&mut self, _buffer: &mut [u8]) -> io::Result<usize> {
-        panic!("CRC reader does not support read.");
-    }
-}
-
-impl<R> io::Read for Crc16Reader<R> {
-    fn read(&mut self, _buffer: &mut [u8]) -> io::Result<usize> {
-        panic!("CRC reader does not support read.");
-    }
-}
-
-impl<R: ReadBytes> ReadBytes for Crc8Reader<R> {
+impl<R: io::Read> io::Read for Crc8Reader<R> {
     #[inline(always)]
-    fn read_u8(&mut self) -> io::Result<u8> {
-        match self.inner.read_u8() {
-            Ok(byte) => {
-                self.update_state(byte);
-                Ok(byte)
-            },
-            Err(err) => Err(err),
+    fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
+        match self.inner.read(buffer) {
+            Ok(n) => {
+                for &b in &buffer[..n] {
+                    self.update_state(b);
+                }
+                Ok(n)
+            }
+            err => err,
         }
-    }
-
-    fn read_u8_or_eof(&mut self) -> io::Result<Option<u8>> {
-        match self.inner.read_u8_or_eof() {
-            Ok(Some(byte)) => {
-                self.update_state(byte);
-                Ok(Some(byte))
-            },
-            Ok(None) => Ok(None),
-            Err(err) => Err(err),
-        }
-    }
-
-    fn skip(&mut self, _amount: u32) -> io::Result<()> {
-        panic!("CRC reader does not support skip, it does not compute CRC over skipped data.");
     }
 }
 
-impl<R: ReadBytes> ReadBytes for Crc16Reader<R> {
+impl<R: io::Read> io::Read for Crc16Reader<R> {
     #[inline(always)]
-    fn read_u8(&mut self) -> io::Result<u8> {
-        match self.inner.read_u8() {
-            Ok(byte) => {
-                self.update_state(byte);
-                Ok(byte)
-            },
-            Err(err) => Err(err),
+    fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
+        match self.inner.read(buffer) {
+            Ok(n) => {
+                for &b in &buffer[..n] {
+                    self.update_state(b);
+                }
+                Ok(n)
+            }
+            err => err,
         }
-    }
-
-    fn read_u8_or_eof(&mut self) -> io::Result<Option<u8>> {
-        match self.inner.read_u8_or_eof() {
-            Ok(Some(byte)) => {
-                self.update_state(byte);
-                Ok(Some(byte))
-            },
-            Ok(None) => Ok(None),
-            Err(err) => Err(err),
-        }
-    }
-
-    fn skip(&mut self, _amount: u32) -> io::Result<()> {
-        panic!("CRC reader does not support skip, it does not compute CRC over skipped data.");
     }
 }
 
 #[cfg(test)]
 fn verify_crc8(test_vector: Vec<u8>, result: u8) {
-    use input::BufferedReader;
+    use input::{BufferedReader, ReadBytes};
     let data = BufferedReader::new(io::Cursor::new(test_vector));
     let mut reader = Crc8Reader::new(data);
     while let Some(_) = reader.read_u8_or_eof().unwrap() {}
@@ -191,7 +152,7 @@ fn verify_crc8(test_vector: Vec<u8>, result: u8) {
 
 #[cfg(test)]
 fn verify_crc16(test_vector: Vec<u8>, result: u16) {
-    use input::BufferedReader;
+    use input::{BufferedReader, ReadBytes};
     let data = BufferedReader::new(io::Cursor::new(test_vector));
     let mut reader = Crc16Reader::new(data);
     while let Some(_) = reader.read_u8_or_eof().unwrap() {}

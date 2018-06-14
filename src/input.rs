@@ -228,6 +228,9 @@ pub trait ReadBytes : io::Read {
     }
 }
 
+impl<R: io::Read> ReadBytes for R { }
+
+/*
 impl<R: io::Read> ReadBytes for BufferedReader<R> {
     #[inline(always)]
     fn read_u8(&mut self) -> io::Result<u8> {
@@ -285,45 +288,7 @@ impl<R: io::Read> ReadBytes for BufferedReader<R> {
         Ok(())
     }
 }
-
-impl<'r, R: io::Read> ReadBytes for &'r mut R {
-    fn read_into(&mut self, buffer: &mut [u8]) -> io::Result<()> {
-        (*self).read_exact(buffer)
-    }
-
-    fn skip(&mut self, amount: u32) -> io::Result<()> {
-        (*self).skip(amount)
-    }
-
-    #[inline(always)]
-    fn read_u8(&mut self) -> io::Result<u8> {
-        (*self).read_u8()
-    }
-
-    fn read_u8_or_eof(&mut self) -> io::Result<Option<u8>> {
-        (*self).read_u8_or_eof()
-    }
-
-    fn read_be_u16(&mut self) -> io::Result<u16> {
-        (*self).read_be_u16()
-    }
-
-    fn read_be_u16_or_eof(&mut self) -> io::Result<Option<u16>> {
-        (*self).read_be_u16_or_eof()
-    }
-
-    fn read_be_u24(&mut self) -> io::Result<u32> {
-        (*self).read_be_u24()
-    }
-
-    fn read_be_u32(&mut self) -> io::Result<u32> {
-        (*self).read_be_u32()
-    }
-
-    fn read_le_u32(&mut self) -> io::Result<u32> {
-        (*self).read_le_u32()
-    }
-}
+*/
 
 /*
 impl<T: AsRef<[u8]>> ReadBytes for io::Cursor<T> {
