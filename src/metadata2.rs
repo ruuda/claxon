@@ -227,8 +227,8 @@ pub struct Picture<'a, R: 'a + io::Read> {
 }
 
 macro_rules! lazy_block_impl {
-    ($struct: ident) => {
-        impl <'a, R: 'a + io::Read> $struct<'a, R> {
+    ($typename: ident) => {
+        impl <'a, R: 'a + io::Read> $typename<'a, R> {
             /// Skip over this metadata block without parsing anything.
             pub fn discard(mut self) -> io::Result<()> {
                 let len = self.len;
@@ -237,10 +237,10 @@ macro_rules! lazy_block_impl {
             }
         }
 
-        impl<'a, R: 'a + io::Read> Drop for $struct<'a, R> {
+        impl<'a, R: 'a + io::Read> Drop for $typename<'a, R> {
             fn drop(&mut self) {
                 if self.len != 0 {
-                    panic!("{} was dropped, call .discard() or .get() instead.", stringify!($struct))
+                    panic!("{} was dropped, call .discard() or .get() instead.", stringify!($typename))
                 }
             }
         }
