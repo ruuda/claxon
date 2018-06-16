@@ -164,7 +164,7 @@ pub trait ReadBytes : io::Read {
         let mut n_read = 0_usize;
         while n_read < amount as usize {
             let n_left = amount as usize - n_read;
-            n_read += try!(self.read(&mut buffer[..n_left.min(512)]));
+            n_read += try!(self.read(&mut buffer[..cmp::min(n_left, 512)]));
         }
         Ok(())
     }
