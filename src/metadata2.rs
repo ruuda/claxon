@@ -928,4 +928,53 @@ impl<R: io::Read> MetadataReader<R> {
     pub fn into_inner(self) -> R {
         self.input
     }
+
+    /// Skip to the audio data and construct a [`FlacReader`][flacreader].
+    ///
+    /// Use this method to continue reading audio data after reading metadata.
+    /// This method skips over remaining metadata blocks right to the audio
+    /// data. If, while skipping to the audio data, a seek table is encountered
+    /// and one was not provided, this method reads the seek table and uses it
+    /// to construct the [`FlacReader`][flacreader].
+    ///
+    /// The `MetadataReader` produces a [`StreamInfo`][streaminfo] block as the
+    /// first element returned from [`next()`][next]. That block should be
+    /// passed in here.
+    ///
+    /// If you are not interested in metadata blocks,
+    /// [`FlacReader::new()`][flacreader-new] is a simpler way to construct a
+    /// [`FlacReader`][flacreader].
+    ///
+    /// [flacreader]:     ../struct.FlacReader.html
+    /// [flacreader-new]: ../struct.FlacReader.html#method.new
+    /// [streaminfo]:     struct.StreamInfo.html
+    /// [next]:           #method.next
+    pub fn into_flac_reader(
+        mut self,
+        streaminfo: StreamInfo,
+        mut seektable: Option<SeekTable>
+    ) -> Result<::FlacReader<R>> {
+        while let Some(metadata_block) = self.next() {
+            match try!(metadata_block) {
+                MetadataBlock::StreamInfo(..) => {
+                    return fmt_err("encountered second streaminfo")
+                }
+                MetadataBlock::Padding(..) => {
+
+                }
+                // TODO: Maybe add a method MetadataBlock::discard()?
+                MetadataBlock::Application(mut _app) => { } // TODO: Discard on app block.
+                MetadataBlock::SeekTable(mut lazy_table) => {
+                    // TODO: Read table once we can.
+                    // seektable = Some(try!(lazy_table.get()));
+                    try!(lazy_table.discard());
+                }
+                MetadataBlock::VorbisComment(mut lazy_block) => try!(lazy_block.discard()),
+                MetadataBlock::CueSheet(mut lazy_block) => try!(lazy_block.discard()),
+                MetadataBlock::Picture(mut lazy_block) => try!(lazy_block.discard()),
+            }
+        }
+
+        Ok(::FlacReader::new_frame_aligned(self.input, streaminfo, seektable))
+    }
 }

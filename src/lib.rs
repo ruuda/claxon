@@ -75,8 +75,7 @@ use std::path;
 use error::fmt_err;
 use frame::FrameReader;
 use input::ReadBytes;
-use metadata::{MetadataBlock, MetadataBlockReader, Picture, PictureKind, StreamInfo, VorbisComment};
-use metadata2::{SeekTable};
+use metadata2::{MetadataBlock, SeekTable, StreamInfo, VorbisComment};
 
 mod crc;
 mod error;
@@ -96,119 +95,7 @@ pub use metadata2::MetadataReader;
 pub struct FlacReader<R: io::Read> {
     streaminfo: StreamInfo,
     vorbis_comment: Option<VorbisComment>,
-    pictures: Vec<Picture>,
     input: R,
-}
-
-/// Determines how to read picture metadata.
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
-pub enum ReadPicture {
-    /// Do not read picture metadata at all.
-    Skip,
-
-    /// Record the offset of the first front cover picture in the stream.
-    ///
-    /// Claxon will skip over the image itself to avoid allocating memory, but
-    /// record the offset and length in the stream. The picture can be extracted
-    /// at a later time by seeking to the offset.
-    ///
-    /// If multiple front cover pictures are present, this will only
-    /// record the first one. Pictures that have a different kind than
-    /// `PictureKind::FrontCover` are skipped altogether.
-    CoverAsOffset,
-
-    /// Record the offset of all pictures in the stream.
-    ///
-    /// Unlike `CoverAsOffset`, all picture blocks are recorded.
-    AllAsOffset,
-
-    /// Read the first front cover picture into a `Vec`.
-    ///
-    /// If multiple front cover pictures are present, this will only
-    /// read the first one. Pictures that have a different kind than
-    /// `PictureKind::FrontCover` are skipped altogether.
-    CoverAsVec,
-
-    /// Read all pictures into `Vec`s.
-    ///
-    /// Unlike `CoverAsVec`, all picture blocks are read.
-    AllAsVec,
-}
-
-/// Controls what metadata `FlacReader` reads when constructed.
-///
-/// The FLAC format contains a number of metadata blocks before the start of
-/// audio data. Reading these is wasteful if the data is never used. The
-/// `FlacReaderOptions` indicate which blocks to look for. As soon as all
-/// desired blocks have been read, `FlacReader::new_ext()` returns without
-/// reading remaining metadata blocks.
-///
-/// A few use cases:
-///
-/// * To read only the streaminfo, as quickly as possible, set `metadata_only`
-///   to true, `read_vorbis_comment` to false, and `read_picture` to `Skip`.
-///   The resulting reader cannot be used to read audio data.
-/// * To read only the streaminfo and tags, set `metadata_only` and
-///   `read_vorbis_comment` both to true, but `read_picture` to `Skip`. The
-///   resulting reader cannot be used to read audio data.
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
-pub struct FlacReaderOptions {
-    /// When true, return a reader as soon as all desired metadata has been read.
-    ///
-    /// If this is set, the `FlacReader` will not be able to read audio samples.
-    /// When reading audio is not desired anyway, enabling `metadata_only` can
-    /// save a lot of expensive reads.
-    ///
-    /// Defaults to false.
-    pub metadata_only: bool,
-
-    /// When true, read metadata blocks at least until a Vorbis comment block is found.
-    ///
-    /// When false, the `FlacReader` will be constructed without reading a
-    /// Vorbis comment block, even if the stream contains one. Consequently,
-    /// `FlacReader::tags()` and other tag-related methods will not return tag
-    /// data.
-    ///
-    /// Defaults to true.
-    pub read_vorbis_comment: bool,
-
-    /// When not `Skip`, read metadata blocks at least until a picture block is found.
-    ///
-    /// When `Skip`, the `FlacReader` will be constructed without reading a
-    /// picture block, even if the stream contains one. When `CoverAsOffset` or
-    /// `CoverAsVec`, the `FlacReader` will be constructed with at most one
-    /// picture, the front cover, even if the stream contained more.
-    ///
-    /// Defaults to `ReadPicture::AllAsVec`.
-    pub read_picture: ReadPicture,
-}
-
-impl Default for FlacReaderOptions {
-    fn default() -> FlacReaderOptions {
-        FlacReaderOptions {
-            metadata_only: false,
-            read_vorbis_comment: true,
-            read_picture: ReadPicture::AllAsVec,
-        }
-    }
-}
-
-impl FlacReaderOptions {
-    /// Return whether any metadata blocks need to be read.
-    fn has_desired_blocks(&self) -> bool {
-        // If we do not want only metadata, we want everything. Hence there are
-        // desired blocks left.
-        if !self.metadata_only {
-            return true
-        }
-
-        let pictures_left = match self.read_picture {
-            ReadPicture::Skip => false,
-            _ => true,
-        };
-
-        self.read_vorbis_comment || pictures_left
-    }
 }
 
 /// An iterator that yields samples read from a `FlacReader`.
@@ -259,15 +146,24 @@ pub fn read_flac_header<R: io::Read>(mut input: R) -> Result<()> {
 impl<R: io::Read> FlacReader<R> {
     /// Create a reader that reads the FLAC format.
     ///
-    /// The header and metadata blocks are read immediately. Audio frames
-    /// will be read on demand.
+    /// The header and relevant metadata blocks are read immediately. Audio
+    /// frames will be read on demand.
     ///
     /// Claxon rejects files that claim to contain excessively large metadata
     /// blocks, to protect against denial of service attacks where a
     /// small damaged or malicous file could cause gigabytes of memory
     /// to be allocated. `Error::Unsupported` is returned in that case.
-    pub fn new(reader: R) -> Result<FlacReader<R>> {
-        FlacReader::new_ext(reader, FlacReaderOptions::default())
+    pub fn new(input: R) -> Result<FlacReader<R>> {
+        let mut metadata_reader = try!(MetadataReader::new(input));
+
+        // The metadata reader will yield at least one element after
+        // construction. If data is missing, that well be a `Some(Err)`.
+        let streaminfo = match try!(metadata_reader.next().unwrap()) {
+            MetadataBlock::StreamInfo(si) => si,
+            _other => return fmt_err("streaminfo block missing"),
+        };
+
+        metadata_reader.into_flac_reader(streaminfo, None)
     }
 
     /// Create a reader, assuming the input reader is positioned at a frame header.
@@ -297,111 +193,8 @@ impl<R: io::Read> FlacReader<R> {
         FlacReader {
             streaminfo: streaminfo,
             vorbis_comment: None,
-            pictures: Vec::new(),
             input: input,
         }
-    }
-
-    /// Create a reader that reads the FLAC format, with reader options.
-    ///
-    /// The header and metadata blocks are read immediately, but only as much as
-    /// specified in the options. See `FlacReaderOptions` for more details.
-    ///
-    /// Claxon rejects files that claim to contain excessively large metadata
-    /// blocks, to protect against denial of service attacks where a
-    /// small damaged or malicous file could cause gigabytes of memory
-    /// to be allocated. `Error::Unsupported` is returned in that case.
-    pub fn new_ext(mut input: R, options: FlacReaderOptions) -> Result<FlacReader<R>> {
-        let mut opts_current = options;
-
-        // A flac stream first of all starts with a stream header.
-        try!(read_flac_header(&mut input));
-
-        let mut pictures = Vec::new();
-
-        // Start a new scope, because the input reader must be available again
-        // for the frame reader next.
-        let (streaminfo, vorbis_comment) = {
-            // Next are one or more metadata blocks. The flac specification
-            // dictates that the streaminfo block is the first block. The metadata
-            // block reader will yield at least one element, so the unwrap is safe.
-            let mut metadata_iter = MetadataBlockReader::new(&mut input);
-            metadata_iter.read_picture_as_vec = match options.read_picture {
-                ReadPicture::AllAsVec => true,
-                ReadPicture::CoverAsVec => true,
-                _ => false,
-            };
-            let streaminfo_block = try!(metadata_iter.next().unwrap());
-            let streaminfo = match streaminfo_block {
-                MetadataBlock::StreamInfo(info) => info,
-                _ => return fmt_err("streaminfo block missing"),
-            };
-
-            let mut vorbis_comment = None;
-
-            // There might be more metadata blocks, read and store them.
-            for block_result in metadata_iter {
-                match try!(block_result) {
-                    MetadataBlock::VorbisComment(vc) => {
-                        // The Vorbis comment block need not be present, but
-                        // when it is, it must be unique.
-                        if vorbis_comment.is_some() {
-                            return fmt_err("encountered second Vorbis comment block")
-                        } else {
-                            vorbis_comment = Some(vc);
-                        }
-
-                        // We have one, no new one is desired.
-                        opts_current.read_vorbis_comment = false;
-                    }
-                    MetadataBlock::StreamInfo(..) => {
-                        return fmt_err("encountered second streaminfo block")
-                    }
-                    MetadataBlock::Picture(p) => {
-                        match opts_current.read_picture {
-                            ReadPicture::CoverAsVec | ReadPicture::CoverAsOffset => {
-                                // If this was the cover that we were looking
-                                // for, there is no need to read further images.
-                                if p.kind == PictureKind::FrontCover {
-                                    pictures.push(p);
-                                    opts_current.read_picture = ReadPicture::Skip;
-                                }
-                            }
-                            ReadPicture::AllAsVec | ReadPicture::AllAsOffset => {
-                                pictures.push(p);
-                            }
-                            ReadPicture::Skip => {}
-                        }
-                    }
-                    // Other blocks are currently not handled.
-                    _block => {}
-                }
-
-                // Early-out reading metadata once all desired blocks have been
-                // collected.
-                if !opts_current.has_desired_blocks() {
-                    break
-                }
-            }
-
-            // TODO: Rather than discarding afterwards, never parse it in the
-            // first place; treat it like padding in the MetadataBlockReader.
-            if !options.read_vorbis_comment {
-                vorbis_comment = None;
-            }
-
-            (streaminfo, vorbis_comment)
-        };
-
-        // The flac reader will contain the reader that will read frames.
-        let flac_reader = FlacReader {
-            streaminfo: streaminfo,
-            vorbis_comment: vorbis_comment,
-            pictures: pictures,
-            input: input,
-        };
-
-        Ok(flac_reader)
     }
 
     /// Returns the streaminfo metadata.
@@ -454,16 +247,6 @@ impl<R: io::Read> FlacReader<R> {
             Some(vc) => metadata::GetTag::new(&vc.comments[..], tag_name),
             None => metadata::GetTag::new(&[], tag_name),
         }
-    }
-
-    /// Returns the pictures embedded in the stream.
-    pub fn pictures(&self) -> &[Picture] {
-        &self.pictures[..]
-    }
-
-    /// Take ownership of the pictures in the stream, destroying the reader.
-    pub fn into_pictures(self) -> Vec<Picture> {
-        self.pictures
     }
 
     /// Returns an iterator that decodes a single frame on every iteration.
@@ -535,17 +318,6 @@ impl FlacReader<fs::File> {
     pub fn open<P: AsRef<path::Path>>(filename: P) -> Result<FlacReader<io::BufReader<fs::File>>> {
         let file = try!(fs::File::open(filename));
         FlacReader::new(io::BufReader::new(file))
-    }
-
-    /// Attemps to create a reader that reads from the specified file.
-    ///
-    /// This is a convenience constructor that opens a `File`, wraps it in a
-    /// `BufReader`, and constructs a `FlacReader` from it.
-    pub fn open_ext<P: AsRef<path::Path>>(filename: P,
-                                          options: FlacReaderOptions)
-                                          -> Result<FlacReader<io::BufReader<fs::File>>> {
-        let file = try!(fs::File::open(filename));
-        FlacReader::new_ext(io::BufReader::new(file), options)
     }
 }
 
