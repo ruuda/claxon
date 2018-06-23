@@ -50,6 +50,25 @@ pub enum MetadataBlock<'a, R: 'a + io::Read> {
     Picture(LazyPicture<'a, R>),
 }
 
+impl<'a, R: 'a + io::Read> MetadataBlock<'a, R> {
+    /// Skip over the block without parsing it.
+    ///
+    /// This calls `discard()` on the inner metadata block.
+    pub fn discard(self) -> io::Result<()> {
+        match self {
+            MetadataBlock::StreamInfo(..) => Ok(()),
+            // TODO: Make Padding like Application, with a reader and discard.
+            MetadataBlock::Padding(..) => Ok(()),
+            // TODO: Add a discard to Application block.
+            MetadataBlock::Application(..) => Ok(()),
+            MetadataBlock::SeekTable(lazy_block) => lazy_block.discard(),
+            MetadataBlock::VorbisComment(lazy_block) => lazy_block.discard(),
+            MetadataBlock::CueSheet(lazy_block) => lazy_block.discard(),
+            MetadataBlock::Picture(lazy_block) => lazy_block.discard(),
+        }
+    }
+}
+
 /// The streaminfo metadata block, with important information about the stream.
 #[derive(Clone, Copy, Debug)]
 pub struct StreamInfo {
@@ -1049,6 +1068,29 @@ impl<R: io::Read> MetadataReader<R> {
     /// Destroy the metadata reader and return the underlying reader.
     pub fn into_inner(self) -> R {
         self.input
+    }
+
+    /// Skip to the next Vorbis comment block and read it.
+    pub fn next_vorbis_comment(&mut self) -> Result<Option<VorbisComment>> {
+        while let Some(block) = self.next() {
+            match try!(block) {
+                MetadataBlock::VorbisComment(lazy_block) => return Ok(Some(try!(lazy_block.get()))),
+                other => try!(other.discard()),
+            }
+        }
+        Ok(None)
+    }
+
+    /// Skip to the next picture block and read it.
+    pub fn next_picture(&mut self) -> Result<Option<Picture<R>>> {
+        while let Some(block) = self.next() {
+            match try!(block) {
+                // TODO: Implement `get()` for picture.
+                // MetadataBlock::Picture(lazy_block) => return Ok(Some(try!(lazy_block.get()))),
+                other => try!(other.discard()),
+            }
+        }
+        Ok(None)
     }
 
     /// Skip to the audio data and construct a [`FlacReader`][flacreader].
