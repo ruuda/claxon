@@ -7,118 +7,11 @@
 
 //! Exposes traits that help reading data at the bit level with low overhead.
 //!
-//! The traits in this module deal with reading bytes (with a given endianness)
-//! from a buffered reader, in such a way that still allows efficient
-//! checksumming of the data read. There is also a bitstream which is used
-//! internally to read the bitstream.
+//! The traits in this module deal with reading bytes (with a given endianness).
+//! There is also a bitstream which is used internally to read the bitstream.
 
 use std::cmp;
 use std::io;
-
-/// Similar to `std::io::BufRead`, but more performant.
-///
-/// The API of the standard `BufRead` precludes computing checksums on consume,
-/// which is essential for performance when reading the FLAC format. Apart from
-/// enabling checksum computations, this buffered reader has a few convenience
-/// functions.
-pub struct BufferedReader<R: io::Read> {
-    /// The wrapped reader.
-    inner: R,
-
-    /// The buffer that holds data read from the inner reader.
-    buf: Box<[u8]>,
-
-    /// The index of the first byte in the buffer which has not been consumed.
-    pos: u32,
-
-    /// The number of bytes of the buffer which have meaningful content.
-    num_valid: u32,
-}
-
-impl<R: io::Read> BufferedReader<R> {
-    /// Wrap the reader in a new buffered reader.
-    pub fn new(inner: R) -> BufferedReader<R> {
-        // Use a large-ish buffer size, such that system call overhead is
-        // negligible when replenishing the buffer. However, when fuzzing we
-        // want to have small samples, and still trigger the case where we have
-        // to replenish the buffer, so use a smaller buffer size there.
-        #[cfg(not(fuzzing))]
-        const CAPACITY: usize = 2048;
-
-        #[cfg(fuzzing)]
-        const CAPACITY: usize = 31;
-
-        let buf = vec![0; CAPACITY].into_boxed_slice();
-        BufferedReader {
-            inner: inner,
-            buf: buf,
-            pos: 0,
-            num_valid: 0,
-        }
-    }
-
-    /// Construct a buffered reader with buffer size (for testing only).
-    fn with_capacity(inner: R, capacity: usize) -> BufferedReader<R> {
-        let buf = vec![0; capacity].into_boxed_slice();
-        BufferedReader {
-            inner: inner,
-            buf: buf,
-            pos: 0,
-            num_valid: 0,
-        }
-    }
-
-    /// Destroys the buffered reader, returning the wrapped reader.
-    ///
-    /// Anything in the buffer will be lost.
-    pub fn into_inner(self) -> R {
-        self.inner
-    }
-}
-
-impl<R: io::Read> io::Read for BufferedReader<R> {
-    #[inline]
-    fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
-        // Replenish the buffer if it was empty.
-        if self.num_valid == 0 {
-            self.pos = 0;
-            self.num_valid = try!(self.inner.read(&mut self.buf)) as u32;
-        }
-
-        let n = cmp::min(self.num_valid as usize, buffer.len());
-        buffer[..n].copy_from_slice(&self.buf[self.pos as usize..self.pos as usize + n]);
-        self.num_valid -= n as u32;
-        self.pos += n as u32;
-        Ok(n)
-    }
-
-    #[inline]
-    fn read_exact(&mut self, buffer: &mut [u8]) -> io::Result<()> {
-        let mut bytes_left = buffer.len();
-
-        while bytes_left > 0 {
-            let from = buffer.len() - bytes_left;
-            let count = cmp::min(bytes_left, self.num_valid as usize);
-            buffer[from..from + count].copy_from_slice(
-                &self.buf[self.pos as usize..self.pos as usize + count]);
-            bytes_left -= count;
-            self.pos += count as u32;
-            self.num_valid -= count as u32;
-
-            if bytes_left > 0 {
-                // Replenish the buffer if there is more to be read.
-                self.pos = 0;
-                self.num_valid = try!(self.inner.read(&mut self.buf)) as u32;
-                if self.num_valid == 0 {
-                    return Err(io::Error::new(io::ErrorKind::UnexpectedEof,
-                                              "Expected more bytes."))
-                }
-            }
-        }
-
-        Ok(())
-    }
-}
 
 /// A reader that exposes a bounded part of the underlying reader.
 ///
@@ -130,9 +23,6 @@ impl<R: io::Read> io::Read for BufferedReader<R> {
 /// The `EmbeddedReader` exposes this embedded data, without allowing to read
 /// past the bounds of the embedded data. After dealing with the embedded data,
 /// the `FlacReader` continues to read the FLAC format.
-///
-/// Note that because `FlacReader` employs buffering internally, this reader is
-/// buffered. There is no need to wrap it in an `io::BufReader`.
 pub struct EmbeddedReader<'a, R: 'a> {
     // TODO: Make the fields private and add a proper constructor instead.
     pub input: &'a mut R,
@@ -151,8 +41,6 @@ impl<'a, R: 'a + io::Read> io::Read for EmbeddedReader<'a, R> {
         self.input.read(buf)
     }
 }
-
-// TODO: Implement io::BufRead for EmbeddedReader.
 
 /// Provides convenience methods to make input less cumbersome.
 pub trait ReadBytes : io::Read {
@@ -239,107 +127,6 @@ pub trait ReadBytes : io::Read {
 
 impl<R: io::Read> ReadBytes for R { }
 
-/*
-impl<T: AsRef<[u8]>> ReadBytes for io::Cursor<T> {
-
-    fn read_u8(&mut self) -> io::Result<u8> {
-        let pos = self.position();
-        if pos < self.get_ref().as_ref().len() as u64 {
-            self.set_position(pos + 1);
-            Ok(self.get_ref().as_ref()[pos as usize])
-        } else {
-            Err(io::Error::new(io::ErrorKind::UnexpectedEof, "unexpected eof"))
-        }
-    }
-
-    fn read_u8_or_eof(&mut self) -> io::Result<Option<u8>> {
-        let pos = self.position();
-        if pos < self.get_ref().as_ref().len() as u64 {
-            self.set_position(pos + 1);
-            Ok(Some(self.get_ref().as_ref()[pos as usize]))
-        } else {
-            Ok(None)
-        }
-    }
-
-    fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
-        (self as &mut io::Read).read(buffer)
-    }
-
-    fn read_exact(&mut self, buffer: &mut [u8]) -> io::Result<()> {
-        let pos = self.position();
-        if pos + buffer.len() as u64 <= self.get_ref().as_ref().len() as u64 {
-            let start = pos as usize;
-            let end = pos as usize + buffer.len();
-            buffer.copy_from_slice(&self.get_ref().as_ref()[start..end]);
-            self.set_position(pos + buffer.len() as u64);
-            Ok(())
-        } else {
-            Err(io::Error::new(io::ErrorKind::UnexpectedEof, "unexpected eof"))
-        }
-    }
-
-    fn skip(&mut self, amount: u32) -> io::Result<()> {
-        let pos = self.position();
-        if pos + amount as u64 <= self.get_ref().as_ref().len() as u64 {
-            self.set_position(pos + amount as u64);
-            Ok(())
-        } else {
-            Err(io::Error::new(io::ErrorKind::UnexpectedEof, "unexpected eof"))
-        }
-    }
-}*/
-
-#[test]
-fn verify_read_exact_buffered_reader() {
-    use std::io::Read;
-    for &buf_len in &[1, 2, 3, 5, 7, 19usize] {
-        let mut reader = BufferedReader::with_capacity(
-            io::Cursor::new(vec![2u8, 3, 5, 7, 11, 13, 17, 19, 23]),
-            buf_len
-        );
-        let mut buf1 = [0u8; 3];
-        let mut buf2 = [0u8; 5];
-        let mut buf3 = [0u8; 2];
-        reader.read_exact(&mut buf1).ok().unwrap();
-        reader.read_exact(&mut buf2).ok().unwrap();
-        assert!(reader.read_exact(&mut buf3).is_err());
-        assert_eq!(&buf1[..], &[2u8, 3, 5]);
-        assert_eq!(&buf2[..], &[7u8, 11, 13, 17, 19]);
-    }
-}
-
-#[test]
-fn verify_read_exact_cursor() {
-    use std::io::Read;
-    let mut cursor = io::Cursor::new(vec![2u8, 3, 5, 7, 11, 13, 17, 19, 23]);
-    let mut buf1 = [0u8; 3];
-    let mut buf2 = [0u8; 5];
-    let mut buf3 = [0u8; 2];
-    cursor.read_exact(&mut buf1).ok().unwrap();
-    cursor.read_exact(&mut buf2).ok().unwrap();
-    assert!(cursor.read_exact(&mut buf3).is_err());
-    assert_eq!(&buf1[..], &[2u8, 3, 5]);
-    assert_eq!(&buf2[..], &[7u8, 11, 13, 17, 19]);
-}
-
-#[test]
-fn verify_read_u8_buffered_reader() {
-    for &buf_len in &[1, 2, 3, 5, 7, 19usize] {
-        let mut reader = BufferedReader::with_capacity(
-            io::Cursor::new(vec![0u8, 2, 129, 89, 122]),
-            buf_len
-        );
-        assert_eq!(reader.read_u8().unwrap(), 0);
-        assert_eq!(reader.read_u8().unwrap(), 2);
-        assert_eq!(reader.read_u8().unwrap(), 129);
-        assert_eq!(reader.read_u8().unwrap(), 89);
-        assert_eq!(reader.read_u8_or_eof().unwrap(), Some(122));
-        assert_eq!(reader.read_u8_or_eof().unwrap(), None);
-        assert!(reader.read_u8().is_err());
-    }
-}
-
 #[test]
 fn verify_read_u8_cursor() {
     let mut reader = io::Cursor::new(vec![0u8, 2, 129, 89, 122]);
@@ -353,37 +140,11 @@ fn verify_read_u8_cursor() {
 }
 
 #[test]
-fn verify_read_be_u16_buffered_reader() {
-    for &buf_len in &[1, 2, 3, 5, 7, 19usize] {
-        let mut reader = BufferedReader::with_capacity(
-            io::Cursor::new(vec![0u8, 2, 129, 89, 122]),
-            buf_len
-        );
-        assert_eq!(reader.read_be_u16().ok(), Some(2));
-        assert_eq!(reader.read_be_u16().ok(), Some(33113));
-        assert!(reader.read_be_u16().is_err());
-    }
-}
-
-#[test]
 fn verify_read_be_u16_cursor() {
     let mut cursor = io::Cursor::new(vec![0u8, 2, 129, 89, 122]);
     assert_eq!(cursor.read_be_u16().ok(), Some(2));
     assert_eq!(cursor.read_be_u16().ok(), Some(33113));
     assert!(cursor.read_be_u16().is_err());
-}
-
-#[test]
-fn verify_read_be_u24_buffered_reader() {
-    for &buf_len in &[1, 2, 3, 5, 7, 19usize] {
-        let mut reader = BufferedReader::with_capacity(
-            io::Cursor::new(vec![0u8, 0, 2, 0x8f, 0xff, 0xf3, 122]),
-            buf_len
-        );
-        assert_eq!(reader.read_be_u24().ok(), Some(2));
-        assert_eq!(reader.read_be_u24().ok(), Some(9_437_171));
-        assert!(reader.read_be_u24().is_err());
-    }
 }
 
 #[test]
@@ -395,37 +156,11 @@ fn verify_read_be_u24_cursor() {
 }
 
 #[test]
-fn verify_read_be_u32_buffered_reader() {
-    for &buf_len in &[1, 2, 3, 5, 7, 19usize] {
-        let mut reader = BufferedReader::with_capacity(
-            io::Cursor::new(vec![0u8, 0, 0, 2, 0x80, 0x01, 0xff, 0xe9, 0]),
-            buf_len
-        );
-        assert_eq!(reader.read_be_u32().ok(), Some(2));
-        assert_eq!(reader.read_be_u32().ok(), Some(2_147_614_697));
-        assert!(reader.read_be_u32().is_err());
-    }
-}
-
-#[test]
 fn verify_read_be_u32_cursor() {
     let mut cursor = io::Cursor::new(vec![0u8, 0, 0, 2, 0x80, 0x01, 0xff, 0xe9, 0]);
     assert_eq!(cursor.read_be_u32().ok(), Some(2));
     assert_eq!(cursor.read_be_u32().ok(), Some(2_147_614_697));
     assert!(cursor.read_be_u32().is_err());
-}
-
-#[test]
-fn verify_read_le_u32_buffered_reader() {
-    for &buf_len in &[1, 2, 3, 5, 7, 19usize] {
-        let mut reader = BufferedReader::with_capacity(
-            io::Cursor::new(vec![2u8, 0, 0, 0, 0xe9, 0xff, 0x01, 0x80, 0]),
-            buf_len
-        );
-        assert_eq!(reader.read_le_u32().ok(), Some(2));
-        assert_eq!(reader.read_le_u32().ok(), Some(2_147_614_697));
-        assert!(reader.read_le_u32().is_err());
-    }
 }
 
 #[test]
@@ -690,7 +425,7 @@ impl<R: ReadBytes> Bitstream<R> {
 #[test]
 fn verify_read_bit() {
     let data = io::Cursor::new(vec![0b1010_0100, 0b1110_0001]);
-    let mut bits = Bitstream::new(BufferedReader::new(data));
+    let mut bits = Bitstream::new(data);
 
     assert_eq!(bits.read_bit().unwrap(), true);
     assert_eq!(bits.read_bit().unwrap(), false);
@@ -717,7 +452,7 @@ fn verify_read_bit() {
 fn verify_read_unary() {
     let data = io::Cursor::new(vec![
         0b1010_0100, 0b1000_0000, 0b0010_0000, 0b0000_0000, 0b0000_1010]);
-    let mut bits = Bitstream::new(BufferedReader::new(data));
+    let mut bits = Bitstream::new(data);
 
     assert_eq!(bits.read_unary().unwrap(), 0);
     assert_eq!(bits.read_unary().unwrap(), 1);
@@ -746,7 +481,7 @@ fn verify_read_leq_u8() {
                                     0b0011_1111,
                                     0b1010_1010,
                                     0b0000_1100]);
-    let mut bits = Bitstream::new(BufferedReader::new(data));
+    let mut bits = Bitstream::new(data);
 
     assert_eq!(bits.read_leq_u8(0).unwrap(), 0);
     assert_eq!(bits.read_leq_u8(1).unwrap(), 1);
@@ -771,7 +506,7 @@ fn verify_read_leq_u8() {
 #[test]
 fn verify_read_gt_u8_get_u16() {
     let data = io::Cursor::new(vec![0b1010_0101, 0b1110_0001, 0b1101_0010, 0b0101_0101, 0b1111_0000]);
-    let mut bits = Bitstream::new(BufferedReader::new(data));
+    let mut bits = Bitstream::new(data);
 
     assert_eq!(bits.read_gt_u8_leq_u16(10).unwrap(), 0b1010_0101_11);
     assert_eq!(bits.read_gt_u8_leq_u16(10).unwrap(), 0b10_0001_1101);
@@ -784,7 +519,7 @@ fn verify_read_gt_u8_get_u16() {
 #[test]
 fn verify_read_leq_u16() {
     let data = io::Cursor::new(vec![0b1010_0101, 0b1110_0001, 0b1101_0010, 0b0101_0101]);
-    let mut bits = Bitstream::new(BufferedReader::new(data));
+    let mut bits = Bitstream::new(data);
 
     assert_eq!(bits.read_leq_u16(0).unwrap(), 0);
     assert_eq!(bits.read_leq_u16(1).unwrap(), 1);
@@ -795,7 +530,7 @@ fn verify_read_leq_u16() {
 #[test]
 fn verify_read_leq_u32() {
     let data = io::Cursor::new(vec![0b1010_0101, 0b1110_0001, 0b1101_0010, 0b0101_0101]);
-    let mut bits = Bitstream::new(BufferedReader::new(data));
+    let mut bits = Bitstream::new(data);
 
     assert_eq!(bits.read_leq_u32(1).unwrap(), 1);
     assert_eq!(bits.read_leq_u32(17).unwrap(), 0b010_0101_1110_0001_11);
@@ -807,7 +542,7 @@ fn verify_read_mixed() {
     // These test data are warm-up samples from an actual stream.
     let data = io::Cursor::new(vec![0x03, 0xc7, 0xbf, 0xe5, 0x9b, 0x74, 0x1e, 0x3a, 0xdd, 0x7d,
                                     0xc5, 0x5e, 0xf6, 0xbf, 0x78, 0x1b, 0xbd]);
-    let mut bits = Bitstream::new(BufferedReader::new(data));
+    let mut bits = Bitstream::new(data);
 
     assert_eq!(bits.read_leq_u8(6).unwrap(), 0);
     assert_eq!(bits.read_leq_u8(1).unwrap(), 1);

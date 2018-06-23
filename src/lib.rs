@@ -519,9 +519,6 @@ impl<R: io::Read> FlacReader<R> {
     }
 
     /// Destroys the FLAC reader and returns the underlying reader.
-    ///
-    /// Because the reader employs buffering internally, anything in the buffer
-    /// will be lost.
     pub fn into_inner(self) -> R {
         match self.input {
             FlacReaderState::Full(inp) => inp,
@@ -533,24 +530,22 @@ impl<R: io::Read> FlacReader<R> {
 impl FlacReader<fs::File> {
     /// Attempts to create a reader that reads from the specified file.
     ///
-    /// This is a convenience constructor that opens a `File`, and constructs a
-    /// `FlacReader` from it. There is no need to wrap the file in a
-    /// `BufReader`, as the `FlacReader` employs buffering already.
-    pub fn open<P: AsRef<path::Path>>(filename: P) -> Result<FlacReader<fs::File>> {
+    /// This is a convenience constructor that opens a `File`, wraps it in a
+    /// `BufReader`, and constructs a `FlacReader` from it.
+    pub fn open<P: AsRef<path::Path>>(filename: P) -> Result<FlacReader<io::BufReader<fs::File>>> {
         let file = try!(fs::File::open(filename));
-        FlacReader::new(file)
+        FlacReader::new(io::BufReader::new(file))
     }
 
     /// Attemps to create a reader that reads from the specified file.
     ///
-    /// This is a convenience constructor that opens a `File`, and constructs a
-    /// `FlacReader` from it. There is no need to wrap the file in a
-    /// `BufReader`, as the `FlacReader` employs buffering already.
+    /// This is a convenience constructor that opens a `File`, wraps it in a
+    /// `BufReader`, and constructs a `FlacReader` from it.
     pub fn open_ext<P: AsRef<path::Path>>(filename: P,
                                           options: FlacReaderOptions)
-                                          -> Result<FlacReader<fs::File>> {
+                                          -> Result<FlacReader<io::BufReader<fs::File>>> {
         let file = try!(fs::File::open(filename));
-        FlacReader::new_ext(file, options)
+        FlacReader::new_ext(io::BufReader::new(file), options)
     }
 }
 

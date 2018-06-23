@@ -135,12 +135,7 @@ fn decode_frames<R, W>(input: R,
                        wav_writer: &mut WavWriter<W>)
                        -> R
 where R: io::Read, W: io::Write + io::Seek {
-    // The simplest way to read frames now, is unfortunately to double buffer.
-    // (The input `R` is a buffered reader.) This might be avoided by not
-    // wrapping the original file in an `io::BufReader`, but in a Claxon
-    // `BufferedReader`. It would have to implement `io::Read` then.
-    let buffered_reader = claxon::input::BufferedReader::new(input);
-    let mut frame_reader = claxon::frame::FrameReader::new(buffered_reader);
+    let mut frame_reader = claxon::frame::FrameReader::new(input);
     let mut buffer = Vec::with_capacity(streaminfo.max_block_size as usize *
                                         streaminfo.channels as usize);
 
@@ -161,9 +156,8 @@ where R: io::Read, W: io::Write + io::Seek {
         buffer = block.into_buffer();
     }
 
-    // Strip off the frame reader and buffered reader to get back the original
-    // reader.
-    frame_reader.into_inner().into_inner()
+    // Strip off the frame reader to get back the original reader.
+    frame_reader.into_inner()
 }
 
 fn main() {
