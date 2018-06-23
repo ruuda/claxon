@@ -22,6 +22,8 @@ Unreleased
 New features:
 
 - Claxon can now read picture metadata blocks.
+- Exposes `read_flac_header()`, to quickly determine whether a file could be
+  a flac file.
 
 0.4.3
 -----
