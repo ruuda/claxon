@@ -396,9 +396,6 @@ fn verify_decoded_stream_wasted_bits() {
     compare_decoded_stream("testsamples/wasted_bits.flac");
 }
 
-// TODO: Restore these tests.
-/*
-
 #[test]
 fn verify_decoded_stream_non_subset() {
     // This sample does not conform to "subset" flac. It has a subframe with LPC
@@ -411,8 +408,8 @@ fn verify_decoded_stream_non_subset() {
 fn verify_limits_on_vendor_string() {
     // This file claims to have a vendor string which would not fit in the
     // block.
-    let file = fs::File::open("testsamples/large_vendor_string.flac").unwrap();
-    match claxon::FlacReader::new(file) {
+    let mut reader = claxon::MetadataReader::open("testsamples/large_vendor_string.flac").unwrap();
+    match reader.next_vorbis_comment() {
         Ok(..) => panic!("This file should fail to load"),
         Err(err) => {
             assert_eq!(err, claxon::Error::FormatError("vendor string too long"))
@@ -424,7 +421,8 @@ fn verify_limits_on_vendor_string() {
 fn verify_limits_on_vorbis_comment_block() {
     // This file claims to have a very large Vorbis comment block, which could
     // make the decoder go OOM.
-    match claxon::FlacReader::open("testsamples/large_vorbis_comment_block.flac") {
+    let mut reader = claxon::MetadataReader::open("testsamples/large_vorbis_comment_block.flac").unwrap();
+    match reader.next_vorbis_comment() {
         Ok(..) => panic!("This file should fail to load"),
         Err(claxon::Error::Unsupported(..)) => { }
         Err(..) => panic!("Expected 'Unsupported' error."),
@@ -432,17 +430,11 @@ fn verify_limits_on_vorbis_comment_block() {
 }
 
 #[test]
-fn metadata_only_still_reads_vorbis_comment_block() {
-    let opts = claxon::FlacReaderOptions {
-        metadata_only: true,
-        read_picture: claxon::ReadPicture::Skip,
-        read_vorbis_comment: true,
-    };
-    let reader = claxon::FlacReader::open_ext("testsamples/short.flac", opts).unwrap();
-    assert_eq!(reader.vendor(), Some("reference libFLAC 1.3.2 20170101"));
+fn next_vorbis_comment_reads_vorbis_comment_block() {
+    let mut reader = claxon::MetadataReader::open("testsamples/short.flac").unwrap();
+    let vc = reader.next_vorbis_comment().unwrap();
+    assert_eq!(vc.vendor(), Some("reference libFLAC 1.3.2 20170101"));
 }
-
-*/
 
 #[test]
 fn verify_extra_samples() {
