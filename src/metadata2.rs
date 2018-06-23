@@ -923,4 +923,9 @@ impl<R: io::Read> MetadataReader<R> {
         // when not done, there will be at least one more.
         if self.done { (0, Some(0)) } else { (1, None) }
     }
+
+    /// Destroy the metadata reader and return the underlying reader.
+    pub fn into_inner(self) -> R {
+        self.input
+    }
 }
