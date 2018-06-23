@@ -159,7 +159,12 @@ impl<R: io::Read> FlacReader<R> {
         // construction. If data is missing, that well be a `Some(Err)`.
         let streaminfo = match try!(metadata_reader.next().unwrap()) {
             MetadataBlock::StreamInfo(si) => si,
-            _other => return fmt_err("streaminfo block missing"),
+            other => {
+                // TODO: Maybe mark MetadataBlock as #[must_use] to avoid
+                // dropping it without discard?
+                try!(other.discard());
+                return fmt_err("streaminfo block missing");
+            }
         };
 
         metadata_reader.into_flac_reader(streaminfo, None)
