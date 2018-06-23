@@ -96,14 +96,7 @@ pub struct FlacReader<R: io::Read> {
     streaminfo: StreamInfo,
     vorbis_comment: Option<VorbisComment>,
     pictures: Vec<Picture>,
-    input: FlacReaderState<R>,
-}
-
-enum FlacReaderState<T> {
-    /// When the reader is positioned at the beginning of a frame.
-    Full(T),
-    /// When the reader might not be positioned at the beginning of a frame.
-    MetadataOnly(T),
+    input: R,
 }
 
 /// Determines how to read picture metadata.
@@ -367,21 +360,12 @@ impl<R: io::Read> FlacReader<R> {
             (streaminfo, vorbis_comment)
         };
 
-        // Even if we might have read all metadata blocks, only set the state to
-        // "full" if `metadata_only` was false: this results in more predictable
-        // behavior.
-        let state = if options.metadata_only {
-            FlacReaderState::MetadataOnly(input)
-        } else {
-            FlacReaderState::Full(input)
-        };
-
         // The flac reader will contain the reader that will read frames.
         let flac_reader = FlacReader {
             streaminfo: streaminfo,
             vorbis_comment: vorbis_comment,
             pictures: pictures,
-            input: state,
+            input: input,
         };
 
         Ok(flac_reader)
@@ -456,12 +440,7 @@ impl<R: io::Read> FlacReader<R> {
     /// happens. The representation of the decoded audio is somewhat specific to
     /// the FLAC format. For a higher-level interface, see `samples()`.
     pub fn blocks<'r>(&'r mut self) -> FrameReader<&'r mut R> {
-        match self.input {
-            FlacReaderState::Full(ref mut inp) => FrameReader::new(inp),
-            FlacReaderState::MetadataOnly(..) =>
-                panic!("FlacReaderOptions::metadata_only must be false \
-                       to be able to use FlacReader::blocks()"),
-        }
+        FrameReader::new(&mut self.input)
     }
 
     /// Returns an iterator over all samples.
@@ -485,20 +464,12 @@ impl<R: io::Read> FlacReader<R> {
     /// nonetheless. For more control over when decoding happens, and less error
     /// handling overhead, use `blocks()`.
     pub fn samples<'r>(&'r mut self) -> FlacSamples<&'r mut R> {
-        match self.input {
-            FlacReaderState::Full(ref mut inp) => {
-                FlacSamples {
-                    frame_reader: frame::FrameReader::new(inp),
-                    block: Block::empty(),
-                    sample: 0,
-                    channel: 0,
-                    has_failed: false,
-                }
-            }
-            FlacReaderState::MetadataOnly(..) => {
-                panic!("FlacReaderOptions::metadata_only must be false \
-                       to be able to use FlacReader::samples()")
-            }
+        FlacSamples {
+            frame_reader: frame::FrameReader::new(&mut self.input),
+            block: Block::empty(),
+            sample: 0,
+            channel: 0,
+            has_failed: false,
         }
     }
 
@@ -506,31 +477,20 @@ impl<R: io::Read> FlacReader<R> {
     ///
     /// See `samples()` for more info.
     pub fn into_samples(self) -> FlacIntoSamples<R> {
-        match self.input {
-            FlacReaderState::Full(inp) => {
-                FlacIntoSamples {
-                    inner: FlacSamples {
-                        frame_reader: frame::FrameReader::new(inp),
-                        block: Block::empty(),
-                        sample: 0,
-                        channel: 0,
-                        has_failed: false,
-                    }
-                }
-            }
-            FlacReaderState::MetadataOnly(..) => {
-                panic!("FlacReaderOptions::metadata_only must be false \
-                       to be able to use FlacReader::into_samples()")
+        FlacIntoSamples {
+            inner: FlacSamples {
+                frame_reader: frame::FrameReader::new(self.input),
+                block: Block::empty(),
+                sample: 0,
+                channel: 0,
+                has_failed: false,
             }
         }
     }
 
     /// Destroys the FLAC reader and returns the underlying reader.
     pub fn into_inner(self) -> R {
-        match self.input {
-            FlacReaderState::Full(inp) => inp,
-            FlacReaderState::MetadataOnly(inp) => inp,
-        }
+        self.input
     }
 }
 
