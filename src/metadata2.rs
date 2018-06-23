@@ -282,6 +282,9 @@ lazy_block_impl!(LazyVorbisComment);
 impl <'a, R: 'a + io::Read> LazyVorbisComment<'a, R> {
     /// Read and parse the Vorbis comment block.
     pub fn get(mut self) -> Result<VorbisComment> {
+        // Set len to zero before reading to indicate that we consumed the data,
+        // dropping does not panic, also if reading the vorbis comment block
+        // returns an error.
         let len = self.len;
         self.len = 0;
         read_vorbis_comment_block(self.input, len)
