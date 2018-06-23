@@ -240,66 +240,6 @@ pub trait ReadBytes : io::Read {
 impl<R: io::Read> ReadBytes for R { }
 
 /*
-impl<R: io::Read> ReadBytes for BufferedReader<R> {
-    #[inline(always)]
-    fn read_u8(&mut self) -> io::Result<u8> {
-        if self.pos == self.num_valid {
-            // The buffer was depleted, replenish it first.
-            self.pos = 0;
-            self.num_valid = try!(self.inner.read(&mut self.buf)) as u32;
-
-            if self.num_valid == 0 {
-                return Err(io::Error::new(io::ErrorKind::UnexpectedEof,
-                                          "Expected one more byte."))
-            }
-        }
-
-        // At this point there is at least one more byte in the buffer, we
-        // checked that above. However, when using regular indexing, the
-        // compiler still inserts a bounds check here. It is safe to avoid it.
-        let byte = unsafe { *self.buf.get_unchecked(self.pos as usize) };
-        self.pos += 1;
-        Ok(byte)
-    }
-
-    fn read_u8_or_eof(&mut self) -> io::Result<Option<u8>> {
-        if self.pos == self.num_valid {
-            // The buffer was depleted, try to replenish it first.
-            self.pos = 0;
-            self.num_valid = try!(self.inner.read(&mut self.buf)) as u32;
-
-            if self.num_valid == 0 {
-                return Ok(None);
-            }
-        }
-
-        Ok(Some(try!(self.read_u8())))
-    }
-
-    fn skip(&mut self, mut amount: u32) -> io::Result<()> {
-        while amount > 0 {
-            let num_left = self.num_valid - self.pos;
-            let read_now = cmp::min(amount, num_left);
-            self.pos += read_now;
-            amount -= read_now;
-
-            if amount > 0 {
-                // If there is more to skip, refill the buffer first.
-                self.pos = 0;
-                self.num_valid = try!(self.inner.read(&mut self.buf)) as u32;
-
-                if self.num_valid == 0 {
-                    return Err(io::Error::new(io::ErrorKind::UnexpectedEof,
-                                              "Expected more bytes."))
-                }
-            }
-        }
-        Ok(())
-    }
-}
-*/
-
-/*
 impl<T: AsRef<[u8]>> ReadBytes for io::Cursor<T> {
 
     fn read_u8(&mut self) -> io::Result<u8> {
@@ -349,8 +289,6 @@ impl<T: AsRef<[u8]>> ReadBytes for io::Cursor<T> {
         }
     }
 }*/
-
-// TODO: Add tests for BufferedReader::read().
 
 #[test]
 fn verify_read_exact_buffered_reader() {
