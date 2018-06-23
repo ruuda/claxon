@@ -788,3 +788,38 @@ struct MetadataBlockHeader {
     block_type: u8,
     length: u32,
 }
+
+/// Reads metadata blocks from a stream and exposes them as an iterator.
+///
+/// It is assumed that the next byte that the reader will read, is the first
+/// byte of a metadata block header. This means that the iterator will yield at
+/// least a single value.
+///
+/// TODO: Is this still true?
+/// If the iterator ever yields an error, then no more
+/// data will be read thereafter, and the next value will be `None`.
+pub struct MetadataReader<R: io::Read> {
+    input: R,
+    done: bool,
+}
+
+/// Either a `MetadataBlock` or an `Error`.
+pub type MetadataResult<'a, R> = Result<MetadataBlock<'a, R>>;
+
+impl<R: io::Read> MetadataReader<R> {
+    /// Create a metadata reader that will yield at least one metadata block.
+    pub fn new(input: R) -> MetadataReader<R> {
+        MetadataReader {
+            input: input,
+            done: false,
+        }
+    }
+
+    #[inline]
+    fn read_next(&mut self) -> MetadataResult<R> {
+        let header = try!(read_metadata_block_header(&mut self.input));
+        let block = try!(read_metadata_block(&mut self.input, header.block_type, header.length));
+        self.done = header.is_last;
+        Ok(block)
+    }
+}

@@ -12,6 +12,8 @@ Unreleased
   size are returned as lazy blocks with a `discard()` and `get()` method. This
   way heap allocations can be avoided if the consumer is not interested in the
   contents of the metadata block.
+- `MetadataBlockReader` has been renamed to `MetadataReader`. TODO: Document
+  constructor changes.
 - The `MetadataBlock::Reserved` has been removed. Claxon now returns an
   `Error::FormatError` when it encounters a reserved bit pattern, just like
   it does for other reserved bit patterns. This `Err` can be ignored, the next
