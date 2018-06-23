@@ -75,7 +75,7 @@ use std::path;
 use error::fmt_err;
 use frame::FrameReader;
 use input::ReadBytes;
-use metadata2::{MetadataBlock, SeekTable, StreamInfo, VorbisComment};
+use metadata2::{MetadataBlock, SeekTable, StreamInfo};
 
 mod crc;
 mod error;
@@ -94,7 +94,6 @@ pub use metadata2::MetadataReader;
 /// TODO: Add an example.
 pub struct FlacReader<R: io::Read> {
     streaminfo: StreamInfo,
-    vorbis_comment: Option<VorbisComment>,
     input: R,
 }
 
@@ -192,7 +191,6 @@ impl<R: io::Read> FlacReader<R> {
         let _ = seektable;
         FlacReader {
             streaminfo: streaminfo,
-            vorbis_comment: None,
             input: input,
         }
     }
@@ -202,51 +200,6 @@ impl<R: io::Read> FlacReader<R> {
     /// This contains information like the sample rate and number of channels.
     pub fn streaminfo(&self) -> StreamInfo {
         self.streaminfo
-    }
-
-    /// Returns the vendor string of the Vorbis comment block, if present.
-    ///
-    /// This string usually contains the name and version of the program that
-    /// encoded the FLAC stream, such as `reference libFLAC 1.3.2 20170101`
-    /// or `Lavf57.25.100`.
-    pub fn vendor(&self) -> Option<&str> {
-        self.vorbis_comment.as_ref().map(|vc| &vc.vendor[..])
-    }
-
-    /// Returns name-value pairs of Vorbis comments, such as `("ARTIST", "Queen")`.
-    ///
-    /// The name is supposed to be interpreted case-insensitively, and is
-    /// guaranteed to consist of ASCII characters. Claxon does not normalize
-    /// the casing of the name. Use `get_tag()` to do a case-insensitive lookup.
-    ///
-    /// Names need not be unique. For instance, multiple `ARTIST` comments might
-    /// be present on a collaboration track.
-    ///
-    /// See <https://www.xiph.org/vorbis/doc/v-comment.html> for more details.
-    pub fn tags<'a>(&'a self) -> metadata::Tags<'a> {
-        match self.vorbis_comment.as_ref() {
-            Some(vc) => metadata::Tags::new(&vc.comments[..]),
-            None => metadata::Tags::new(&[]),
-        }
-    }
-
-    /// Look up a Vorbis comment such as `ARTIST` in a case-insensitive way.
-    ///
-    /// Returns an iterator,  because tags may occur more than once. There could
-    /// be multiple `ARTIST` tags on a collaboration track, for instance.
-    ///
-    /// Note that tag names are ASCII and never contain `'='`; trying to look up
-    /// a non-ASCII tag will return no results. Furthermore, the Vorbis comment
-    /// spec dictates that tag names should be handled case-insensitively, so
-    /// this method performs a case-insensitive lookup.
-    ///
-    /// See also `tags()` for access to the raw tags.
-    /// See <https://www.xiph.org/vorbis/doc/v-comment.html> for more details.
-    pub fn get_tag<'a>(&'a self, tag_name: &'a str) -> metadata::GetTag<'a> {
-        match self.vorbis_comment.as_ref() {
-            Some(vc) => metadata::GetTag::new(&vc.comments[..], tag_name),
-            None => metadata::GetTag::new(&[], tag_name),
-        }
     }
 
     /// Returns an iterator that decodes a single frame on every iteration.

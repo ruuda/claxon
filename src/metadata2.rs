@@ -10,6 +10,7 @@
 use std::fs;
 use std::io;
 use std::path;
+use std::slice;
 
 use error::{Error, Result, fmt_err};
 use input::{EmbeddedReader, ReadBytes};
@@ -237,6 +238,127 @@ pub struct Picture<'a, R: 'a + io::Read> {
     /// when the picture data ends. The reader can safely be dropped even if
     /// it was not consumed until the end.
     pub reader: EmbeddedReader<'a, R>
+}
+
+impl VorbisComment {
+    /// Return name-value pairs of Vorbis comments, such as `("ARTIST", "Queen")`.
+    ///
+    /// The name is supposed to be interpreted case-insensitively, and is
+    /// guaranteed to consist of ASCII characters. Claxon does not normalize
+    /// the casing of the name. Use [`get_tag()`](#method.get_tag) to do a
+    /// case-insensitive lookup.
+    ///
+    /// Names need not be unique. For instance, multiple `ARTIST` comments might
+    /// be present on a collaboration track.
+    ///
+    /// See <https://www.xiph.org/vorbis/doc/v-comment.html> for more details.
+    pub fn tags(&self) -> Tags {
+        Tags::new(&self.comments)
+    }
+
+    /// Look up a Vorbis comment such as `ARTIST` in a case-insensitive way.
+    ///
+    /// Returns an iterator, because tags may occur more than once. There could
+    /// be multiple `ARTIST` tags on a collaboration track, for instance.
+    ///
+    /// Note that tag names are ASCII and never contain `'='`; trying to look up
+    /// a non-ASCII tag will return no results. Furthermore, the Vorbis comment
+    /// spec dictates that tag names should be handled case-insensitively, so
+    /// this method performs a case-insensitive lookup.
+    ///
+    /// See also [`tags()`](#method.tags) for access to the raw tags.
+    /// See <https://www.xiph.org/vorbis/doc/v-comment.html> for more details.
+    pub fn get_tag<'a>(&'a self, tag_name: &'a str) -> GetTag<'a> {
+        GetTag::new(&self.comments, tag_name)
+    }
+}
+
+impl<'a> IntoIterator for &'a VorbisComment {
+    type Item = (&'a str, &'a str);
+    type IntoIter = Tags<'a>;
+
+    fn into_iter(self) -> Tags<'a> {
+        self.tags()
+    }
+}
+
+/// Iterates over Vorbis comments (FLAC tags) in a FLAC stream.
+///
+/// See [`VorbisComment::tags()`](struct.VorbisComment#method.tags) for more details.
+pub struct Tags<'a> {
+    /// The underlying iterator.
+    iter: slice::Iter<'a, (String, usize)>,
+}
+
+impl<'a> Tags<'a> {
+    /// Returns a new `Tags` iterator.
+    #[inline]
+    fn new(comments: &'a [(String, usize)]) -> Tags<'a> {
+        Tags {
+            iter: comments.iter(),
+        }
+    }
+}
+
+impl<'a> Iterator for Tags<'a> {
+    type Item = (&'a str, &'a str);
+
+    #[inline]
+    fn next(&mut self) -> Option<(&'a str, &'a str)> {
+        return self.iter.next().map(|&(ref comment, sep_idx)| {
+            (&comment[..sep_idx], &comment[sep_idx+1..])
+        })
+    }
+}
+
+// TODO: `Tags` could implement `ExactSizeIterator`.
+
+/// Iterates over Vorbis comments looking for a specific one; returns its values as `&str`.
+///
+/// See [`VorbisComment::get_tag()`](struct.VorbisComment#method.get_tag) for more details.
+pub struct GetTag<'a> {
+    /// The Vorbis comments to search through.
+    vorbis_comments: &'a [(String, usize)],
+
+    /// The tag to look for.
+    needle: &'a str,
+
+    /// The index of the (name, value) pair that should be inspected next.
+    index: usize,
+}
+
+impl<'a> GetTag<'a> {
+    /// Returns a new `GetTag` iterator.
+    #[inline]
+    fn new(vorbis_comments: &'a [(String, usize)], needle: &'a str) -> GetTag<'a> {
+        GetTag {
+            vorbis_comments: vorbis_comments,
+            needle: needle,
+            index: 0,
+        }
+    }
+}
+
+impl<'a> Iterator for GetTag<'a> {
+    type Item = &'a str;
+
+    #[inline]
+    fn next(&mut self) -> Option<&'a str> {
+        // This import is actually required on Rust 1.13.
+        #[allow(unused_imports)]
+        use std::ascii::AsciiExt;
+
+        while self.index < self.vorbis_comments.len() {
+            let (ref comment, sep_idx) = self.vorbis_comments[self.index];
+            self.index += 1;
+
+            if comment[..sep_idx].eq_ignore_ascii_case(self.needle) {
+                return Some(&comment[sep_idx + 1..])
+            }
+        }
+
+        return None
+    }
 }
 
 macro_rules! lazy_block_impl {
@@ -952,7 +1074,7 @@ impl<R: io::Read> MetadataReader<R> {
     pub fn into_flac_reader(
         mut self,
         streaminfo: StreamInfo,
-        mut seektable: Option<SeekTable>
+        seektable: Option<SeekTable>
     ) -> Result<::FlacReader<R>> {
         while let Some(metadata_block) = self.next() {
             match try!(metadata_block) {
