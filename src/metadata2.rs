@@ -17,22 +17,33 @@ pub enum MetadataBlock<'a, R: 'a + io::Read> {
     /// The stream info block.
     StreamInfo(StreamInfo),
 
-    /// A padding block, of a given number of zero bytes.
+    /// A padding block, of a given number of `0x00` bytes.
     Padding(u32),
 
-    /// An block with application-specific data.
+    /// A block with application-specific data.
     Application(ApplicationBlock<'a, R>),
 
-    /// A seek table block.
+    /// A lazy seek table block.
+    ///
+    /// Yields the [`SeekTable`](struct.SeekTable.html) from `get()` (not implemented yet).
+    // TODO: get() docs when implemented.
     SeekTable(LazySeekTable<'a, R>),
 
-    /// A Vorbis comment block, also known as FLAC tags.
+    /// A lazy Vorbis comment block, also known as FLAC tags.
+    ///
+    /// Yields the [`VorbisComment`](struct.VorbisComment.html) from
+    /// [`get()`](struct.LazyVorbisComment.html#method.get).
     VorbisComment(LazyVorbisComment<'a, R>),
 
-    /// A CUE sheet block.
+    /// A lazy CUE sheet block.
+    ///
+    /// Yields the `CueSheet` from `get()` (not implemented yet).
     CueSheet(LazyCueSheet<'a, R>),
 
-    /// A picture block.
+    /// A lazy picture block.
+    ///
+    /// Yields the [`Picture`](struct.Picture.html) from
+    /// [`get()`](struct.LazyPicture.html#method.get).
     Picture(LazyPicture<'a, R>),
 }
 
@@ -789,15 +800,35 @@ struct MetadataBlockHeader {
     length: u32,
 }
 
-/// Reads metadata blocks from a stream and exposes them as an iterator.
+/// An iterator over metadata blocks in the stream.
 ///
-/// It is assumed that the next byte that the reader will read, is the first
-/// byte of a metadata block header. This means that the iterator will yield at
-/// least a single value.
+/// The metadata reader reads the FLAC stream header and subsequent medatadata
+/// blocks, up to the start of the audio data. It can be used as an iterator
+/// of [`MetadataBlock`][metadatablock] items (wrapped in
+/// [`MetadataResult`][metadataresult]), although `MetadataReader` does not
+/// implement [`std::Iterator`][std-iter] for technical reasons.*
 ///
-/// TODO: Is this still true?
-/// If the iterator ever yields an error, then no more
-/// data will be read thereafter, and the next value will be `None`.
+/// A valid FLAC stream contains at least one metadata block: the
+/// [`StreamInfo`][streaminfo] block. This is always the first block in the
+/// stream.
+///
+/// Some metadata blocks, such as the [`VorbisComment`][vorbiscomment] block,
+/// require heap allocations for convenient use. `MetadataReader` does not parse
+/// these blocks immediately, it returns them as *lazy metadata blocks* instead.
+/// Calling `get()` on the lazy block will read and parse it; calling
+/// `discard()` will skip over the block without allocating anything on the
+/// heap.
+///
+/// <small>* For [`std::Iterator`][std-iter], the `Item` type is fixed for
+/// the iterator, and values returned from `Iterator::next()` need to live at
+/// least as long as the iterator itself. For `MetadataReader` this is not
+/// possible due to the lazy blocks that borrow the underlying reader.</small>
+///
+/// [streaminfo]:     struct.StreamInfo.html
+/// [metadataresult]: type.MetadataResult.html
+/// [metadatablock]:  enum.MetadataBlock.html
+/// [vorbiscomment]:  struct.VorbisComment.html
+/// [std-iter]:       https://doc.rust-lang.org/std/iter/trait.Iterator.html
 pub struct MetadataReader<R: io::Read> {
     input: R,
     done: bool,
@@ -808,7 +839,21 @@ pub type MetadataResult<'a, R> = Result<MetadataBlock<'a, R>>;
 
 impl<R: io::Read> MetadataReader<R> {
     /// Create a metadata reader that will yield at least one metadata block.
+    ///
+    /// TODO: Make this read the FLAC header and return a Result.
     pub fn new(input: R) -> MetadataReader<R> {
+        MetadataReader {
+            input: input,
+            done: false,
+        }
+    }
+
+    /// Create a metadata reader, assuming the input reader is aligned at a metadata block header.
+    ///
+    /// It is assumed that the next byte that the reader will read, is the first
+    /// byte of a metadata block header. This means that the iterator will yield
+    /// at least a single value.
+    pub fn new_aligned(input: R) -> MetadataReader<R> {
         MetadataReader {
             input: input,
             done: false,
@@ -821,5 +866,35 @@ impl<R: io::Read> MetadataReader<R> {
         let block = try!(read_metadata_block(&mut self.input, header.block_type, header.length));
         self.done = header.is_last;
         Ok(block)
+    }
+
+    /// Read the next metadata block.
+    ///
+    /// This method corresponds to [`Iterator::next()`][iter-next].
+    ///
+    /// [iter-next]: https://doc.rust-lang.org/std/iter/trait.Iterator.html#tymethod.next
+    #[inline]
+    pub fn next(&mut self) -> Option<MetadataResult<R>> {
+        if self.done {
+            None
+        } else {
+            Some(self.read_next())
+        }
+    }
+
+    /// Return bounds on the remaining number of metadata blocks.
+    ///
+    /// The returned bounds are either `(0, Some(0))` when the last metadata
+    /// block has been read, or `(1, None)` when there is at least one metadata
+    /// block remaining.
+    ///
+    /// This method corresponds to [`Iterator::size_hint()`][iter-size-hint].
+    ///
+    /// [iter-size-hint]: https://doc.rust-lang.org/std/iter/trait.Iterator.html#method.size_hint
+    #[inline]
+    pub fn size_hint(&self) -> (usize, Option<usize>) {
+        // When done, there will be no more blocks,
+        // when not done, there will be at least one more.
+        if self.done { (0, Some(0)) } else { (1, None) }
     }
 }
