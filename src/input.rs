@@ -136,7 +136,11 @@ impl<R: io::Read> io::Read for BufferedReader<R> {
 pub struct EmbeddedReader<'a, R: 'a> {
     // TODO: Make the fields private and add a proper constructor instead.
     pub input: &'a mut R,
+
+    /// Number of bytes read.
     pub cursor: u32,
+
+    /// Total number of bytes that the embedded reader is allowed to read.
     pub len: u32,
 }
 

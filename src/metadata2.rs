@@ -10,7 +10,7 @@
 use std::io;
 
 use error::{Error, Result, fmt_err};
-use input::{BufferedReader, EmbeddedReader, ReadBytes};
+use input::{EmbeddedReader, ReadBytes};
 
 /// A metadata about the FLAC stream.
 pub enum MetadataBlock<'a, R: 'a + io::Read> {
@@ -469,7 +469,7 @@ fn read_streaminfo_block<R: io::Read>(input: &mut R) -> Result<StreamInfo> {
 
     // Next are 128 bits (16 bytes) of MD5 signature.
     let mut md5sum = [0u8; 16];
-    try!(input.read_into(&mut md5sum));
+    try!(input.read_exact(&mut md5sum));
 
     // Lower bounds can never be larger than upper bounds. Note that 0 indicates
     // unknown for the frame size. Also, the block size must be at least 16.
@@ -548,10 +548,10 @@ fn read_vorbis_comment_block<R: io::Read>(input: &mut R, length: u32) -> Result<
     let mut vendor_bytes = Vec::with_capacity(vendor_len as usize);
 
     // We can safely set the length of the vector here; the uninitialized memory
-    // is not exposed. If `read_into` succeeds, it will have overwritten all
+    // is not exposed. If `read_exact` succeeds, it will have overwritten all
     // bytes. If not, an error is returned and the memory is never exposed.
     unsafe { vendor_bytes.set_len(vendor_len as usize); }
-    try!(input.read_into(&mut vendor_bytes));
+    try!(input.read_exact(&mut vendor_bytes));
     let vendor = try!(String::from_utf8(vendor_bytes));
 
     // Next up is the number of comments. Because every comment is at least 4
@@ -579,7 +579,7 @@ fn read_vorbis_comment_block<R: io::Read>(input: &mut R, length: u32) -> Result<
         // For the same reason as above, setting the length is safe here.
         let mut comment_bytes = Vec::with_capacity(comment_len as usize);
         unsafe { comment_bytes.set_len(comment_len as usize); }
-        try!(input.read_into(&mut comment_bytes));
+        try!(input.read_exact(&mut comment_bytes));
 
         bytes_left -= comment_len;
 
@@ -703,10 +703,10 @@ fn read_picture_block<R: io::Read>(input: &mut R, length: u32) -> Result<Picture
     let mut mime_bytes = Vec::with_capacity(mime_len as usize);
 
     // We can safely set the length of the vector here; the uninitialized memory
-    // is not exposed. If `read_into` succeeds, it will have overwritten all
+    // is not exposed. If `read_exact` succeeds, it will have overwritten all
     // bytes. If not, an error is returned and the memory is never exposed.
     unsafe { mime_bytes.set_len(mime_len as usize); }
-    try!(input.read_into(&mut mime_bytes));
+    try!(input.read_exact(&mut mime_bytes));
 
     // According to the spec, the MIME type string must consist of printable
     // ASCII characters in the range 0x20-0x7e; validate that. This also means
@@ -729,10 +729,10 @@ fn read_picture_block<R: io::Read>(input: &mut R, length: u32) -> Result<Picture
     let mut description_bytes = Vec::with_capacity(description_len as usize);
 
     // We can safely set the length of the vector here; the uninitialized memory
-    // is not exposed. If `read_into` succeeds, it will have overwritten all
+    // is not exposed. If `read_exact` succeeds, it will have overwritten all
     // bytes. If not, an error is returned and the memory is never exposed.
     unsafe { description_bytes.set_len(description_len as usize); }
-    try!(input.read_into(&mut description_bytes));
+    try!(input.read_exact(&mut description_bytes));
     let description = try!(String::from_utf8(description_bytes));
 
     // Next are a few fields with pixel metadata. It seems a bit weird to me
