@@ -156,14 +156,6 @@ impl<'a, R: 'a + io::Read> io::Read for EmbeddedReader<'a, R> {
 
 /// Provides convenience methods to make input less cumbersome.
 pub trait ReadBytes : io::Read {
-    /// Reads until the provided buffer is full.
-    ///
-    /// This equivalent to `io::Read::read_exact()`.
-    #[deprecated = "Use io::Read::read_exact instead."]
-    fn read_into(&mut self, buffer: &mut [u8]) -> io::Result<()> {
-        self.read_exact(buffer)
-    }
-
     /// Skips over the specified number of bytes.
     ///
     /// For a buffered reader, this can help a lot by just bumping a pointer.
@@ -334,7 +326,7 @@ impl<T: AsRef<[u8]>> ReadBytes for io::Cursor<T> {
         (self as &mut io::Read).read(buffer)
     }
 
-    fn read_into(&mut self, buffer: &mut [u8]) -> io::Result<()> {
+    fn read_exact(&mut self, buffer: &mut [u8]) -> io::Result<()> {
         let pos = self.position();
         if pos + buffer.len() as u64 <= self.get_ref().as_ref().len() as u64 {
             let start = pos as usize;
@@ -361,7 +353,8 @@ impl<T: AsRef<[u8]>> ReadBytes for io::Cursor<T> {
 // TODO: Add tests for BufferedReader::read().
 
 #[test]
-fn verify_read_into_buffered_reader() {
+fn verify_read_exact_buffered_reader() {
+    use std::io::Read;
     for &buf_len in &[1, 2, 3, 5, 7, 19usize] {
         let mut reader = BufferedReader::with_capacity(
             io::Cursor::new(vec![2u8, 3, 5, 7, 11, 13, 17, 19, 23]),
@@ -370,23 +363,24 @@ fn verify_read_into_buffered_reader() {
         let mut buf1 = [0u8; 3];
         let mut buf2 = [0u8; 5];
         let mut buf3 = [0u8; 2];
-        reader.read_into(&mut buf1).ok().unwrap();
-        reader.read_into(&mut buf2).ok().unwrap();
-        assert!(reader.read_into(&mut buf3).is_err());
+        reader.read_exact(&mut buf1).ok().unwrap();
+        reader.read_exact(&mut buf2).ok().unwrap();
+        assert!(reader.read_exact(&mut buf3).is_err());
         assert_eq!(&buf1[..], &[2u8, 3, 5]);
         assert_eq!(&buf2[..], &[7u8, 11, 13, 17, 19]);
     }
 }
 
 #[test]
-fn verify_read_into_cursor() {
+fn verify_read_exact_cursor() {
+    use std::io::Read;
     let mut cursor = io::Cursor::new(vec![2u8, 3, 5, 7, 11, 13, 17, 19, 23]);
     let mut buf1 = [0u8; 3];
     let mut buf2 = [0u8; 5];
     let mut buf3 = [0u8; 2];
-    cursor.read_into(&mut buf1).ok().unwrap();
-    cursor.read_into(&mut buf2).ok().unwrap();
-    assert!(cursor.read_into(&mut buf3).is_err());
+    cursor.read_exact(&mut buf1).ok().unwrap();
+    cursor.read_exact(&mut buf2).ok().unwrap();
+    assert!(cursor.read_exact(&mut buf3).is_err());
     assert_eq!(&buf1[..], &[2u8, 3, 5]);
     assert_eq!(&buf2[..], &[7u8, 11, 13, 17, 19]);
 }
