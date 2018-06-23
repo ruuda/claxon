@@ -76,6 +76,7 @@ use error::fmt_err;
 use frame::FrameReader;
 use input::ReadBytes;
 use metadata::{MetadataBlock, MetadataBlockReader, Picture, PictureKind, StreamInfo, VorbisComment};
+use metadata2::{SeekTable};
 
 mod crc;
 mod error;
@@ -267,6 +268,38 @@ impl<R: io::Read> FlacReader<R> {
     /// to be allocated. `Error::Unsupported` is returned in that case.
     pub fn new(reader: R) -> Result<FlacReader<R>> {
         FlacReader::new_ext(reader, FlacReaderOptions::default())
+    }
+
+    /// Create a reader, assuming the input reader is positioned at a frame header.
+    ///
+    /// This constructor takes a reader that is positioned at the start of the
+    /// first frame (the start of the audio data). This is useful when the
+    /// preceding metadata was read manually using a
+    /// [`MetadataReader`][metadatareader]. After
+    /// [`MetadataReader::next()`][metadatareader-next] returns `None`, the
+    /// underlying reader will be positioned at the start of the first frame
+    /// header. Constructing a `FlacReader` at this point requires the
+    /// [`StreamInfo`][streaminfo] metadata block, and optionally a
+    /// [`SeekTable`][seektable] to aid seeking. Seeking is not implemented
+    /// yet.
+    ///
+    /// [metadatareader]:      metadata2/struct.MetadataReader.html
+    /// [metadatareader-next]: metadata2/struct.MetadataReader.html#method.next
+    /// [streaminfo]:          metadata2/struct.StreamInfo.html
+    /// [seektable]:           metadata2/struct.SeekTable.html
+    // TODO: Patch url when renaming metadata2.
+    pub fn new_frame_aligned(input: R, streaminfo: StreamInfo, seektable: Option<SeekTable>) -> FlacReader<R> {
+        // Ignore the seek table for now. When we implement seeking in the
+        // future, it will be stored in the FlacReader and used for seeking. We
+        // already take it as a constructor argument now, to avoid breaking
+        // changes in the future.
+        let _ = seektable;
+        FlacReader {
+            streaminfo: streaminfo,
+            vorbis_comment: None,
+            pictures: Vec::new(),
+            input: input,
+        }
     }
 
     /// Create a reader that reads the FLAC format, with reader options.
