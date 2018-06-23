@@ -161,14 +161,14 @@ pub struct VorbisComment {
     /// Name-value pairs of Vorbis comments, such as `ARTIST=Queen`.
     ///
     /// This struct stores a raw low-level representation of tags. Use
-    /// `FlacReader::tags()` for a friendlier iterator. The tuple consists of
-    /// the string in `"NAME=value"` format, and the index of the `'='` into
+    /// [`tags()`](#method.tags) for a friendlier iterator. The tuple consists
+    /// of the string in `"NAME=value"` format, and the index of the `'='` into
     /// that string.
     ///
     /// The name is supposed to be interpreted case-insensitively, and is
     /// guaranteed to consist of ASCII characters. Claxon does not normalize
-    /// the casing of the name. Use `metadata::GetTag` to do a case-insensitive
-    /// lookup.
+    /// the casing of the name. Use [`get_tag()`](#method.get_tag) to do a
+    /// case-insensitive lookup.
     ///
     /// Names need not be unique. For instance, multiple `ARTIST` comments might
     /// be present on a collaboration track.
@@ -272,7 +272,8 @@ impl VorbisComment {
     /// Names need not be unique. For instance, multiple `ARTIST` comments might
     /// be present on a collaboration track.
     ///
-    /// See <https://www.xiph.org/vorbis/doc/v-comment.html> for more details.
+    /// See <https://www.xiph.org/vorbis/doc/v-comment.html> for more details
+    /// about tag conventions.
     pub fn tags(&self) -> Tags {
         Tags::new(&self.comments)
     }
@@ -287,8 +288,9 @@ impl VorbisComment {
     /// spec dictates that tag names should be handled case-insensitively, so
     /// this method performs a case-insensitive lookup.
     ///
-    /// See also [`tags()`](#method.tags) for access to the raw tags.
-    /// See <https://www.xiph.org/vorbis/doc/v-comment.html> for more details.
+    /// See also [`tags()`](#method.tags) for access to all tags.
+    /// See <https://www.xiph.org/vorbis/doc/v-comment.html> for more details
+    /// about tag conventions.
     pub fn get_tag<'a>(&'a self, tag_name: &'a str) -> GetTag<'a> {
         GetTag::new(&self.comments, tag_name)
     }
@@ -309,6 +311,11 @@ impl<'a> IntoIterator for &'a VorbisComment {
 /// have a Vorbis comment block and streams that do not. It is always possible
 /// to iterate over tags or look up a tag. If there was no Vorbis comment block,
 /// those lookups will simply return no results.
+///
+/// [`MetadataReader::next_vorbis_comment()`][next-vorbis-comment] returns this
+/// struct.
+///
+/// [next-vorbis-comment]: struct.MetadataReader.html#method.next_vorbis_comment
 pub struct OptionalVorbisComment(pub Option<VorbisComment>);
 
 impl OptionalVorbisComment {
@@ -1125,11 +1132,6 @@ impl<R: io::Read> MetadataReader<R> {
         if self.done { (0, Some(0)) } else { (1, None) }
     }
 
-    /// Destroy the metadata reader and return the underlying reader.
-    pub fn into_inner(self) -> R {
-        self.input
-    }
-
     /// Skip to the next Vorbis comment block and read it.
     ///
     /// There is at most one Vorbis comment block in a valid FLAC stream.
@@ -1159,19 +1161,22 @@ impl<R: io::Read> MetadataReader<R> {
         Ok(None)
     }
 
+    /// Destroy the metadata reader and return the underlying reader.
+    pub fn into_inner(self) -> R {
+        self.input
+    }
+
     /// Skip to the audio data and construct a [`FlacReader`][flacreader].
     ///
     /// Use this method to continue reading audio data after reading metadata.
     /// This method skips over remaining metadata blocks right to the audio
-    /// data. If, while skipping to the audio data, a seek table is encountered
+    /// data. If a seek table is encountered while skipping to the audio data,
     /// and one was not provided, this method reads the seek table and uses it
     /// to construct the [`FlacReader`][flacreader].
     ///
     /// The `MetadataReader` produces a [`StreamInfo`][streaminfo] block as the
     /// first element returned from [`next()`][next]. That block should be
-    /// passed in here.
-    ///
-    /// If you are not interested in metadata blocks,
+    /// passed in here. If you are not interested in metadata blocks,
     /// [`FlacReader::new()`][flacreader-new] is a simpler way to construct a
     /// [`FlacReader`][flacreader].
     ///
