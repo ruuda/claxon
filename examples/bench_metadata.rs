@@ -36,28 +36,29 @@ fn main() {
 
             // Read the file multiple times to amortize the walkdir cost.
             for _ in 0..10 {
-                let reader = claxon::FlacReader::open(path).unwrap();
+                let mut reader = claxon::MetadataReader::open(path).unwrap();
+                let vc = reader.next_vorbis_comment().unwrap();
 
                 // Note that these are not optimized away even though the results
                 // are not used, because the expectation may fail.
-                reader.get_tag("date").next().expect("date");
-                reader.get_tag("originaldate").next().expect("originaldate");
-                reader.get_tag("tracknumber").next().expect("tracknumber");
-                reader.get_tag("tracktotal").next().expect("tracktotal");
-                reader.get_tag("discnumber").next().expect("discnumber");
-                reader.get_tag("disctotal").next().expect("disctotal");
+                vc.get_tag("date").next().expect("date");
+                vc.get_tag("originaldate").next().expect("originaldate");
+                vc.get_tag("tracknumber").next().expect("tracknumber");
+                vc.get_tag("tracktotal").next().expect("tracktotal");
+                vc.get_tag("discnumber").next().expect("discnumber");
+                vc.get_tag("disctotal").next().expect("disctotal");
 
-                reader.get_tag("title").next().expect("title");
-                reader.get_tag("album").next().expect("album");
-                reader.get_tag("artist").next().expect("artist");
-                reader.get_tag("albumartist").next().expect("albumartist");
-                reader.get_tag("artistsort").next().expect("artistsort");
-                reader.get_tag("albumartistsort").next().expect("albumartistsort");
+                vc.get_tag("title").next().expect("title");
+                vc.get_tag("album").next().expect("album");
+                vc.get_tag("artist").next().expect("artist");
+                vc.get_tag("albumartist").next().expect("albumartist");
+                vc.get_tag("artistsort").next().expect("artistsort");
+                vc.get_tag("albumartistsort").next().expect("albumartistsort");
 
-                reader.get_tag("musicbrainz_trackid").next().expect("musicbrainz_trackid");
-                reader.get_tag("musicbrainz_albumid").next().expect("musicbrainz_albumid");
-                reader.get_tag("musicbrainz_artistid").next().expect("musicbrainz_artistid");
-                reader.get_tag("musicbrainz_albumartistid").next().expect("musicbrainz_albumartistid");
+                vc.get_tag("musicbrainz_trackid").next().expect("musicbrainz_trackid");
+                vc.get_tag("musicbrainz_albumid").next().expect("musicbrainz_albumid");
+                vc.get_tag("musicbrainz_artistid").next().expect("musicbrainz_artistid");
+                vc.get_tag("musicbrainz_albumartistid").next().expect("musicbrainz_albumartistid");
 
                 bytes += reader.into_inner().seek(SeekFrom::Current(0)).unwrap();
             }

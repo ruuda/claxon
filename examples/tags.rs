@@ -15,11 +15,12 @@ use std::env;
 
 fn main() {
     for fname in env::args().skip(1) {
-        let reader = claxon::FlacReader::open(&fname).expect("failed to open FLAC stream");
+        let mut reader = claxon::MetadataReader::open(&fname).expect("failed to open FLAC stream");
+        let tags = reader.next_vorbis_comment().expect("failed to read metadata");
 
-        // We can use `tags()` to iterate over all tags. When looking for a
-        // specific tag, `get_tag()` may be useful instead.
-        for (name, value) in reader.tags() {
+        // We can iterate directly over all tags. When looking for a specific
+        // tag, `OptionalVorbisComment::get_tag()` may be useful instead.
+        for (name, value) in &tags {
             // Print comments in a format similar to what
             // `metaflac --block-type=VORBIS_COMMENT --list` would print.
             println!("{}: {}={}", fname, name, value);

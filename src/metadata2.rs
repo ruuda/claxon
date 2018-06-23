@@ -11,6 +11,8 @@ use std::fs;
 use std::io;
 use std::path;
 use std::slice;
+use std::convert;
+use std::ops;
 
 use error::{Error, Result, fmt_err};
 use input::{EmbeddedReader, ReadBytes};
@@ -298,6 +300,74 @@ impl<'a> IntoIterator for &'a VorbisComment {
 
     fn into_iter(self) -> Tags<'a> {
         self.tags()
+    }
+}
+
+/// Wrapper for `Option<VorbisComment>` with convenient tag iterators.
+///
+/// This struct avoids the need for a case distinction between streams that do
+/// have a Vorbis comment block and streams that do not. It is always possible
+/// to iterate over tags or look up a tag. If there was no Vorbis comment block,
+/// those lookups will simply return no results.
+pub struct OptionalVorbisComment(pub Option<VorbisComment>);
+
+impl OptionalVorbisComment {
+    /// Returns the vendor string of the Vorbis comment block, if present.
+    ///
+    /// This string usually contains the name and version of the program that
+    /// encoded the FLAC stream, such as `reference libFLAC 1.3.2 20170101`
+    /// or `Lavf57.25.100`.
+    pub fn vendor(&self) -> Option<&str> {
+        self.as_ref().map(|vc| &vc.vendor[..])
+    }
+
+    /// Returns name-value pairs of Vorbis comments, such as `("ARTIST", "Queen")`.
+    ///
+    /// See [`VorbisComment::tags()`](struct.VorbisComment.html#method.tags).
+    pub fn tags(&self) -> Tags {
+        match self.as_ref() {
+            Some(vc) => Tags::new(&vc.comments[..]),
+            None => Tags::new(&[]),
+        }
+    }
+
+    /// Look up a Vorbis comment such as `ARTIST` in a case-insensitive way.
+    ///
+    /// See [`VorbisComment::get_tag()`](struct.VorbisComment.html#method.get_tag).
+    pub fn get_tag<'a>(&'a self, tag_name: &'a str) -> GetTag<'a> {
+        match self.as_ref() {
+            Some(vc) => GetTag::new(&vc.comments[..], tag_name),
+            None => GetTag::new(&[], tag_name),
+        }
+    }
+}
+
+impl convert::From<OptionalVorbisComment> for Option<VorbisComment> {
+    fn from(opt: OptionalVorbisComment) -> Option<VorbisComment> {
+        opt.0
+    }
+}
+
+impl<'a> IntoIterator for &'a OptionalVorbisComment {
+    type Item = (&'a str, &'a str);
+    type IntoIter = Tags<'a>;
+
+    fn into_iter(self) -> Tags<'a> {
+        self.tags()
+    }
+}
+
+impl ops::Deref for OptionalVorbisComment {
+    type Target = Option<VorbisComment>;
+
+    fn deref(&self) -> &Option<VorbisComment> {
+        &self.0
+    }
+}
+
+impl ops::DerefMut for OptionalVorbisComment {
+    fn deref_mut(&mut self) -> &mut Option<VorbisComment> {
+        &mut self.0
     }
 }
 
@@ -1017,16 +1087,6 @@ impl<R: io::Read> MetadataReader<R> {
         }
     }
 
-    /// Create a reader that reads metadata blocks from the specified file.
-    ///
-    /// This is a convenience constructor that opens a `File`, wraps it in a
-    /// `BufReader`, and constructs a `MetadataReader` from it. It can be used
-    /// to open a flac file and read its metadata.
-    pub fn open<P: AsRef<path::Path>>(filename: P) -> Result<MetadataReader<io::BufReader<fs::File>>> {
-        let file = try!(fs::File::open(filename));
-        MetadataReader::new(io::BufReader::new(file))
-    }
-
     #[inline]
     fn read_next(&mut self) -> MetadataResult<R> {
         let header = try!(read_metadata_block_header(&mut self.input));
@@ -1071,14 +1131,20 @@ impl<R: io::Read> MetadataReader<R> {
     }
 
     /// Skip to the next Vorbis comment block and read it.
-    pub fn next_vorbis_comment(&mut self) -> Result<Option<VorbisComment>> {
+    ///
+    /// There is at most one Vorbis comment block in a valid FLAC stream.
+    pub fn next_vorbis_comment(&mut self) -> Result<OptionalVorbisComment> {
         while let Some(block) = self.next() {
             match try!(block) {
-                MetadataBlock::VorbisComment(lazy_block) => return Ok(Some(try!(lazy_block.get()))),
+                MetadataBlock::VorbisComment(lazy_block) => {
+                    let vc = try!(lazy_block.get());
+                    return Ok(OptionalVorbisComment(Some(vc)))
+                }
                 other => try!(other.discard()),
             }
         }
-        Ok(None)
+
+        Ok(OptionalVorbisComment(None))
     }
 
     /// Skip to the next picture block and read it.
@@ -1140,5 +1206,17 @@ impl<R: io::Read> MetadataReader<R> {
         }
 
         Ok(::FlacReader::new_frame_aligned(self.input, streaminfo, seektable))
+    }
+}
+
+impl MetadataReader<io::BufReader<fs::File>> {
+    /// Create a reader that reads metadata blocks from the specified file.
+    ///
+    /// This is a convenience constructor that opens a `File`, wraps it in a
+    /// `BufReader`, and constructs a `MetadataReader` from it. It can be used
+    /// to open a flac file and read its metadata.
+    pub fn open<P: AsRef<path::Path>>(filename: P) -> Result<MetadataReader<io::BufReader<fs::File>>> {
+        let file = try!(fs::File::open(filename));
+        MetadataReader::new(io::BufReader::new(file))
     }
 }

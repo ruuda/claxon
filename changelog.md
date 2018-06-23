@@ -16,8 +16,12 @@ Unreleased
   constructor changes.
 - The `MetadataBlock::Reserved` has been removed. Claxon now returns an
   `Error::FormatError` when it encounters a reserved bit pattern, just like
-  it does for other reserved bit patterns. This `Err` can be ignored, the next
+  it does for other reserved bit patterns. This `Err` can be ignored; the next
   metadata block can be read normally.
+- The `vendor()`, `tags()`, and `get_tag()` methods have been removed from
+  `FlacReader`. They have been moved to `OptionalVorbisComment`, which is
+  returned from `MetadataReader::next_vorbis_comment()`.
+  TODO: Turn changelog items into links.
 
 New features:
 

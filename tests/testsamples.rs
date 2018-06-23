@@ -101,7 +101,8 @@ fn compare_metaflac_streaminfo<P: AsRef<Path>>(fname: P) {
 
 fn compare_metaflac_vorbis_comment<P: AsRef<Path>>(fname: P) {
     let metaflac = run_metaflac_vorbis_comment(&fname);
-    let reader = claxon::FlacReader::open(fname).unwrap();
+    let mut reader = claxon::MetadataReader::open(fname).unwrap();
+    let vc = reader.next_vorbis_comment().unwrap();
 
     let mut mf_lines = metaflac.lines();
 
@@ -114,7 +115,7 @@ fn compare_metaflac_vorbis_comment<P: AsRef<Path>>(fname: P) {
             // If the vendor string starts with a null byte, metaflac will not
             // print it -- my guess is because metaflac is written in C and uses
             // C-style string manipulation. In that case we skip it.
-            match reader.vendor() {
+            match vc.vendor() {
                 Some(x) if x.starts_with('\0') => {
                     assert_eq!("", mf_vendor_string);
                     break
@@ -122,12 +123,12 @@ fn compare_metaflac_vorbis_comment<P: AsRef<Path>>(fname: P) {
                 _ => {}
             }
 
-            assert_eq!(reader.vendor(), Some(mf_vendor_string));
+            assert_eq!(vc.vendor(), Some(mf_vendor_string));
             break
         }
     }
 
-    let mut tags = reader.tags();
+    let mut tags = vc.tags();
 
     // Loop through all of the comments.
     while let Some(line) = mf_lines.next() {
@@ -287,7 +288,8 @@ fn verify_vorbis_comment_p4() {
 
 #[test]
 fn test_flac_reader_get_tag_is_case_insensitive() {
-    let flac_reader = claxon::FlacReader::open("testsamples/p4.flac").unwrap();
+    let mut metadata_reader = claxon::MetadataReader::open("testsamples/p4.flac").unwrap();
+    let vc = metadata_reader.next_vorbis_comment().unwrap();
 
     // This file contains the following metadata:
     // METADATA block #2
@@ -302,27 +304,28 @@ fn test_flac_reader_get_tag_is_case_insensitive() {
     //     comment[3]: REPLAYGAIN_ALBUM_GAIN=-3.68 dB
     //     comment[4]: Comment=Encoded by FLAC v1.1.1a with FLAC Frontend v1.7.1
 
-    let mut replaygain_upper = flac_reader.get_tag("REPLAYGAIN_TRACK_GAIN");
+    let mut replaygain_upper = vc.get_tag("REPLAYGAIN_TRACK_GAIN");
     assert_eq!(replaygain_upper.next(), Some("-4.00 dB"));
     assert_eq!(replaygain_upper.next(), None);
 
     // The lookup should be case-insensitive.
-    let mut replaygain_lower = flac_reader.get_tag("replaygain_track_gain");
+    let mut replaygain_lower = vc.get_tag("replaygain_track_gain");
     assert_eq!(replaygain_lower.next(), Some("-4.00 dB"));
     assert_eq!(replaygain_lower.next(), None);
 
     // Non-existing tags should not be found.
-    let mut foobar = flac_reader.get_tag("foobar");
+    let mut foobar = vc.get_tag("foobar");
     assert_eq!(foobar.next(), None);
 }
 
 #[test]
 fn test_flac_reader_get_tag_returns_all_matches() {
-    let flac_reader = claxon::FlacReader::open("testsamples/repeated_vorbis_comment.flac").unwrap();
+    let mut metadata_reader = claxon::MetadataReader::open("testsamples/repeated_vorbis_comment.flac").unwrap();
+    let vc = metadata_reader.next_vorbis_comment().unwrap();
 
     // This file contains two FOO tags, `FOO=bar` and `FOO=baz`.
 
-    let mut foo = flac_reader.get_tag("FOO");
+    let mut foo = vc.get_tag("FOO");
     assert_eq!(foo.next(), Some("bar"));
     assert_eq!(foo.next(), Some("baz"));
     assert_eq!(foo.next(), None);
