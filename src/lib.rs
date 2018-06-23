@@ -57,8 +57,8 @@
 //!
 //! ```
 //! # use claxon;
-//! let reader = claxon::FlacReader::open("testsamples/pop.flac").unwrap();
-//! for artist in reader.get_tag("ARTIST") {
+//! let mut reader = claxon::MetadataReader::open("testsamples/pop.flac").unwrap();
+//! for artist in reader.next_vorbis_comment().unwrap().get_tag("ARTIST") {
 //!     println!("{}", artist);
 //! }
 //! ```
