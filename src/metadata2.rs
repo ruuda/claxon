@@ -7,7 +7,9 @@
 
 //! The `metadata` module deals with metadata at the beginning of a FLAC stream.
 
+use std::fs;
 use std::io;
+use std::path;
 
 use error::{Error, Result, fmt_err};
 use input::{EmbeddedReader, ReadBytes};
@@ -872,6 +874,16 @@ impl<R: io::Read> MetadataReader<R> {
             input: input,
             done: false,
         }
+    }
+
+    /// Create a reader that reads metadata blocks from the specified file.
+    ///
+    /// This is a convenience constructor that opens a `File`, wraps it in a
+    /// `BufReader`, and constructs a `MetadataReader` from it. It can be used
+    /// to open a flac file and read its metadata.
+    pub fn open<P: AsRef<path::Path>>(filename: P) -> Result<MetadataReader<io::BufReader<fs::File>>> {
+        let file = try!(fs::File::open(filename));
+        MetadataReader::new(io::BufReader::new(file))
     }
 
     #[inline]

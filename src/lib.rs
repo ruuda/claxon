@@ -87,6 +87,7 @@ pub mod metadata2;
 
 pub use error::{Error, Result};
 pub use frame::Block;
+pub use metadata2::MetadataReader;
 
 /// A FLAC decoder that can decode the stream from the underlying reader.
 ///
