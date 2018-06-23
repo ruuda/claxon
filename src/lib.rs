@@ -234,7 +234,13 @@ pub struct FlacIntoSamples<R: ReadBytes> {
     inner: FlacSamples<R>,
 }
 
-fn read_stream_header<R: ReadBytes>(input: &mut R) -> Result<()> {
+/// Read the FLAC stream header.
+///
+/// This function can be used to quickly check if the file could be a flac file
+/// by reading 4 bytes of the header. If an `Ok` is returned, the file is likely
+/// a flac file. If an `Err` is returned, the file is definitely not a flac
+/// file.
+pub fn read_flac_header<R: io::Read>(mut input: R) -> Result<()> {
     // A FLAC stream starts with a 32-bit header 'fLaC' (big endian).
     const FLAC_HEADER: u32 = 0x66_4c_61_43;
 
@@ -282,7 +288,7 @@ impl<R: io::Read> FlacReader<R> {
         let mut opts_current = options;
 
         // A flac stream first of all starts with a stream header.
-        try!(read_stream_header(&mut input));
+        try!(read_flac_header(&mut input));
 
         let mut pictures = Vec::new();
 

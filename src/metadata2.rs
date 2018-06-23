@@ -838,17 +838,31 @@ pub struct MetadataReader<R: io::Read> {
 pub type MetadataResult<'a, R> = Result<MetadataBlock<'a, R>>;
 
 impl<R: io::Read> MetadataReader<R> {
-    /// Create a metadata reader that will yield at least one metadata block.
+    /// Create a metadata reader from a reader positioned at the beginning of a FLAC stream.
     ///
-    /// TODO: Make this read the FLAC header and return a Result.
-    pub fn new(input: R) -> MetadataReader<R> {
-        MetadataReader {
+    /// This function reads the FLAC stream header and positions the
+    /// `MetadataReader` at the first block. For a valid FLAC stream, the first
+    /// call to [`next()`][next] will yield a [`StreamInfo`][streaminfo] block.
+    ///
+    /// Use [`new_aligned()`][new-aligned] if the input reader is already
+    /// positioned at a metadata block header, and not at the start of the
+    /// FLAC stream. This is the case if you manually read the header with
+    /// [`read_flac_header()`][read-flac-header], for example.
+    ///
+    /// [next]:             #method.next
+    /// [streaminfo]:       struct.StreamInfo.html
+    /// [new-aligned]:      #method.new_aligned
+    /// [read-flac-header]: ../fn.read_flac_header.html
+    pub fn new(mut input: R) -> Result<MetadataReader<R>> {
+        try!(::read_flac_header(&mut input));
+        let reader = MetadataReader {
             input: input,
             done: false,
-        }
+        };
+        Ok(reader)
     }
 
-    /// Create a metadata reader, assuming the input reader is aligned at a metadata block header.
+    /// Create a metadata reader, assuming the input reader is positioned at a metadata block header.
     ///
     /// It is assumed that the next byte that the reader will read, is the first
     /// byte of a metadata block header. This means that the iterator will yield
