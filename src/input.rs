@@ -23,7 +23,7 @@ use std::io;
 /// The `EmbeddedReader` exposes this embedded data, without allowing to read
 /// past the bounds of the embedded data. After dealing with the embedded data,
 /// the `FlacReader` continues to read the FLAC format.
-pub struct EmbeddedReader<'a, R: 'a> {
+pub struct EmbeddedReader<'a, R: 'a + io::Read> {
     // TODO: Make the fields private and add a proper constructor instead.
     pub input: &'a mut R,
 
@@ -39,6 +39,14 @@ impl<'a, R: 'a + io::Read> io::Read for EmbeddedReader<'a, R> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         // TODO: Update cursor, take bounds into account.
         self.input.read(buf)
+    }
+}
+
+impl<'a, R: 'a + io::Read> Drop for EmbeddedReader<'a, R> {
+    fn drop(&mut self) {
+        // TODO: The user does not observe the error like this ... Maybe just
+        // make the Application block implement io::Read and use Discard on it?
+        let _ = self.input.skip(self.len - self.cursor);
     }
 }
 
