@@ -55,10 +55,15 @@ pub trait ReadBytes : io::Read {
         // Safe because the uninitialized memory is never exposed.
         use std::mem;
         let mut buffer: [u8; 512] = unsafe { mem::uninitialized() };
-        let mut n_read = 0_usize;
-        while n_read < amount as usize {
-            let n_left = amount as usize - n_read;
-            n_read += try!(self.read(&mut buffer[..cmp::min(n_left, 512)]));
+        let mut n_read_total = 0_usize;
+        while n_read_total < amount as usize {
+            let n_left = amount as usize - n_read_total;
+            let n_read = try!(self.read(&mut buffer[..cmp::min(n_left, 512)]));
+            if n_read == 0 {
+                let err = io::Error::new(io::ErrorKind::UnexpectedEof, "Expected more bytes to skip over.");
+                return Err(err);
+            }
+            n_read_total += n_read;
         }
         Ok(())
     }
@@ -420,6 +425,19 @@ impl<R: ReadBytes> Bitstream<R> {
             Ok((msb << (bits - 16)) | lsb)
         }
     }
+}
+
+#[test]
+fn verify_read_bytes_skip_stops_at_eof() {
+    let mut data = io::Cursor::new(vec![0, 1, 2, 3, 4, 5, 6, 7]);
+    let result = data.skip(5);
+    assert!(result.is_ok());
+
+    // Skip for one more than there are bytes in the buffer.
+    let result = data.skip(4);
+    assert!(result.is_err());
+    let err = result.err().unwrap();
+    assert_eq!(err.kind(), io::ErrorKind::UnexpectedEof);
 }
 
 #[test]
