@@ -10,8 +10,8 @@
 extern crate libfuzzer_sys;
 extern crate claxon;
 
-use std::io;
 use std::io::Seek;
+use std::io;
 use std::iter;
 
 #[export_name="rust_fuzzer_test_input"]
@@ -28,9 +28,16 @@ pub extern fn go(data: &[u8]) {
     // the two outputs should be identical. If we don't overwrite parts of the
     // buffer, then we would see a difference in the marker byte. The buffer
     // allocated up front should be large enough that Claxon does not need to
-    // allocate a new one.
-    let buffer0: Vec<i32> = iter::repeat(data[0] as i32).take(1024 * 1024 * 4).collect();
-    let buffer1: Vec<i32> = iter::repeat(data[1] as i32).take(1024 * 1024 * 4).collect();
+    // allocate a new one, but small enough to keep the fuzzer fast.
+    let buffer0: Vec<i32> = iter::repeat(data[0] as i32).take(1024 * 8).collect();
+    let buffer1: Vec<i32> = iter::repeat(data[1] as i32).take(1024 * 8).collect();
+
+    // NOTE: Somewhat surprisingly, the bove runs at about 4x the execs per
+    // second of this version below. I should file a performance bug against Rust.
+    // let mut buffer0: Vec<i32> = Vec::with_capacity(1024 * 8);
+    // let mut buffer1: Vec<i32> = Vec::with_capacity(1024 * 8);
+    // buffer0.resize(1024 * 16, data[0] as i32);
+    // buffer1.resize(1024 * 16, data[1] as i32);
 
     let result0 = {
         let mut reader = match claxon::FlacReader::new(&mut cursor) {
