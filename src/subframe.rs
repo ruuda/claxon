@@ -254,12 +254,25 @@ fn decode_residual<R: ReadBytes>(input: &mut Bitstream<R>,
     // most 2^16 - 1 samples in the block. No values have been marked as
     // invalid by the specification though.
     let n_partitions = 1u32 << order;
-    let n_samples = block_size >> order;
+    let n_samples_per_partition = block_size >> order;
+
+    // The partitions together must fill the block. If the block size is not a
+    // multiple of 2^order; if we shifted off some bits, then we would not fill
+    // the entire block. Such a partition order is invalid for this block size.
+    if block_size & (n_partitions - 1) as u16 != 0 {
+        return fmt_err("invalid partition order")
+    }
+
+    // NOTE: the check above checks that block_size is a multiple of n_partitions
+    // (this works because n_partitions is a power of 2). The check below is
+    // equivalent but more expensive.
+    debug_assert_eq!(n_partitions * n_samples_per_partition as u32, block_size as u32);
+
     let n_warm_up = block_size - buffer.len() as u16;
 
     // The partition size must be at least as big as the number of warm-up
     // samples, otherwise the size of the first partition is negative.
-    if n_warm_up > n_samples {
+    if n_warm_up > n_samples_per_partition {
         return fmt_err("invalid residual");
     }
 
@@ -267,22 +280,22 @@ fn decode_residual<R: ReadBytes>(input: &mut Bitstream<R>,
     match partition_type {
         RicePartitionType::Rice => {
             let mut start = 0;
-            let mut len = n_samples - n_warm_up;
+            let mut len = n_samples_per_partition - n_warm_up;
             for _ in 0..n_partitions {
                 let slice = &mut buffer[start..start + len as usize];
                 try!(decode_rice_partition(input, slice));
                 start = start + len as usize;
-                len = n_samples;
+                len = n_samples_per_partition;
             }
         }
         RicePartitionType::Rice2 => {
             let mut start = 0;
-            let mut len = n_samples - n_warm_up;
+            let mut len = n_samples_per_partition - n_warm_up;
             for _ in 0..n_partitions {
                 let slice = &mut buffer[start..start + len as usize];
                 try!(decode_rice2_partition(input, slice));
                 start = start + len as usize;
-                len = n_samples;
+                len = n_samples_per_partition;
             }
         }
     }
