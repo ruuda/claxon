@@ -599,10 +599,12 @@ pub struct FrameReader<R: ReadBytes> {
 // TODO: The option should not be part of FrameResult.
 pub type FrameResult = Result<Option<Block>>;
 
-/// A macro to expand the length of a buffer, or replace the buffer altogether,
+/// A function to expand the length of a buffer, or replace the buffer altogether,
 /// so it can hold at least `new_len` elements. The contents of the buffer can
 /// be anything, it is assumed they will be overwritten anyway.
-fn ensure_buffer_len(mut buffer: Vec<i32>, new_len: usize) -> Vec<i32> {
+///
+/// To use this function safely, the caller must overwrite all `new_len` bytes.
+unsafe fn ensure_buffer_len(mut buffer: Vec<i32>, new_len: usize) -> Vec<i32> {
     if buffer.len() < new_len {
         // Previous data will be overwritten, so instead of resizing the
         // vector if it is too small, we might as well allocate a new one.
@@ -612,10 +614,8 @@ fn ensure_buffer_len(mut buffer: Vec<i32>, new_len: usize) -> Vec<i32> {
 
         // We are going to fill the buffer anyway, so there is no point in
         // initializing it with default values. This does mean that there could
-        // be garbage in the buffer, but that is not exposed, as the buffer is
-        // only exposed if a frame has been decoded successfully, and hence the
-        // entire buffer has been overwritten.
-        unsafe { buffer.set_len(new_len); }
+        // be garbage in the buffer, therefore this function is unsafe.
+        buffer.set_len(new_len);
     } else {
         buffer.truncate(new_len);
     }
@@ -654,7 +654,11 @@ impl<R: ReadBytes> FrameReader<R> {
         // We must allocate enough space for all channels in the block to be
         // decoded.
         let total_samples = header.channels() as usize * header.block_size as usize;
-        buffer = ensure_buffer_len(buffer, total_samples);
+
+        // Ensure the buffer is the right size to hold all samples, potentially
+        // allocating a new buffer without initializing the memory. From here
+        // on, we must be careful to overwrite each byte in the buffer.
+        buffer = unsafe { ensure_buffer_len(buffer, total_samples) };
 
         let bps = match header.bits_per_sample {
             Some(x) => x,
