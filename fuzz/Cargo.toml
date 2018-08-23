@@ -28,3 +28,7 @@ path = "fuzzers/decode_header.rs"
 [[bin]]
 name = "decode_single_block"
 path = "fuzzers/decode_single_block.rs"
+
+[[bin]]
+name = "diff"
+path = "fuzzers/diff.rs"
