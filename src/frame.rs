@@ -292,8 +292,12 @@ fn read_frame_header_or_eof<R: ReadBytes>(input: &mut R) -> Result<Option<FrameH
     let computed_crc = crc_input.crc();
     let presumed_crc = try!(crc_input.read_u8());
 
-    if computed_crc != presumed_crc {
-        return fmt_err("frame header CRC mismatch");
+    // Do not verify checksum during fuzzing,
+    // otherwise malformed input from fuzzer won't reach the actually interesting code
+    if ! cfg!(fuzzing) {
+        if computed_crc != presumed_crc {
+            return fmt_err("frame header CRC mismatch");
+        }
     }
 
     let frame_header = FrameHeader {
@@ -725,8 +729,12 @@ impl<R: ReadBytes> FrameReader<R> {
         let computed_crc = crc_input.crc();
         let presumed_crc = try!(crc_input.read_be_u16());
 
-        if computed_crc != presumed_crc {
-            return fmt_err("frame CRC mismatch");
+        // Do not verify checksum during fuzzing,
+        // otherwise malformed input from fuzzer won't reach the actually interesting code
+        if ! cfg!(fuzzing) {
+            if computed_crc != presumed_crc {
+                return fmt_err("frame CRC mismatch");
+            }
         }
 
         // TODO: constant block size should be verified if a frame number is
