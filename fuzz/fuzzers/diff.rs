@@ -51,6 +51,15 @@ pub extern fn go(data: &[u8]) {
         }
     };
 
+    if let Some(ref res) = result0 {
+        if res.capacity() != 1024 * 8 {
+            // If a resize was needed, there is no point in attempting the
+            // second decode, because Claxon allocated a new buffer that was not
+            // filled with the marker byte.
+            return
+        }
+    }
+
     cursor.seek(io::SeekFrom::Start(0)).unwrap();
 
     let result1 = {
