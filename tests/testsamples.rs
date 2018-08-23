@@ -11,6 +11,7 @@ extern crate walkdir;
 
 use std::fs;
 use std::io;
+use std::iter;
 use std::path::Path;
 
 fn run_metaflac_streaminfo<P: AsRef<Path>>(fname: P) -> String {
@@ -472,12 +473,31 @@ fn regression_test_fuzz_samples() {
             print!("    regression testing {} ...", path.to_str()
                    .expect("unsupported filename"));
 
+            let mut decodes = Vec::new();
+
+            // Decode the file once into buffer pre-filled with "13", and keep
+            // the buffers. All of the pre-filled samples should be overwritten.
             if let Ok(mut reader) = claxon::FlacReader::open(&path) {
-                let mut buffer = Vec::new();
+                let mut buffer = iter::repeat(13_i32).take(1024 * 16).collect();
                 while let Ok(Some(block)) = reader.blocks().read_next_or_eof(buffer) {
-                    buffer = block.into_buffer();
+                    decodes.push(block.into_buffer());
+                    buffer = iter::repeat(13_i32).take(1024 * 16).collect();
                 }
             }
+
+            // Decode the file again, into a buffer pre-filled with "17". There
+            // should not be any difference between the decoded buffers and the
+            // previously decoded ones. If there was, then part of the buffer
+            // was not overwritten properly.
+            if let Ok(mut reader) = claxon::FlacReader::open(&path) {
+                let mut buffer = iter::repeat(17_i32).take(1024 * 16).collect();
+                while let Ok(Some(block)) = reader.blocks().read_next_or_eof(buffer) {
+                    let prev_decode = decodes.remove(0);
+                    assert_eq!(prev_decode, block.into_buffer());
+                    buffer = iter::repeat(17_i32).take(1024 * 16).collect();
+                }
+            }
+
             println!(" ok");
         }
     }
