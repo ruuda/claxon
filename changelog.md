@@ -6,7 +6,8 @@ Changelog
 
 Released 2018-08-25.
 
-This is a bugfix release that addresses a security issue.
+This is a bugfix release that addresses a security issue that had been present
+in Claxon since its initial release.
 
 **Compatibility**:
 
@@ -15,7 +16,7 @@ This is a bugfix release that addresses a security issue.
 
 Bugs fixed:
 
-- A bug where uninitialized memory or previous decode buffer content could be
+- A bug where uninitialized memory or previous decode buffer contents could be
   exposed has been fixed.
 
 Thanks Sergey "Shnatsel" Davidoff for identifying the bug.
