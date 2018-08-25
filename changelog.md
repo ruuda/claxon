@@ -17,7 +17,7 @@ in Claxon since its initial release.
 Bugs fixed:
 
 - A bug where uninitialized memory or previous decode buffer contents could be
-  exposed has been fixed.
+  exposed when decoding a maliciously crafted file has been fixed.
 
 Thanks Sergey "Shnatsel" Davidoff for identifying the bug.
 
