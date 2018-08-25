@@ -1,6 +1,25 @@
 Changelog
 =========
 
+0.4.1
+-----
+
+Released 2018-08-25.
+
+This is a bugfix release that addresses a security issue.
+
+**Compatibility**:
+
+- No breaking changes.
+- Compatible with Rust 1.13 through 1.28.
+
+Bugs fixed:
+
+- A bug where uninitialized memory or previous decode buffer content could be
+  exposed has been fixed.
+
+Thanks Sergey "Shnatsel" Davidoff for identifying the bug.
+
 0.4.0
 -----
 
