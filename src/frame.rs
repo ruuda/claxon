@@ -602,8 +602,6 @@ pub type FrameResult = Result<Option<Block>>;
 /// A function to expand the length of a buffer, or replace the buffer altogether,
 /// so it can hold at least `new_len` elements. The contents of the buffer can
 /// be anything, it is assumed they will be overwritten anyway.
-///
-/// To use this function safely, the caller must overwrite all `new_len` bytes.
 fn ensure_buffer_len(mut buffer: Vec<i32>, new_len: usize) -> Vec<i32> {
     if buffer.len() < new_len {
         // Previous data will be overwritten, so instead of resizing the
