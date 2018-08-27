@@ -292,9 +292,10 @@ fn read_frame_header_or_eof<R: ReadBytes>(input: &mut R) -> Result<Option<FrameH
     let computed_crc = crc_input.crc();
     let presumed_crc = try!(crc_input.read_u8());
 
-    // Do not verify checksum during fuzzing,
-    // otherwise malformed input from fuzzer won't reach the actually interesting code
-    if ! cfg!(fuzzing) {
+    // Do not verify checksum during fuzzing, otherwise malformed input from
+    // fuzzer won't reach the actually interesting code.
+    #[cfg(not(fuzzing))]
+    {
         if computed_crc != presumed_crc {
             return fmt_err("frame header CRC mismatch");
         }
@@ -733,9 +734,10 @@ impl<R: ReadBytes> FrameReader<R> {
         let computed_crc = crc_input.crc();
         let presumed_crc = try!(crc_input.read_be_u16());
 
-        // Do not verify checksum during fuzzing,
-        // otherwise malformed input from fuzzer won't reach the actually interesting code
-        if ! cfg!(fuzzing) {
+        // Do not verify checksum during fuzzing, otherwise malformed input from
+        // the fuzzer won't reach the actually interesting code.
+        #[cfg(not(fuzzing))]
+        {
             if computed_crc != presumed_crc {
                 return fmt_err("frame CRC mismatch");
             }
