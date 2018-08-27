@@ -301,6 +301,10 @@ fn read_frame_header_or_eof<R: ReadBytes>(input: &mut R) -> Result<Option<FrameH
         }
     }
 
+    // Silence unused variable warnings.
+    #[cfg(fuzzing)]
+    let _ = computed_crc == presumed_crc;
+
     let frame_header = FrameHeader {
         block_time: block_time,
         block_size: block_size,
@@ -742,6 +746,10 @@ impl<R: ReadBytes> FrameReader<R> {
                 return fmt_err("frame CRC mismatch");
             }
         }
+
+        // Silence unused variable warnings.
+        #[cfg(fuzzing)]
+        let _ = computed_crc == presumed_crc;
 
         // TODO: constant block size should be verified if a frame number is
         // encountered.
