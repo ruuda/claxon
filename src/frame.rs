@@ -618,6 +618,17 @@ fn ensure_buffer_len(mut buffer: Vec<i32>, new_len: usize) -> Vec<i32> {
     buffer
 }
 
+#[test]
+fn ensure_buffer_len_returns_buffer_with_new_len() {
+    for capacity in 0..10 {
+        for new_len in 0..10 {
+            let buffer = Vec::with_capacity(capacity);
+            let resized = unsafe { ensure_buffer_len(buffer, new_len) };
+            assert_eq!(resized.len(), new_len);
+        }
+    }
+}
+
 impl<R: ReadBytes> FrameReader<R> {
     /// Creates a new frame reader that will yield at least one element.
     pub fn new(input: R) -> FrameReader<R> {
