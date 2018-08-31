@@ -14,7 +14,10 @@ if ! grep -q "performance" /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor
 fi
 
 # Optimize for the current CPU specifically, and include debugging symbols.
-export RUSTFLAGS="-C target-cpu=native -g"
+# Since Rust 1.24, the number of codegen units is more than 1 by default. This
+# improves compile time, but causes a 36% regression in Claxon performance, so
+# we need to set the number of codegen units to 1.
+export RUSTFLAGS="-C target-cpu=native -C codegen-units=1 -g"
 
 # Compile the example decode program.
 cargo build --release --example decode

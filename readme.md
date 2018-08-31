@@ -45,6 +45,10 @@ implementation][ref-flac]. Measurements were done on a Skylake i7.
 | Claxon  | 1.13 ± 0.03      |
 | libflac | 1.00 ± 0.03      |
 
+Note that for decent performance, Claxon should be compiled with
+`-C codegen-units=1` on Rust ≥ 1.24.0. Not passing this `RUSTFLAG` can cause as
+much as a 45% increase in running time.
+
 Contributing
 ------------
 Contributions in the form of bug reports, feature requests, or pull requests are
