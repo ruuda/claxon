@@ -631,7 +631,7 @@ fn ensure_buffer_len_returns_buffer_with_new_len() {
     for capacity in 0..10 {
         for new_len in 0..10 {
             let buffer = Vec::with_capacity(capacity);
-            let resized = unsafe { ensure_buffer_len(buffer, new_len) };
+            let resized = ensure_buffer_len(buffer, new_len);
             assert_eq!(resized.len(), new_len);
         }
     }
