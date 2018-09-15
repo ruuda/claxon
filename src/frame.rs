@@ -617,6 +617,8 @@ fn ensure_buffer_len(mut buffer: Vec<i32>, new_len: usize) -> Vec<i32> {
         // vector if it is too small, we might as well allocate a new one.
         if buffer.capacity() < new_len {
             buffer = vec![0; new_len];
+        } else {
+            buffer.resize(new_len, 0);
         }
     } else {
         buffer.truncate(new_len);
