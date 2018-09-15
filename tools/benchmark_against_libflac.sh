@@ -32,12 +32,12 @@ for i in {1..11}; do
     # overwrite.
     rm -f testsamples/extra/*.wav
     echo -n "[libflac]"
-    $(which time) --format="%e" --append --output /tmp/bench_times_libflac.dat \
+    env time --format="%e" --append --output /tmp/bench_times_libflac.dat \
         flac -d testsamples/extra/*.flac 2> /dev/null
 
     rm -f testsamples/extra/*.wav
     echo -en "\b\b\b\b\b\b\b\b\b[Claxon] \b"
-    $(which time) --format="%e" --append --output /tmp/bench_times_claxon.dat \
+    env time --format="%e" --append --output /tmp/bench_times_claxon.dat \
         target/release/examples/decode testsamples/extra/*.flac > /dev/null
 
     echo -e "\b\b\b\b\b\b\b\b[done]  "
