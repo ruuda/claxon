@@ -292,9 +292,18 @@ fn read_frame_header_or_eof<R: ReadBytes>(input: &mut R) -> Result<Option<FrameH
     let computed_crc = crc_input.crc();
     let presumed_crc = try!(crc_input.read_u8());
 
-    if computed_crc != presumed_crc {
-        return fmt_err("frame header CRC mismatch");
+    // Do not verify checksum during fuzzing, otherwise malformed input from
+    // fuzzer won't reach the actually interesting code.
+    #[cfg(not(fuzzing))]
+    {
+        if computed_crc != presumed_crc {
+            return fmt_err("frame header CRC mismatch");
+        }
     }
+
+    // Silence unused variable warnings.
+    #[cfg(fuzzing)]
+    let _ = computed_crc == presumed_crc;
 
     let frame_header = FrameHeader {
         block_time: block_time,
@@ -615,6 +624,17 @@ fn ensure_buffer_len(mut buffer: Vec<i32>, new_len: usize) -> Vec<i32> {
     buffer
 }
 
+#[test]
+fn ensure_buffer_len_returns_buffer_with_new_len() {
+    for capacity in 0..10 {
+        for new_len in 0..10 {
+            let buffer = Vec::with_capacity(capacity);
+            let resized = unsafe { ensure_buffer_len(buffer, new_len) };
+            assert_eq!(resized.len(), new_len);
+        }
+    }
+}
+
 impl<R: ReadBytes> FrameReader<R> {
     /// Creates a new frame reader that will yield at least one element.
     pub fn new(input: R) -> FrameReader<R> {
@@ -720,9 +740,18 @@ impl<R: ReadBytes> FrameReader<R> {
         let computed_crc = crc_input.crc();
         let presumed_crc = try!(crc_input.read_be_u16());
 
-        if computed_crc != presumed_crc {
-            return fmt_err("frame CRC mismatch");
+        // Do not verify checksum during fuzzing, otherwise malformed input from
+        // the fuzzer won't reach the actually interesting code.
+        #[cfg(not(fuzzing))]
+        {
+            if computed_crc != presumed_crc {
+                return fmt_err("frame CRC mismatch");
+            }
         }
+
+        // Silence unused variable warnings.
+        #[cfg(fuzzing)]
+        let _ = computed_crc == presumed_crc;
 
         // TODO: constant block size should be verified if a frame number is
         // encountered.

@@ -14,7 +14,10 @@ if ! grep -q "performance" /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor
 fi
 
 # Optimize for the current CPU specifically, and include debugging symbols.
-export RUSTFLAGS="-C target-cpu=native -g"
+# Since Rust 1.24, the number of codegen units is more than 1 by default. This
+# improves compile time, but causes a 36% regression in Claxon performance, so
+# we need to set the number of codegen units to 1.
+export RUSTFLAGS="-C target-cpu=native -C codegen-units=1 -g"
 
 # Compile the example decode program.
 cargo build --release --example decode
@@ -29,12 +32,12 @@ for i in {1..11}; do
     # overwrite.
     rm -f testsamples/extra/*.wav
     echo -n "[libflac]"
-    /bin/time --format="%e" --append --output /tmp/bench_times_libflac.dat \
+    env time --format="%e" --append --output /tmp/bench_times_libflac.dat \
         flac -d testsamples/extra/*.flac 2> /dev/null
 
     rm -f testsamples/extra/*.wav
     echo -en "\b\b\b\b\b\b\b\b\b[Claxon] \b"
-    /bin/time --format="%e" --append --output /tmp/bench_times_claxon.dat \
+    env time --format="%e" --append --output /tmp/bench_times_claxon.dat \
         target/release/examples/decode testsamples/extra/*.flac > /dev/null
 
     echo -e "\b\b\b\b\b\b\b\b[done]  "

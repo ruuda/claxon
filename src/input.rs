@@ -39,7 +39,17 @@ impl<R: io::Read> BufferedReader<R> {
 
     /// Wrap the reader in a new buffered reader.
     pub fn new(inner: R) -> BufferedReader<R> {
-        let buf = vec![0; 2048].into_boxed_slice();
+        // Use a large-ish buffer size, such that system call overhead is
+        // negligible when replenishing the buffer. However, when fuzzing we
+        // want to have small samples, and still trigger the case where we have
+        // to replenish the buffer, so use a smaller buffer size there.
+        #[cfg(not(fuzzing))]
+        const CAPACITY: usize = 2048;
+
+        #[cfg(fuzzing)]
+        const CAPACITY: usize = 31;
+
+        let buf = vec![0; CAPACITY].into_boxed_slice();
         BufferedReader {
             inner: inner,
             buf: buf,

@@ -38,12 +38,17 @@ Performance
 -----------
 These are the times to decode 5 real-world FLAC files to wav, average and
 standard deviation of 11 runs, normalized to version 1.3.2 of the [reference
-implementation][ref-flac]. Measurements were done on a Skylake i7.
+implementation][ref-flac]. Measurements were done on a Skylake i7. Claxon was
+compiled with Rust 1.26.0.
 
 | Decoder | Time / reference |
 | ------- | ---------------- |
-| Claxon  | 1.13 ± 0.03      |
-| libflac | 1.00 ± 0.03      |
+| Claxon  | 1.10 ± 0.01      |
+| libflac | 1.00 ± 0.01      |
+
+Note that for decent performance, Claxon should be compiled with
+`-C codegen-units=1` on Rust ≥ 1.24.0. Not passing this `RUSTFLAG` can
+cause as much as a 45% increase in running time.
 
 Contributing
 ------------
