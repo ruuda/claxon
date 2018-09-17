@@ -602,16 +602,19 @@ fn ensure_buffer_len(mut buffer: Vec<i32>, new_len: usize) -> Vec<i32> {
     if buffer.len() < new_len {
         // Previous data will be overwritten, so instead of resizing the
         // vector if it is too small, we might as well allocate a new one.
+        // NOTE: In the past we allocated a vector with Vec::with_capacity here,
+        // setting it to the right length without zeroing (and also setting the
+        // right length if the capacity was sufficient). However, the
+        // performance impact of zeroing turned out to be negligible (a 0.2%
+        // increase in decode times in an adversarial scenario, but a 0.03%
+        // increase on real-world files when the buffer is recycled). We still
+        // don't zero out previous contents of the buffer as it was passed in,
+        // zeroing only happens on resize or for new allocations.
         if buffer.capacity() < new_len {
-            buffer = Vec::with_capacity(new_len);
+            buffer = vec![0; new_len];
+        } else {
+            buffer.resize(new_len, 0);
         }
-
-        // We are going to fill the buffer anyway, so there is no point in
-        // initializing it with default values. This does mean that there could
-        // be garbage in the buffer, but that is not exposed, as the buffer is
-        // only exposed if a frame has been decoded successfully, and hence the
-        // entire buffer has been overwritten.
-        unsafe { buffer.set_len(new_len); }
     } else {
         buffer.truncate(new_len);
     }
@@ -623,7 +626,7 @@ fn ensure_buffer_len_returns_buffer_with_new_len() {
     for capacity in 0..10 {
         for new_len in 0..10 {
             let buffer = Vec::with_capacity(capacity);
-            let resized = unsafe { ensure_buffer_len(buffer, new_len) };
+            let resized = ensure_buffer_len(buffer, new_len);
             assert_eq!(resized.len(), new_len);
         }
     }
@@ -661,6 +664,9 @@ impl<R: ReadBytes> FrameReader<R> {
         // We must allocate enough space for all channels in the block to be
         // decoded.
         let total_samples = header.channels() as usize * header.block_size as usize;
+
+        // Ensure the buffer is the right size to hold all samples. For
+        // correctness, we must be careful to overwrite each byte in the buffer.
         buffer = ensure_buffer_len(buffer, total_samples);
 
         let bps = match header.bits_per_sample {
