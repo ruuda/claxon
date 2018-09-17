@@ -19,9 +19,12 @@ fi
 bname="$1_$(git rev-parse @ | cut -c 1-7)"
 
 # Disable automatic CPU frequency scaling to get lower variance measurements.
+# We could use either "performance" or "powersave", they lock the frequency
+# to the maximum and minimum respectively. But the minimum is better for laptops,
+# to avoid going into thermal throttling.
 if ! grep -q "performance" /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor; then
     echo "Locking CPU clock speed to its maximum. This requires root access."
-  echo performance | sudo tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor > /dev/null
+  echo powersave | sudo tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor > /dev/null
 fi
 
 # Optimize for the current CPU specifically, and include debugging symbols.
@@ -33,13 +36,12 @@ export RUSTFLAGS="-C target-cpu=native -C codegen-units=1 -g"
 # Compile the benchmarking program.
 cargo build --release --example bench_decode
 
-for file in testsamples/extra/*.flac; do
-  echo "Benchmarking ${file} ..."
+for i in {0..5}; do
+  for file in testsamples/extra/*.flac; do
+    echo "Benchmarking ${file} ..."
 
-  # Run the benchmarks with "taskset" to lock them to the same CPU core for the
-  # entire program, to lower variance in the measurements.
-  taskset -c 1 target/release/examples/bench_decode ${file} > "${bname}_$(basename ${file}).dat"
+    # Run the benchmarks with "taskset" to lock them to the same CPU core for the
+    # entire program, to lower variance in the measurements.
+    taskset -c 1 target/release/examples/bench_decode ${file} >> "${bname}.dat"
+  done
 done
-
-# Merge the output files.
-cat ${bname}_*.dat > "${bname}_all.dat"
