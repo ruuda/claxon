@@ -36,12 +36,22 @@ export RUSTFLAGS="-C target-cpu=native -C codegen-units=1 -g"
 # Compile the benchmarking program.
 cargo build --release --example bench_decode
 
-for i in {0..5}; do
+for i in {1..7}; do
+  echo "Round $i of 7."
+  # Clear previous results in case we're accidentally overwriting the file.
+  truncate --size 0 "${bname}_$i.dat"
+
   for file in testsamples/extra/*.flac; do
-    echo "Benchmarking ${file} ..."
+    printf "\033[2K\rBenchmarking ${file} ..."
 
     # Run the benchmarks with "taskset" to lock them to the same CPU core for the
     # entire program, to lower variance in the measurements.
-    taskset -c 1 target/release/examples/bench_decode ${file} >> "${bname}.dat"
+    taskset -c 1 target/release/examples/bench_decode ${file} >> "${bname}_$i.dat"
   done
+  echo ""
 done
+
+# Concatenate the results of all of the rounds (concatenate horizontally, so
+# every row represents one block, and every value on that row is one measurement
+# of the time to decode that block).
+paste ${bname}_*.dat > "${bname}.dat"
