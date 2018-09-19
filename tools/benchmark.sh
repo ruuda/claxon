@@ -22,8 +22,8 @@ bname="$1_$(git rev-parse @ | cut -c 1-7)"
 # We could use either "performance" or "powersave", they lock the frequency
 # to the maximum and minimum respectively. But the minimum is better for laptops,
 # to avoid going into thermal throttling.
-if ! grep -q "performance" /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor; then
-    echo "Locking CPU clock speed to its maximum. This requires root access."
+if ! grep -q "powersave" /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor; then
+    echo "Locking CPU clock speed to its minimum. This requires root access."
   echo powersave | sudo tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor > /dev/null
 fi
 
