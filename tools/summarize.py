@@ -48,23 +48,25 @@ t_mean = np.mean(ok_mins)
 # lobes, and in the first lobe there are small spikes at clear intervals,
 # possibly quantization noise). At a high level it looks more like a gamma
 # distribution with k = 0.5. But we will assume exponential for now because it
-# is easy to work with.
+# is easy to work with. NOTE 2: Actually, the noise distribution loosk a lot
+# like lognormal after removing the zeros.
 diffs = np.transpose(data) - mins
+diffs = np.reshape(diffs, -1)
+diffs = diffs[diffs > 0.0]
 mean_noise = np.mean(diffs)
 
-# Estimate the bounds of a 95% confidence interval for the parameter lambda of
-# the exponential distribution, and then invert them to get a 95% confidence
-# interval of the expected value of the noise.
-sqrtn = np.sqrt(num_samples)
-noise_bounds = (1.0 + np.array([-1.0, 1.0]) * 1.96 / sqrtn) / mean_noise
-noise_bounds = 1.0 / noise_bounds
+# TODO: Take one of the bounds to 0?
+# TODO: These new bounds look far too tight. What's up?
+conf_bounds = np.array([0.975, 0.025])
+qs = -np.log(1.0 - conf_bounds) / num_samples
+noise_offset_bounds = qs * mean_noise
 
 # Recall that we assume times to be of the form t + x where x is noise. We now
 # have a 95% confidence interval for x, and by taking the mean over all timings
 # for a block, we get an estimate of t + x. Combined we get a 95% confidence
 # interval for t. It's a bit of a hack, and there should be a better statistic
 # to report, but for now this will do.
-t_bounds = np.mean(ok_means) - noise_bounds
+t_bounds = t_mean - noise_offset_bounds
 
 print(f'Mean time per sample:    {t_mean:6.3f} ns')
 print(f'95% confidence interval: {t_bounds[0]:6.3f} ns .. {t_bounds[1]:6.3f} ns')
