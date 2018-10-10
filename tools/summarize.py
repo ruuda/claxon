@@ -10,6 +10,8 @@ Usage:
 import numpy as np
 import sys
 
+import matplotlib.pyplot as plt
+
 data = np.genfromtxt(sys.argv[1])
 
 # For every decoded block, we have num_samples measurements.
@@ -53,6 +55,23 @@ t_mean = np.mean(ok_mins)
 diffs = np.transpose(data) - mins
 diffs = np.reshape(diffs, -1)
 diffs = diffs[diffs > 0.0]
+
+plt.hist(diffs, bins=np.linspace(0, 1, 300), normed=True)
+
+log_diffs = np.log(diffs)
+mu = np.mean(log_diffs)
+variance = np.mean(np.square(log_diffs - mu))
+stddev = np.sqrt(variance)
+
+def fit_pdf(x):
+    factor = x * stddev * np.sqrt(2.0 * np.pi)
+    exponent = np.square(np.log(x) - mu) / (2.0 * variance)
+    return np.exp(-exponent) / factor
+
+xs = np.linspace(0, 1, 600)
+plt.plot(xs, fit_pdf(xs), lw=2)
+
+plt.show()
 mean_noise = np.mean(diffs)
 
 # TODO: Take one of the bounds to 0?
