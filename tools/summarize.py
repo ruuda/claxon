@@ -55,6 +55,8 @@ t_mean = np.mean(ok_mins)
 diffs = np.transpose(data) - mins
 diffs = np.reshape(diffs, -1)
 diffs = diffs[diffs > 0.0]
+diffs = diffs[diffs < 4.0]
+mean_noise = np.mean(diffs)
 
 plt.hist(diffs, bins=np.linspace(0, 1, 300), normed=True)
 
@@ -62,17 +64,27 @@ log_diffs = np.log(diffs)
 mu = np.mean(log_diffs)
 variance = np.mean(np.square(log_diffs - mu))
 stddev = np.sqrt(variance)
+a = mean_noise / (2.0 * np.sqrt(2.0 * np.pi))
 
-def fit_pdf(x):
+def pdf_logn(x):
     factor = x * stddev * np.sqrt(2.0 * np.pi)
     exponent = np.square(np.log(x) - mu) / (2.0 * variance)
     return np.exp(-exponent) / factor
 
+def pdf_exp(x):
+    return np.exp(-x / mean_noise) / mean_noise
+
+def pdf_mb(x):
+    factor = np.sqrt(2.0 / np.pi) / (a ** 3)
+    exponent = np.square(x) / (2.0 * a * a)
+    return np.exp(-exponent) * np.square(x) * factor
+
 xs = np.linspace(0, 1, 600)
-plt.plot(xs, fit_pdf(xs), lw=2)
+plt.plot(xs, pdf_logn(xs), lw=2)
+plt.plot(xs, pdf_exp(xs), lw=2)
+plt.plot(xs, pdf_mb(xs), lw=2)
 
 plt.show()
-mean_noise = np.mean(diffs)
 
 # TODO: Take one of the bounds to 0?
 # TODO: These new bounds look far too tight. What's up?
