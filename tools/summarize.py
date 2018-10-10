@@ -55,42 +55,12 @@ t_mean = np.mean(ok_mins)
 diffs = np.transpose(data) - mins
 diffs = np.reshape(diffs, -1)
 diffs = diffs[diffs > 0.0]
-diffs = diffs[diffs < 4.0]
 mean_noise = np.mean(diffs)
 
-plt.hist(diffs, bins=np.linspace(0, 1, 300), normed=True)
-
-log_diffs = np.log(diffs)
-mu = np.mean(log_diffs)
-variance = np.mean(np.square(log_diffs - mu))
-stddev = np.sqrt(variance)
-a = mean_noise / (2.0 * np.sqrt(2.0 * np.pi))
-
-def pdf_logn(x):
-    factor = x * stddev * np.sqrt(2.0 * np.pi)
-    exponent = np.square(np.log(x) - mu) / (2.0 * variance)
-    return np.exp(-exponent) / factor
-
-def pdf_exp(x):
-    return np.exp(-x / mean_noise) / mean_noise
-
-def pdf_mb(x):
-    factor = np.sqrt(2.0 / np.pi) / (a ** 3)
-    exponent = np.square(x) / (2.0 * a * a)
-    return np.exp(-exponent) * np.square(x) * factor
-
-xs = np.linspace(0, 1, 600)
-plt.plot(xs, pdf_logn(xs), lw=2)
-plt.plot(xs, pdf_exp(xs), lw=2)
-plt.plot(xs, pdf_mb(xs), lw=2)
-
-plt.show()
-
-# TODO: Take one of the bounds to 0?
 # TODO: These new bounds look far too tight. What's up?
-conf_bounds = np.array([0.975, 0.025])
+conf_bounds = np.array([0.95, 0.95 * 0.5, 0.0])
 qs = -np.log(1.0 - conf_bounds) / num_samples
-noise_offset_bounds = qs * mean_noise
+noise_offset_bounds = qs * mean_noise * 2.0
 
 # Recall that we assume times to be of the form t + x where x is noise. We now
 # have a 95% confidence interval for x, and by taking the mean over all timings
@@ -99,5 +69,8 @@ noise_offset_bounds = qs * mean_noise
 # to report, but for now this will do.
 t_bounds = t_mean - noise_offset_bounds
 
+mid_interval = 0.5 * (t_bounds[0] + t_bounds[2])
+plm_interval = 0.5 * (t_bounds[2] - t_bounds[0])
+
 print(f'Mean time per sample:    {t_mean:6.3f} ns')
-print(f'95% confidence interval: {t_bounds[0]:6.3f} ns .. {t_bounds[1]:6.3f} ns')
+print(f'95% confidence interval: {mid_interval:6.3f} ± {plm_interval:.3f} ns')
