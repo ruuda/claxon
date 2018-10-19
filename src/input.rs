@@ -14,6 +14,7 @@
 
 use std::cmp;
 use std::io;
+use std::mem;
 
 /// Similar to `std::io::BufRead`, but more performant.
 ///
@@ -66,6 +67,62 @@ impl<R: io::Read> BufferedReader<R> {
     }
 }
 
+/// Aligned 16-bit buffer and converter
+#[derive(Copy, Clone)]
+#[repr(align(2))]
+struct Helper16([u8; 2]);
+
+/// Aligned 32-bit buffer and converter
+#[derive(Copy, Clone)]
+#[repr(align(4))]
+struct Helper32([u8; 4]);
+
+/// Aligned 64-bit buffer and converter
+#[derive(Copy, Clone)]
+#[repr(align(8))]
+struct Helper64([u8; 8]);
+
+impl Helper16 {
+    /// Transmute aligned little-endian buffer to integer
+    #[allow(dead_code)]
+    #[inline(always)]
+    pub fn to_u16_le(self) -> u16 {
+        u16::from_le(unsafe { mem::transmute::<[u8; 2], u16>(self.0) })
+    }
+    /// Transmute aligned big-endian buffer to integer
+    #[inline(always)]
+    pub fn to_u16_be(self) -> u16 {
+        u16::from_be(unsafe { mem::transmute::<[u8; 2], u16>(self.0) })
+    }
+}
+
+impl Helper32 {
+    /// Transmute aligned little-endian buffer to integer
+    #[inline(always)]
+    pub fn to_u32_le(self) -> u32 {
+        u32::from_le(unsafe { mem::transmute::<[u8; 4], u32>(self.0) })
+    }
+    /// Transmute aligned big-endian buffer to integer
+    #[inline(always)]
+    pub fn to_u32_be(self) -> u32 {
+        u32::from_be(unsafe { mem::transmute::<[u8; 4], u32>(self.0) })
+    }
+}
+
+impl Helper64 {
+    /// Transmute aligned little-endian buffer to integer
+    #[allow(dead_code)]
+    #[inline(always)]
+    pub fn to_u64_le(self) -> u64 {
+        u64::from_le(unsafe { mem::transmute::<[u8; 8], u64>(self.0) })
+    }
+    /// Transmute aligned big-endian buffer to integer
+    #[allow(dead_code)]
+    #[inline(always)]
+    pub fn to_u64_be(self) -> u64 {
+        u64::from_be(unsafe { mem::transmute::<[u8; 8], u64>(self.0) })
+    }
+}
 
 /// Provides convenience methods to make input less cumbersome.
 pub trait ReadBytes {
@@ -85,16 +142,17 @@ pub trait ReadBytes {
 
     /// Reads two bytes and interprets them as a big-endian 16-bit unsigned integer.
     fn read_be_u16(&mut self) -> io::Result<u16> {
-        let b0 = try!(self.read_u8()) as u16;
-        let b1 = try!(self.read_u8()) as u16;
-        Ok(b0 << 8 | b1)
+        Ok(Helper16([
+            try!(self.read_u8()),
+            try!(self.read_u8()),
+        ]).to_u16_be())
     }
 
     /// Reads two bytes and interprets them as a big-endian 16-bit unsigned integer.
     fn read_be_u16_or_eof(&mut self) -> io::Result<Option<u16>> {
         if let Some(b0) = try!(self.read_u8_or_eof()) {
             if let Some(b1) = try!(self.read_u8_or_eof()) {
-                return Ok(Some((b0 as u16) << 8 | (b1 as u16)));
+                return Ok(Some(Helper16([b0, b1]).to_u16_be()));
             }
         }
         Ok(None)
@@ -102,28 +160,32 @@ pub trait ReadBytes {
 
     /// Reads three bytes and interprets them as a big-endian 24-bit unsigned integer.
     fn read_be_u24(&mut self) -> io::Result<u32> {
-        let b0 = try!(self.read_u8()) as u32;
-        let b1 = try!(self.read_u8()) as u32;
-        let b2 = try!(self.read_u8()) as u32;
-        Ok(b0 << 16 | b1 << 8 | b2)
+        Ok(Helper32([
+            0,
+            try!(self.read_u8()),
+            try!(self.read_u8()),
+            try!(self.read_u8()),
+        ]).to_u32_be())
     }
 
     /// Reads four bytes and interprets them as a big-endian 32-bit unsigned integer.
     fn read_be_u32(&mut self) -> io::Result<u32> {
-        let b0 = try!(self.read_u8()) as u32;
-        let b1 = try!(self.read_u8()) as u32;
-        let b2 = try!(self.read_u8()) as u32;
-        let b3 = try!(self.read_u8()) as u32;
-        Ok(b0 << 24 | b1 << 16 | b2 << 8 | b3)
+        Ok(Helper32([
+            try!(self.read_u8()),
+            try!(self.read_u8()),
+            try!(self.read_u8()),
+            try!(self.read_u8()),
+        ]).to_u32_be())
     }
 
     /// Reads four bytes and interprets them as a little-endian 32-bit unsigned integer.
     fn read_le_u32(&mut self) -> io::Result<u32> {
-        let b0 = try!(self.read_u8()) as u32;
-        let b1 = try!(self.read_u8()) as u32;
-        let b2 = try!(self.read_u8()) as u32;
-        let b3 = try!(self.read_u8()) as u32;
-        Ok(b3 << 24 | b2 << 16 | b1 << 8 | b0)
+        Ok(Helper32([
+            try!(self.read_u8()),
+            try!(self.read_u8()),
+            try!(self.read_u8()),
+            try!(self.read_u8()),
+        ]).to_u32_le())
     }
 }
 
