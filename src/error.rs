@@ -13,7 +13,7 @@ use std::io;
 use std::result;
 use std::string;
 
-/// An error that prevents succesful decoding of the FLAC stream.
+/// An error that prevents successful decoding of the FLAC stream.
 #[derive(Debug)]
 pub enum Error {
     /// Not a decoding error, but a problem with the underlying IO.
@@ -87,7 +87,7 @@ impl From<io::Error> for Error {
 
 impl From<string::FromUtf8Error> for Error {
     fn from(_: string::FromUtf8Error) -> Error {
-        // Vendor strings and Vorbis cmments are the only place where UTF-8 is
+        // Vendor strings and Vorbis comments are the only place where UTF-8 is
         // parsed into a String.
         Error::FormatError("Vorbis comment or vendor string is not valid UTF-8")
     }

@@ -32,7 +32,7 @@ pub extern fn go(data: &[u8]) {
     let buffer0: Vec<i32> = iter::repeat(data[0] as i32).take(1024 * 8).collect();
     let buffer1: Vec<i32> = iter::repeat(data[1] as i32).take(1024 * 8).collect();
 
-    // NOTE: Somewhat surprisingly, the bove runs at about 4x the execs per
+    // NOTE: Somewhat surprisingly, the above runs at about 4x the execs per
     // second of this version below. I should file a performance bug against Rust.
     // let mut buffer0: Vec<i32> = Vec::with_capacity(1024 * 8);
     // let mut buffer1: Vec<i32> = Vec::with_capacity(1024 * 8);
