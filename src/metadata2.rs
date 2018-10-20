@@ -514,7 +514,7 @@ impl <'a, R: 'a + io::Read> LazyVorbisComment<'a, R> {
     /// Read and parse the Vorbis comment block.
     pub fn get(mut self) -> Result<VorbisComment> {
         // Set len to zero before reading to indicate that we consumed the data,
-        // dropping does not panic, also if reading the vorbis comment block
+        // so dropping does not panic, also if reading the vorbis comment block
         // returns an error.
         let len = self.len;
         self.len = 0;
@@ -554,6 +554,18 @@ pub struct LazyPicture<'a, R: 'a + io::Read> {
 }
 
 lazy_block_impl!(LazyPicture);
+
+impl <'a, R: 'a + io::Read> LazyPicture<'a, R> {
+    /// Read and parse metadata in the picture block and expose embedded reader.
+    pub fn get(mut self) -> Result<Picture<'a, R>> {
+        // Set len to zero before reading to indicate that we consumed the data,
+        // so dropping does not panic, also if reading the vorbis comment block
+        // returns an error.
+        let len = self.len;
+        self.len = 0;
+        read_picture_block(self.input, len)
+    }
+}
 
 #[inline]
 fn read_metadata_block_header<R: io::Read>(input: &mut R) -> Result<MetadataBlockHeader> {
@@ -992,12 +1004,18 @@ fn read_picture_block<R: io::Read>(input: &mut R, length: u32) -> Result<Picture
     // 95th percentile is 3_672_912 bytes. Having larger cover art embedded kind
     // of defeats the purpose, as the cover art would be larger than the audio
     // data for the typical track. Hence a 100 MiB limit should be reasonable.
+    // TODO: With the embedded reader, this is no longer as risky, because we
+    // don't read the entire picture into memory.
     if data_len > 100 * 1024 * 1024 {
         let msg = "pictures larger than 100 MiB are not supported";
         return Err(Error::Unsupported(msg))
     }
 
-    // TODO: Expose reader.
+    let embedded_reader = EmbeddedReader {
+        input: input,
+        cursor: 0,
+        len: data_len,
+    };
 
     let picture = Picture {
         metadata: PictureMetadata {
@@ -1007,7 +1025,7 @@ fn read_picture_block<R: io::Read>(input: &mut R, length: u32) -> Result<Picture
             width: width,
             height: height,
         },
-        reader: unimplemented!(),
+        reader: embedded_reader,
     };
 
     Ok(picture)
