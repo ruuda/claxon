@@ -226,9 +226,8 @@ pub enum PictureKind {
     Other = 0,
 }
 
-/// Metadata about an embedded picture.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct PictureMetadata {
+/// A block that embeds a picture (e.g. cover art).
+pub struct Picture<'a, R: 'a + io::Read> {
     /// The picture kind: front cover, leaflet, etc.
     pub kind: PictureKind,
 
@@ -246,12 +245,6 @@ pub struct PictureMetadata {
 
     /// The height of the picture in pixels.
     pub height: u32,
-}
-
-/// A block that embeds a picture (e.g. cover art).
-pub struct Picture<'a, R: 'a + io::Read> {
-    /// Metadata about the picture, such as its kind and dimensions.
-    pub metadata: PictureMetadata,
 
     /// A reader that exposes the embedded picture data.
     ///
@@ -1018,13 +1011,11 @@ fn read_picture_block<R: io::Read>(input: &mut R, length: u32) -> Result<Picture
     };
 
     let picture = Picture {
-        metadata: PictureMetadata {
-            kind: kind,
-            mime_type: mime_type,
-            description: description,
-            width: width,
-            height: height,
-        },
+        kind: kind,
+        mime_type: mime_type,
+        description: description,
+        width: width,
+        height: height,
         reader: embedded_reader,
     };
 
