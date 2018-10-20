@@ -9,7 +9,7 @@ Usage:
 
 import numpy as np
 import sys
-from typing import NamedTuple
+from typing import NamedTuple, Tuple
 
 import matplotlib
 matplotlib.use('gtk3cairo')
@@ -39,6 +39,11 @@ class Stats(NamedTuple):
     # Delays on top of the minimal time per sample for a block. Filtered to
     # remove outlier iterations.
     noise: np.array
+
+    # Mean and standard deviation of log(noise), parameter of a log-normal
+    # distribution to fit the noise. Also 1/mean(noise), parameter for an
+    # exponential distribution.
+    noise_params: Tuple[float, float, float]
 
 
 def load(fname) -> Stats:
@@ -90,6 +95,11 @@ def load(fname) -> Stats:
     noise = np.reshape(ok_diffs, -1)
     noise = noise[noise > 0.0]
 
+    log_noise = np.log(noise)
+    noise_mu = np.mean(log_noise)
+    noise_sigma = np.std(log_noise)  # TODO: This 0.7 makes no sense.
+    noise_lambda = 1.0 / np.mean(noise)
+
     return Stats(
         num_blocks = num_blocks,
         num_iters = num_iters,
@@ -97,12 +107,47 @@ def load(fname) -> Stats:
         iter_outlier_threshold = iter_outlier_threshold,
         block_mins = ok_mins,
         noise = noise,
+        noise_params = (noise_mu, noise_sigma, noise_lambda),
     )
 
 
+def plogn(mu: float, sigma: float, x: np.array) -> np.array:
+    """Return log-normal probability density at x."""
+    denom = x * sigma * np.sqrt(np.pi * 2.0)
+    exponent = np.square(np.log(x) - mu) / (2.0 * sigma * sigma)
+    return np.exp(-exponent) / denom
+
+
+def pexp(lam: float, x: np.array) -> np.array:
+    """Return exponential probability density at x."""
+    return lam * np.exp(-lam * x)
+
+
 def plot(stats: Stats) -> None:
-    plt.plot(np.arange(0, stats.num_iters), stats.iter_means)
-    plt.axhline(np.mean(stats.iter_outlier_threshold))
+    plt.rcParams['font.family'] = 'Source Serif Pro'
+    fig, (ax1, ax2) = plt.subplots(2, 1)
+
+    ax1.axhline(np.mean(stats.iter_outlier_threshold), color='red')
+    ax1.plot(
+        np.arange(0, stats.num_iters),
+        stats.iter_means,
+        color='black',
+        linewidth=1,
+    )
+    ax1.set_xlabel('iteration')
+    ax1.set_ylabel('time per sample (ns)')
+
+    noise_max_bin = np.quantile(stats.noise, 0.98)
+    bins = np.arange(0.0, noise_max_bin, noise_max_bin / 200.0);
+    ax2.hist(stats.noise, bins=bins, density=True, color='#bbbbbb')
+    ax2.set_xlabel('delay (ns)')
+
+    mu, sigma, lam = stats.noise_params
+    ax2.plot(bins, plogn(mu, sigma, bins), color='red')
+    ax2.plot(bins, pexp(lam, bins), color='blue')
+    ax2.plot(bins, pexp(lam, bins) * 0.1 + plogn(mu, sigma, bins) * 0.9, color='orange')
+
+
     plt.show()
 
 
