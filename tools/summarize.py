@@ -95,7 +95,14 @@ def load(fname) -> Stats:
     # noise.
     noise = np.reshape(ok_diffs, -1)
     noise = noise[noise > 0.0]
-    #noise = noise[noise < np.quantile(noise, 0.995)]
+
+    # Although we already excluded outliers by excluding iterations with high
+    # averages, in the good iterations there can still be severe outliers for
+    # some blocks. In a quiet measurement this does not happen, and the
+    # distribution is very clean, but when there is a lot of variance, an extra
+    # lobe can appear on the noise distribution. Cut that one off so we can fit
+    # the first lobe.
+    noise = noise[noise < np.quantile(noise, 0.75) * 3.0]
 
     log_noise = np.log(noise)
     noise_mu = np.mean(log_noise)
@@ -148,31 +155,34 @@ def plot(stats: Stats) -> None:
     noise_max_bin = np.quantile(stats.noise, 0.98)
     bins = np.arange(0.0, noise_max_bin, noise_max_bin / 200.0);
     ax2.hist(stats.noise, bins=bins, density=True, color='#bbbbbb')
-    ax2.set_xlabel('delay (ns)')
+    ax2.set_xlabel('noise delay (ns)')
     ax2.set_ylabel('density')
 
     mu, sigma, lam = stats.noise_params
 
+    ax3.plot([0.0, noise_max_bin], [0.0, noise_max_bin], color='black')
+
     qs = np.arange(0.01, 0.98, 0.01)
     hs = np.histogram(stats.noise, bins, density=True)[0]
     vs = np.quantile(stats.noise, qs)
-    lm = lam * 2.0
-    for i in range(0, 350):
-        la = lm * 1.01
-        lb = lm * 0.99
-        vsa = erlang.ppf(qs, 2, scale=1.0 / la)
-        vsb = erlang.ppf(qs, 2, scale=1.0 / lb)
-        da = np.sum(np.square(vsa - vs))
-        db = np.sum(np.square(vsb - vs))
-        de_dl = (da - db) / (la - lb)
-        lm = lm - de_dl * 0.5
+    lams = [lam, lam, lam, lam, lam]
+    for k, color in zip((2, 3), ('red', 'blue')):
+        lm = lam * k
+        for i in range(0, 350):
+            la = lm * 1.01
+            lb = lm * 0.99
+            vsa = erlang.ppf(qs, k, scale=1.0 / la)
+            vsb = erlang.ppf(qs, k, scale=1.0 / lb)
+            da = np.sum(np.square(np.log(vsa) - np.log(vs)))
+            db = np.sum(np.square(np.log(vsb) - np.log(vs)))
+            de_dl = (da - db) / (la - lb)
+            lm = lm - min(lm * 0.5, de_dl * 0.5)
+            lams[k] = lm
+
+        ax2.plot(bins, perl(lm, k, bins), color=color)
+        ax3.plot(vs, erlang.ppf(qs, k, scale=1.0 / lm), color=color, linewidth=1)
 
     #ax2.plot(bins, plogn(mu, sigma, bins), color='#cc3366')
-    #ax2.plot(bins, pexp(lam, bins), color='blue')
-    ax2.plot(bins, perl(lm, 2, bins), color='blue')
-    ax3.plot(vs, erlang.ppf(qs, 2, scale=1.0 / lm), color='blue')
-    #ax2.plot(bins, perl(lam * 3.5, 3, bins), color='red')
-    #ax2.plot(bins, perl(lam * 6.5, 4, bins), color='red')
 
     plt.show()
 
