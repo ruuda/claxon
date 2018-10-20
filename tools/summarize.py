@@ -9,6 +9,7 @@ Usage:
 
 import numpy as np
 import sys
+from scipy.stats import gamma, erlang
 from typing import NamedTuple, Tuple
 
 import matplotlib
@@ -94,6 +95,7 @@ def load(fname) -> Stats:
     # noise.
     noise = np.reshape(ok_diffs, -1)
     noise = noise[noise > 0.0]
+    #noise = noise[noise < np.quantile(noise, 0.995)]
 
     log_noise = np.log(noise)
     noise_mu = np.mean(log_noise)
@@ -107,7 +109,7 @@ def load(fname) -> Stats:
         iter_outlier_threshold = iter_outlier_threshold,
         block_mins = ok_mins,
         noise = noise,
-        noise_params = (noise_mu, noise_sigma, noise_lambda),
+        noise_params = (noise_mu, noise_sigma, noise_lambda)
     )
 
 
@@ -123,9 +125,15 @@ def pexp(lam: float, x: np.array) -> np.array:
     return lam * np.exp(-lam * x)
 
 
+def perl(lam: float, k: int, x: np.array) -> np.array:
+    """Return Erlang probability density at x."""
+    k_minus_1_fact = np.product(range(1, k))
+    return np.power(lam, k) * np.power(x, k - 1) * np.exp(-lam * x) / k_minus_1_fact
+
+
 def plot(stats: Stats) -> None:
     plt.rcParams['font.family'] = 'Source Serif Pro'
-    fig, (ax1, ax2) = plt.subplots(2, 1)
+    fig, (ax1, ax2, ax3) = plt.subplots(3, 1)
 
     ax1.axhline(np.mean(stats.iter_outlier_threshold), color='red')
     ax1.plot(
@@ -141,12 +149,30 @@ def plot(stats: Stats) -> None:
     bins = np.arange(0.0, noise_max_bin, noise_max_bin / 200.0);
     ax2.hist(stats.noise, bins=bins, density=True, color='#bbbbbb')
     ax2.set_xlabel('delay (ns)')
+    ax2.set_ylabel('density')
 
     mu, sigma, lam = stats.noise_params
-    ax2.plot(bins, plogn(mu, sigma, bins), color='red')
-    ax2.plot(bins, pexp(lam, bins), color='blue')
-    ax2.plot(bins, pexp(lam, bins) * 0.1 + plogn(mu, sigma, bins) * 0.9, color='orange')
 
+    qs = np.arange(0.01, 0.98, 0.01)
+    hs = np.histogram(stats.noise, bins, density=True)[0]
+    vs = np.quantile(stats.noise, qs)
+    lm = lam * 2.0
+    for i in range(0, 350):
+        la = lm * 1.01
+        lb = lm * 0.99
+        vsa = erlang.ppf(qs, 2, scale=1.0 / la)
+        vsb = erlang.ppf(qs, 2, scale=1.0 / lb)
+        da = np.sum(np.square(vsa - vs))
+        db = np.sum(np.square(vsb - vs))
+        de_dl = (da - db) / (la - lb)
+        lm = lm - de_dl * 0.5
+
+    #ax2.plot(bins, plogn(mu, sigma, bins), color='#cc3366')
+    #ax2.plot(bins, pexp(lam, bins), color='blue')
+    ax2.plot(bins, perl(lm, 2, bins), color='blue')
+    ax3.plot(vs, erlang.ppf(qs, 2, scale=1.0 / lm), color='blue')
+    #ax2.plot(bins, perl(lam * 3.5, 3, bins), color='red')
+    #ax2.plot(bins, perl(lam * 6.5, 4, bins), color='red')
 
     plt.show()
 
