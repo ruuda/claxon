@@ -162,7 +162,7 @@ def plot(stats: Stats) -> None:
 
     ax3.plot([0.0, noise_max_bin], [0.0, noise_max_bin], color='black')
 
-    qs = np.arange(0.01, 0.98, 0.01)
+    qs = np.arange(0.1, 0.9, 0.01)
     hs = np.histogram(stats.noise, bins, density=True)[0]
     vs = np.quantile(stats.noise, qs)
     lams = [lam, lam, lam, lam, lam]
