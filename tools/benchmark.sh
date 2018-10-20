@@ -36,6 +36,10 @@ export RUSTFLAGS="-C target-cpu=native -C codegen-units=1 -g"
 # Compile the benchmarking program.
 cargo build --release --example bench_decode
 
+# Renice this script. The child processes it spawns will inherit the nicesness.
+echo "Bumping process scheduling priority. This may require root access."
+sudo renice -15 --pid $$
+
 for i in {1..7}; do
   echo "Round $i of 7."
   # Clear previous results in case we're accidentally overwriting the file.
