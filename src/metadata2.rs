@@ -1141,6 +1141,22 @@ impl<R: io::Read> MetadataReader<R> {
         if self.done { (0, Some(0)) } else { (1, None) }
     }
 
+    /// Skip to the streaminfo block and read it.
+    ///
+    /// In a valid FLAC stream, there is exactly one streaminfo block, and it is
+    /// the first metadata block in the stream.
+    pub fn next_streaminfo(&mut self) -> Result<StreamInfo> {
+        if let Some(block) = self.next() {
+            if let MetadataBlock::StreamInfo(streaminfo) = try!(block) {
+                Ok(streaminfo)
+            } else {
+                fmt_err("first metadata block is not a streaminfo block")
+            }
+        } else {
+            fmt_err("missing streaminfo metadata block")
+        }
+    }
+
     /// Skip to the next Vorbis comment block and read it.
     ///
     /// There is at most one Vorbis comment block in a valid FLAC stream.
