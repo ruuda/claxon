@@ -12,7 +12,7 @@ use std::fmt;
 use std::io;
 use std::result;
 
-/// An error that prevents succesful decoding of the FLAC stream.
+/// An error that prevents successful decoding of the FLAC stream.
 #[derive(Debug)]
 pub enum Error {
     /// Not a decoding error, but a problem with the underlying IO.
