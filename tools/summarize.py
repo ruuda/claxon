@@ -83,7 +83,7 @@ def quantile_min(p: float, n: int, xs: np.array) -> float:
 
 
 def load(fname) -> Stats:
-    data = np.genfromtxt(sys.argv[1])
+    data = np.genfromtxt(fname)
 
     # For every decoded block, we have num_samples measurements.
     num_blocks, num_iters = data.shape
@@ -169,10 +169,7 @@ def perl(lam: float, k: int, x: np.array) -> np.array:
     return np.power(lam, k) * np.power(x, k - 1) * np.exp(-lam * x) / k_minus_1_fact
 
 
-def plot(stats: Stats) -> None:
-    plt.rcParams['font.family'] = 'Source Serif Pro'
-    fig, (ax1, ax2, ax3) = plt.subplots(3, 1)
-
+def plot(stats: Stats, ax1, ax2, ax3) -> None:
     iter_median = np.quantile(stats.iter_means, 0.5)
     ax1.axhline(iter_median, color='red')
     ax1.plot(
@@ -202,7 +199,13 @@ def plot(stats: Stats) -> None:
     ax3.set_xlabel('time per sample (ns)')
     ax3.set_ylabel('density')
 
-    plt.show()
+
+def plot_diff(statsa: Stats, statsb: Stats, ax1, ax2, ax3) -> None:
+    diffs = statsb.block_mins - statsa.block_mins
+    ax3.set_xlabel('speedup (ns)')
+    ax3.set_ylabel('density')
+    ax3.hist(diffs, bins=100, density=True, color='#bbbbbb')
+    ax3.axvline(np.mean(diffs), color='red')
 
 
 def report(stats: Stats) -> None:
@@ -223,11 +226,33 @@ def report(stats: Stats) -> None:
     print(f'95% confidence interval: {mid_interval:6.3f} ± {plm_interval:.3f} ns')
 
 
-if len(sys.argv) < 2:
-    print(__doc__)
-    sys.exit(1)
+def main():
+    if len(sys.argv) < 2:
+        print(__doc__)
+        sys.exit(1)
 
-for fname in sys.argv[1:]:
-    stats = load(fname)
-    plot(stats)
-    report(stats)
+    plt.rcParams['font.family'] = 'Source Serif Pro'
+
+    print('Loading data ...')
+    stats = [load(fname) for fname in sys.argv[1:]]
+
+    if len(sys.argv) == 2:
+        fig, (ax1, ax2, ax3) = plt.subplots(3, 1)
+        report(stats[0])
+        plot(stats[0], ax1, ax2, ax3)
+
+    if len(sys.argv) == 3:
+        fig, axes = plt.subplots(3, 3)
+        for i, stat in enumerate(stats):
+            report(stat)
+            plot(stat, *(ax[i] for ax in axes))
+
+        plot_diff(stats[0], stats[1], *(ax[2] for ax in axes))
+
+    # Make plots fit, without overwriting each others axis labels.
+    plt.tight_layout(pad = 1.0, h_pad = 1.5)
+    plt.show()
+
+
+if __name__ == '__main__':
+    main()
