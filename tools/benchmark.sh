@@ -28,6 +28,13 @@ if ! grep -q "nohz_full" /proc/cmdline; then
   echo ""
 fi
 
+# Interupts from peripherals cause jitter. One such source is the network card.
+# Disabling networking makes runs a lot cleaner with lower variance.
+if ip link show up | grep -qvE 'loopback|LOOPBACK'; then
+  echo "NOTE: A network interface is up, disable to reduce interrupt jitter."
+  echo ""
+fi
+
 # Disable automatic CPU frequency scaling to get lower variance measurements.
 # We could use either "performance" or "powersave", they lock the frequency
 # to the maximum and minimum respectively. But the minimum is better for laptops,
