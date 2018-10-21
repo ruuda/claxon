@@ -23,7 +23,7 @@ bname="$1_$(git rev-parse @ | cut -c 1-7)"
 # See also:
 # https://raw.githubusercontent.com/torvalds/linux/master/Documentation/timers/NO_HZ.txt
 if ! grep -q "nohz_full" /proc/cmdline; then
-  echo "Adaptive ticks mode is not enabled."
+  echo "NOTE: Adaptive ticks mode is not enabled."
   echo "You can reduce jitter by rebooting with nohz_full=1 kernel cmdline."
   echo ""
 fi
@@ -44,7 +44,16 @@ fi
 export RUSTFLAGS="-C target-cpu=native -C codegen-units=1 -g"
 
 # Compile the benchmarking program.
-cargo build --release --example bench_decode
+cargo build --quiet --release --example bench_decode
+
+# Ensure binaries are written to disk, to avoid unexpected filesystem activity
+# during the benchmark.
+sync
+
+# Read the test samples to benchmark ahead of time, to ensure the files are in
+# the page cache.
+cat testsamples/extra/*.flac > /dev/null
+cat target/release/examples/bench_decode > /dev/null
 
 # Renice this script. The child processes it spawns will inherit the nicesness.
 echo "Bumping process scheduling priority. This may require root access."
