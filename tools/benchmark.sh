@@ -18,6 +18,16 @@ fi
 # Put the Git commit in the basename so I can cross-reference later.
 bname="$1_$(git rev-parse @ | cut -c 1-7)"
 
+# Urge the user to reboot with nohz_full=1 cmdline, to disable clock interrupts
+# on CPU 1 (the one that we pin the benchmark program to).
+# See also:
+# https://raw.githubusercontent.com/torvalds/linux/master/Documentation/timers/NO_HZ.txt
+if ! grep -q "nohz_full" /proc/cmdline; then
+  echo "Adaptive ticks mode is not enabled."
+  echo "You can reduce jitter by rebooting with nohz_full=1 kernel cmdline."
+  echo ""
+fi
+
 # Disable automatic CPU frequency scaling to get lower variance measurements.
 # We could use either "performance" or "powersave", they lock the frequency
 # to the maximum and minimum respectively. But the minimum is better for laptops,
