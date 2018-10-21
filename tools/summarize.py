@@ -44,6 +44,15 @@ class Stats(NamedTuple):
     noise_min_q95: float
 
 
+class DeltaStats(NamedTuple):
+    """
+    Holds the differences between block_mins of two Stats instances.
+    """
+    deltas: np.array
+    mean: float
+    std: float
+
+
 def quantile(p: float, lower: float, upper: float, cdf: Callable[[float], float]) -> float:
     """
     Performs a binary search to find q_p such that cdf(q_p) = p. A lower and
@@ -188,7 +197,7 @@ def plot(stats: Stats, ax1, ax2, ax3) -> None:
     bins = np.arange(0.0, noise_max_bin, noise_max_bin / 200.0);
     ax2.hist(stats.noise, bins=bins, density=True, color='#bbbbbb')
     ax2.axvline(np.mean(stats.noise), color='red')
-    ax2.set_xlabel('noise delay (ns)')
+    ax2.set_xlabel('measurement noise (ns)')
     ax2.set_ylabel('density')
 
     time_min = np.quantile(stats.block_mins, 0.002)
@@ -200,22 +209,27 @@ def plot(stats: Stats, ax1, ax2, ax3) -> None:
     ax3.set_ylabel('density')
 
 
-def plot_diff(statsa: Stats, statsb: Stats, ax1, ax2, ax3) -> None:
-    diffs = statsb.block_mins - statsa.block_mins
-    ax3.set_xlabel('block tps delta (ns)')
-    ax3.set_ylabel('density')
-    ax3.hist(diffs, bins=100, density=True, color='#bbbbbb')
-    ax3.axvline(np.mean(diffs), color='red')
+def plot_deltas(stats: DeltaStats, message: str, ax1, ax2) -> None:
+    ax1.hist(stats.deltas, bins=100, density=True, color='#bbbbbb')
+    ax1.axvline(stats.mean, color='red')
+    ax1.set_xlabel('block tps delta (ns)')
+    ax1.set_ylabel('density')
 
-    mu = np.mean(diffs)
-    sigma = np.std(diffs)
-    xs = np.linspace(np.min(diffs), np.max(diffs), 200)
-    exponent = np.square(xs - mu) / (2.0 * sigma * sigma)
-    ys = np.exp(-exponent) / np.sqrt(2.0 * np.pi * sigma * sigma)
-    ax3.plot(xs, ys, color='black', linewidth=1, alpha=0.5)
+    # Plot a fitted normal distribution as well.
+    xs = np.linspace(np.min(stats.deltas), np.max(stats.deltas), 200)
+    exponent = np.square(xs - stats.mean) / (2.0 * stats.std * stats.std)
+    ys = np.exp(-exponent) / np.sqrt(2.0 * np.pi * stats.std * stats.std)
+    ax1.plot(xs, ys, color='black', linewidth=1, alpha=0.5)
+
+    ax2.text(0.0, 0.5, message, va='center')
+    ax2.axis('off')
 
 
-def report(stats: Stats) -> None:
+def mean_confidence_interval(stats: Stats) -> Tuple[float, float]:
+    """
+    Return the center and half width of a 95% confidence interval for the mean
+    time per sample.
+    """
     # Report the mean time per sample (average the time per sample over the
     # blocks). What we are interested in for optimization purposes is the total
     # running time, not the median or an other quantile, because you always
@@ -229,8 +243,7 @@ def report(stats: Stats) -> None:
     mid_interval = t_mean - stats.noise_min_q95 * 0.5
     plm_interval = stats.noise_min_q95 * 0.5
 
-    print(f'Mean time per sample:    {t_mean:6.3f} ns')
-    print(f'95% confidence interval: {mid_interval:6.3f} ± {plm_interval:.3f} ns')
+    return mid_interval, plm_interval
 
 
 def main():
@@ -245,16 +258,26 @@ def main():
 
     if len(sys.argv) == 2:
         fig, (ax1, ax2, ax3) = plt.subplots(3, 1)
-        report(stats[0])
+        mid, plm = mean_confidence_interval(stats[0])
+        print(f'Mean time per sample: {mid:6.3f} ± {plm:.3f} ns')
         plot(stats[0], ax1, ax2, ax3)
 
     if len(sys.argv) == 3:
-        fig, axes = plt.subplots(3, 3)
+        fig, axes = plt.subplots(4, 2)
+        msg = ''
         for i, stat in enumerate(stats):
-            report(stat)
-            plot(stat, *(ax[i] for ax in axes))
+            mid, plm = mean_confidence_interval(stat)
+            label = 'Before' if i == 0 else 'After'
+            print(f'{label} ({sys.argv[i + 1]}):')
+            print(f'  Mean time per sample: {mid:6.3f} ± {plm:.3f} ns')
+            plot(stat, *(ax[i] for ax in axes[:3]))
+            msg += f'{label}: {mid:6.3f} ± {plm:.3f} ns\n'
 
-        plot_diff(stats[0], stats[1], *(ax[2] for ax in axes))
+        deltas = stats[1].block_mins - stats[0].block_mins
+        delta_stats = DeltaStats(deltas, np.mean(deltas), np.std(deltas))
+        delta_percent = 100.0 * delta_stats.mean / np.mean(stats[0].block_mins_filtered)
+        msg += f'Delta: {delta_stats.mean:.3f} ns ({delta_percent:.2f}%)'
+        plot_deltas(delta_stats, msg, axes[3][0], axes[3][1])
 
     # Make plots fit, without overwriting each others axis labels.
     plt.tight_layout(pad = 1.0, h_pad = 1.5)
