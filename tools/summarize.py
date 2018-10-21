@@ -10,7 +10,7 @@ Usage:
 import numpy as np
 import sys
 from scipy.stats import gamma, erlang
-from typing import NamedTuple, Tuple
+from typing import Callable, NamedTuple, Tuple
 
 import matplotlib
 matplotlib.use('gtk3cairo')
@@ -41,10 +41,47 @@ class Stats(NamedTuple):
     # remove outlier iterations.
     noise: np.array
 
-    # Mean and standard deviation of log(noise), parameter of a log-normal
-    # distribution to fit the noise. Also 1/mean(noise), parameter for an
-    # exponential distribution.
-    noise_params: Tuple[float, float, float]
+    # Width of a 95% confidence interval starting at 0, for the noise delay that
+    # is still present in the minima that we observed.
+    noise_min_q95: float
+
+
+def quantile(p: float, lower: float, upper: float, cdf: Callable[[float], float]) -> float:
+    """
+    Performs a binary search to find q_p such that cdf(q_p) = p. A lower and
+    upper bound for q_p must be provided as "low" and "high". The cdf must be
+    monotonically increasing (as all CDFs are).
+    """
+    qp_lo, p_lo = lower, 0.0
+    qp_hi, p_hi = upper, 1.0
+
+    for _ in range(0, 60):
+        qp_mid = 0.5 * qp_lo + 0.5 * qp_hi
+        p_mid = cdf(qp_mid)
+
+        if p_mid > p:
+            qp_hi, p_hi = qp_mid, p_mid
+        else:
+            qp_lo, p_lo = qp_mid, p_mid
+
+    return 0.5 * qp_lo + 0.5 * qp_hi
+
+
+def quantile_min(p: float, n: int, xs: np.array) -> float:
+    """
+    Return the p-th quantile of the distribution of min(x1, x2, ..., xn),
+    where the xi are n independent random variables drawn from the empirical
+    distribution given by xs.
+    """
+    # The empirical CDF for the data given by xs.
+    ecdf = lambda x: np.sum(xs < x) / len(xs)
+
+    # Given a cumulative distribution function F, we can construct G that
+    # describes the distribution min(x1, x2, ..., xn) where the xi are drawn
+    # from the distribution described by F, and G(x) = 1 - (1 - F(x))^n.
+    ecdf_min = lambda x: 1.0 - np.power(1.0 - ecdf(x), n)
+
+    return quantile(p, np.min(xs), np.max(xs), ecdf_min)
 
 
 def load(fname) -> Stats:
@@ -85,29 +122,26 @@ def load(fname) -> Stats:
     # form t + x, where t is the true time, and x is noise on top. We estimate t
     # as the minimum over all samples. Then for every iteration that was below
     # the threshold, we get the noise delay x, and by collecting all of the
-    # delays we can quantify the noise and report its properties.
-    # NOTE: Looks lognormal.
+    # delays we can quantify the noise and plot its distribution. On my system
+    # it often looks like an Erlang distribution with k=3, which would mean that
+    # the delay is the sum of 3 exponentially distributed noise sources.
     diffs = np.transpose(data) - mins
-    ok_diffs = diffs[iter_means < iter_outlier_threshold]
 
     # We now have the noise per block, but the particular block is not that
     # interesting, so flatten the matrix. Also exclude zeros, those are not
-    # noise.
-    noise = np.reshape(ok_diffs, -1)
+    # delays, those are the actual minimum times.
+    noise = np.reshape(diffs, -1)
     noise = noise[noise > 0.0]
 
-    # Although we already excluded outliers by excluding iterations with high
-    # averages, in the good iterations there can still be severe outliers for
-    # some blocks. In a quiet measurement this does not happen, and the
-    # distribution is very clean, but when there is a lot of variance, an extra
-    # lobe can appear on the noise distribution. Cut that one off so we can fit
-    # the first lobe.
-    noise = noise[noise < np.quantile(noise, 0.75) * 3.0]
-
-    log_noise = np.log(noise)
-    noise_mu = np.mean(log_noise)
-    noise_sigma = np.std(log_noise)  # TODO: This 0.7 makes no sense.
-    noise_lambda = 1.0 / np.mean(noise)
+    # From the empirical noise distribution, we can get a distribution of
+    # min(x1, x2, ..., xn), where xi are drawn from that distribution. With
+    # this, we can build a 95% confidence interval for the delay in our observed
+    # minima. We could take quantile bounds (0.025, 0.975) as is customary for
+    # symmetric distributions, but that would mean that the maximum likelihood
+    # estimate of the minimum is not in the interval, so we take (0.0, 0.95) as
+    # bounds instead, such that the maximum likelihood estimate of the minimum
+    # is one of the endpoints.
+    noise_min_q95 = quantile_min(0.95, num_iters, noise)
 
     return Stats(
         num_blocks = num_blocks,
@@ -116,7 +150,7 @@ def load(fname) -> Stats:
         iter_outlier_threshold = iter_outlier_threshold,
         block_mins = ok_mins,
         noise = noise,
-        noise_params = (noise_mu, noise_sigma, noise_lambda)
+        noise_min_q95 = noise_min_q95,
     )
 
 
@@ -152,37 +186,14 @@ def plot(stats: Stats) -> None:
     ax1.set_xlabel('iteration')
     ax1.set_ylabel('time per sample (ns)')
 
-    noise_max_bin = np.quantile(stats.noise, 0.98)
+    noise_max_bin = min(
+        np.quantile(stats.noise, 0.98),
+        np.quantile(stats.noise, 0.66) * 4.0,
+    )
     bins = np.arange(0.0, noise_max_bin, noise_max_bin / 200.0);
     ax2.hist(stats.noise, bins=bins, density=True, color='#bbbbbb')
     ax2.set_xlabel('noise delay (ns)')
     ax2.set_ylabel('density')
-
-    mu, sigma, lam = stats.noise_params
-
-    ax3.plot([0.0, noise_max_bin], [0.0, noise_max_bin], color='black')
-
-    qs = np.arange(0.1, 0.9, 0.01)
-    hs = np.histogram(stats.noise, bins, density=True)[0]
-    vs = np.quantile(stats.noise, qs)
-    lams = [lam, lam, lam, lam, lam]
-    for k, color in zip((2, 3), ('red', 'blue')):
-        lm = lam * k
-        for i in range(0, 350):
-            la = lm * 1.01
-            lb = lm * 0.99
-            vsa = erlang.ppf(qs, k, scale=1.0 / la)
-            vsb = erlang.ppf(qs, k, scale=1.0 / lb)
-            da = np.sum(np.square(np.log(vsa) - np.log(vs)))
-            db = np.sum(np.square(np.log(vsb) - np.log(vs)))
-            de_dl = (da - db) / (la - lb)
-            lm = lm - min(lm * 0.5, de_dl * 0.5)
-            lams[k] = lm
-
-        ax2.plot(bins, perl(lm, k, bins), color=color)
-        ax3.plot(vs, erlang.ppf(qs, k, scale=1.0 / lm), color=color, linewidth=1)
-
-    #ax2.plot(bins, plogn(mu, sigma, bins), color='#cc3366')
 
     plt.show()
 
@@ -194,23 +205,12 @@ def report(stats: Stats) -> None:
     # decode all blocks of a file. So we take the mean.
     t_mean = np.mean(stats.block_mins)
 
-    mean_noise = np.mean(stats.noise)
-    print(mean_noise)
-
-    # TODO: These new bounds look far too tight. What's up?
-    conf_bounds = np.array([0.95, 0.95 * 0.5, 0.0])
-    qs = -np.log(1.0 - conf_bounds) / stats.num_blocks
-    noise_offset_bounds = qs * mean_noise
-
     # Recall that we assume times to be of the form t + x where x is noise. We
-    # now have a 95% confidence interval for x, and by taking the mean over all
-    # timings for a block, we get an estimate of t + x. Combined we get a 95%
-    # confidence interval for t. It's a bit of a hack, and there should be a
-    # better statistic to report, but for now this will do.
-    t_bounds = t_mean - noise_offset_bounds
-
-    mid_interval = 0.5 * (t_bounds[0] + t_bounds[2])
-    plm_interval = 0.5 * (t_bounds[2] - t_bounds[0])
+    # have min(t + x1, t + x2, ...), and a 95% confidence interval for the noise
+    # that is still present in that measurement, which means we have a 95%
+    # confidence interval for t.
+    mid_interval = t_mean - stats.noise_min_q95 * 0.5
+    plm_interval = stats.noise_min_q95 * 0.5
 
     print(f'Mean time per sample:    {t_mean:6.3f} ns')
     print(f'95% confidence interval: {mid_interval:6.3f} ± {plm_interval:.3f} ns')
