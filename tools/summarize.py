@@ -9,7 +9,6 @@ Usage:
 
 import numpy as np
 import sys
-from scipy.stats import gamma, erlang
 from typing import Callable, NamedTuple, Tuple
 
 import matplotlib
@@ -28,14 +27,13 @@ class Stats(NamedTuple):
     # one element per iteration.
     iter_means: np.array
 
-    # Time above which the iteration is considered an outlier for noise analysis
-    # purposes.
-    iter_outlier_threshold: float
-
     # Minimum time per sample (in nanoseconds) over all iterations, one element
-    # per block. Excludes outlier blocks that are very fast to decode and
-    # therefore not interesting.
+    # per block.
     block_mins: np.array
+
+    # Same as block_mins, but excludes outlier blocks that are very fast to
+    # decode and therefore not interesting.
+    block_mins_filtered: np.array
 
     # Delays on top of the minimal time per sample for a block. Filtered to
     # remove outlier iterations.
@@ -116,7 +114,6 @@ def load(fname) -> Stats:
     # iterations entirely. They are still used for the minimum time per block,
     # just not for analyzing the noise.
     iter_means = np.mean(data, axis=0)
-    iter_outlier_threshold = np.quantile(iter_means, 0.5)
 
     # For every block, we have a number of measurements, that should be of the
     # form t + x, where t is the true time, and x is noise on top. We estimate t
@@ -147,8 +144,8 @@ def load(fname) -> Stats:
         num_blocks = num_blocks,
         num_iters = num_iters,
         iter_means = iter_means,
-        iter_outlier_threshold = iter_outlier_threshold,
-        block_mins = ok_mins,
+        block_mins = mins,
+        block_mins_filtered = ok_mins,
         noise = noise,
         noise_min_q95 = noise_min_q95,
     )
@@ -176,7 +173,8 @@ def plot(stats: Stats) -> None:
     plt.rcParams['font.family'] = 'Source Serif Pro'
     fig, (ax1, ax2, ax3) = plt.subplots(3, 1)
 
-    ax1.axhline(np.mean(stats.iter_outlier_threshold), color='red')
+    iter_median = np.quantile(stats.iter_means, 0.5)
+    ax1.axhline(iter_median, color='red')
     ax1.plot(
         np.arange(0, stats.num_iters),
         stats.iter_means,
@@ -192,8 +190,17 @@ def plot(stats: Stats) -> None:
     )
     bins = np.arange(0.0, noise_max_bin, noise_max_bin / 200.0);
     ax2.hist(stats.noise, bins=bins, density=True, color='#bbbbbb')
+    ax2.axvline(np.mean(stats.noise), color='red')
     ax2.set_xlabel('noise delay (ns)')
     ax2.set_ylabel('density')
+
+    time_min = np.quantile(stats.block_mins, 0.002)
+    time_max = np.max(stats.block_mins)
+    bins = np.arange(time_min, time_max, (time_max - time_min) / 100.0)
+    ax3.hist(stats.block_mins, bins=bins, density=True, color='#bbbbbb')
+    ax3.axvline(np.mean(stats.block_mins), color='red')
+    ax3.set_xlabel('time per sample (ns)')
+    ax3.set_ylabel('density')
 
     plt.show()
 
@@ -203,7 +210,7 @@ def report(stats: Stats) -> None:
     # blocks). What we are interested in for optimization purposes is the total
     # running time, not the median or an other quantile, because you always
     # decode all blocks of a file. So we take the mean.
-    t_mean = np.mean(stats.block_mins)
+    t_mean = np.mean(stats.block_mins_filtered)
 
     # Recall that we assume times to be of the form t + x where x is noise. We
     # have min(t + x1, t + x2, ...), and a 95% confidence interval for the noise
