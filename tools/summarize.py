@@ -9,12 +9,14 @@ Usage:
 
 import numpy as np
 import sys
-from typing import Callable, NamedTuple, Tuple
 
 import matplotlib
 matplotlib.use('gtk3cairo')
 
 import matplotlib.pyplot as plt
+import scipy.stats
+
+from typing import Callable, NamedTuple, Tuple
 
 class Stats(NamedTuple):
     # Number of blocks for which we measured the time per sample.
@@ -51,6 +53,10 @@ class DeltaStats(NamedTuple):
     deltas: np.array
     mean: float
     std: float
+
+    # P-value under the null hypothesis that "deltas" follows a normal
+    # distribution with zero mean.
+    p_value: float
 
 
 def quantile(p: float, lower: float, upper: float, cdf: Callable[[float], float]) -> float:
@@ -158,6 +164,23 @@ def load(fname) -> Stats:
         noise = noise,
         noise_min_q95 = noise_min_q95,
     )
+
+
+def compare(before: Stats, after: Stats) -> DeltaStats:
+    deltas = after.block_mins - before.block_mins
+    mean = np.mean(deltas)
+    std = np.std(deltas)
+    t_statistic, p_value = scipy.stats.ttest_1samp(deltas, 0.0)
+    print(t_statistic, p_value)
+    s = np.sum(deltas < 0.0)
+    k = len(deltas)
+    pv = scipy.stats.binom_test(s, k, 0.5)
+    print(s, k, pv)
+    with open('x.dat', 'w') as f:
+        for d in deltas:
+            print(f'{d:0.7f}', file=f)
+
+    return DeltaStats(deltas, mean, std, p_value)
 
 
 def plogn(mu: float, sigma: float, x: np.array) -> np.array:
@@ -273,10 +296,11 @@ def main():
             plot(stat, *(ax[i] for ax in axes[:3]))
             msg += f'{label}: {mid:6.3f} ± {plm:.3f} ns\n'
 
-        deltas = stats[1].block_mins - stats[0].block_mins
-        delta_stats = DeltaStats(deltas, np.mean(deltas), np.std(deltas))
+        delta_stats = compare(stats[0], stats[1])
         delta_percent = 100.0 * delta_stats.mean / np.mean(stats[0].block_mins_filtered)
-        msg += f'Delta: {delta_stats.mean:.3f} ns ({delta_percent:.2f}%)'
+        msg += f'Delta: {delta_stats.mean:.3f} ns ({delta_percent:.2f}%)\n'
+        msg += 'Null hypothesis: deltas have zero mean\n'
+        msg += f'p-value: {delta_stats.p_value:0.4f}'
         plot_deltas(delta_stats, msg, axes[3][0], axes[3][1])
 
     # Make plots fit, without overwriting each others axis labels.
