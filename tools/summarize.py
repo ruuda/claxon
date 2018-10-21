@@ -202,10 +202,17 @@ def plot(stats: Stats, ax1, ax2, ax3) -> None:
 
 def plot_diff(statsa: Stats, statsb: Stats, ax1, ax2, ax3) -> None:
     diffs = statsb.block_mins - statsa.block_mins
-    ax3.set_xlabel('speedup (ns)')
+    ax3.set_xlabel('block tps delta (ns)')
     ax3.set_ylabel('density')
     ax3.hist(diffs, bins=100, density=True, color='#bbbbbb')
     ax3.axvline(np.mean(diffs), color='red')
+
+    mu = np.mean(diffs)
+    sigma = np.std(diffs)
+    xs = np.linspace(np.min(diffs), np.max(diffs), 200)
+    exponent = np.square(xs - mu) / (2.0 * sigma * sigma)
+    ys = np.exp(-exponent) / np.sqrt(2.0 * np.pi * sigma * sigma)
+    ax3.plot(xs, ys, color='black', linewidth=1, alpha=0.5)
 
 
 def report(stats: Stats) -> None:
