@@ -15,6 +15,7 @@ matplotlib.use('gtk3cairo')
 
 import matplotlib.pyplot as plt
 import scipy.stats
+from scipy.stats import erlang, gamma
 
 from typing import Callable, NamedTuple, Tuple
 
@@ -217,11 +218,45 @@ def plot(stats: Stats, ax1, ax2, ax3) -> None:
         np.quantile(stats.noise, 0.98),
         np.quantile(stats.noise, 0.66) * 4.0,
     )
-    bins = np.arange(0.0, noise_max_bin, noise_max_bin / 200.0);
+    bins = np.arange(0.0, noise_max_bin, noise_max_bin / 600.0);
     ax2.hist(stats.noise, bins=bins, density=True, color='#bbbbbb')
     ax2.axvline(np.mean(stats.noise), color='red')
     ax2.set_xlabel('measurement noise (ns)')
     ax2.set_ylabel('density')
+
+    qs = np.arange(0.01, 0.8, 0.01)
+    hs = np.histogram(stats.noise, bins, density=True)[0]
+    vs = np.quantile(stats.noise, qs)
+    lam = 1.0 / np.mean(stats.noise)
+    lams = [lam] * 30
+    offs = [0.0] * 30
+    # The sweet spot appears to be k=12 or k=13.
+    for k, color in zip((10, 13, 15), ('red', 'purple', 'blue')):
+        lm = lam * k
+        off = 0.0
+        for i in range(0, 350):
+            la = lm * 1.01
+            lb = lm * 0.99
+            vsa = erlang.ppf(qs, k, scale=1.0 / la)
+            vsb = erlang.ppf(qs, k, scale=1.0 / lb)
+            da = np.sum(np.square(np.log(vsa) - np.log(vs + off)))
+            db = np.sum(np.square(np.log(vsb) - np.log(vs + off)))
+            de_dl = (da - db) / (la - lb)
+            lm = lm - min(lm * 0.5, de_dl * 0.5)
+            lams[k] = lm
+
+        for i in range(0, 100):
+            oa = off + 0.01
+            ob = min(off - 0.01, off * 0.09, 0.0)
+            vsa = erlang.ppf(qs, k, scale=1.0 / lm)
+            vsb = erlang.ppf(qs, k, scale=1.0 / lm)
+            da = np.sum(np.square(np.log(vsa) - np.log(vs + oa)))
+            db = np.sum(np.square(np.log(vsb) - np.log(vs + ob)))
+            de_do = (da - db) / (oa - ob)
+            off = max(0.0, off - de_do * 0.0001)
+            offs[k] = off
+
+        ax2.plot(bins - off, perl(lm, k, bins), color=color)
 
     time_min = np.quantile(stats.block_mins, 0.002)
     time_max = np.max(stats.block_mins)
