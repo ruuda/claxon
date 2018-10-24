@@ -83,6 +83,34 @@ fn estimate_shape(offset: f64, xs: &[f64]) -> f64 {
     (3.0 - s + ((s - 3.0) * (s - 3.0) + 24.0 * s).sqrt()) / (12.0 * s)
 }
 
+fn erlang_ln_likelihood(k: u32, scale: f64, offset: f64, xs: &[f64]) -> f64 {
+    let kfact: u32 = (1..k).product();
+    let kpred = (k - 1) as f64;
+    let ln_const = -(kfact as f64).ln() - scale.ln() * (k as f64);
+    // NOTE: These constants are not relevant for optimization, unless we want
+    // to optimize k and scale. But k we should fix, and for the scale we have
+    // an estimator already. So we should probably remove the constants.
+    ln_const * (xs.len() as f64) +
+        sum(xs.iter().map(|x| (x - offset).ln() * kpred - ((x - offset) / scale)))
+}
+
+fn estimate_offset(k: u32, scale: f64, offset: f64, xs: &[f64]) -> f64 {
+    let mut off = offset;
+    let m = min(xs.iter().cloned());
+    for i in 0..100 {
+        let oa = off * 0.999;
+        let ob = 0.99 * off + 0.01 * m;
+        let llka = erlang_ln_likelihood(k, scale, oa, xs);
+        let llkb = erlang_ln_likelihood(k, scale, ob, xs);
+        let dllk_do = (llkb - llka) / (ob - oa);
+        // println!("{} {} {} {}", i, off, llka, llkb);
+        off += (dllk_do / (xs.len() as f64)) * 0.001;
+        off = off.min(m);
+        off = off.max(0.0);
+    }
+    off
+}
+
 /// For every frame, remove all measurements that are more than 5% slower than
 /// the minimum time observed for that frame. In typical measurements there are
 /// two sources of noise: modest, relatively well-behaved noise, the median of
@@ -163,8 +191,37 @@ fn main() {
         ks.push(k);
         scales.push(scale);
     }
-    let moff = mean(&offs[..]);
-    let mk = mean(&ks[..]);
-    let mscale = mean(&scales[..]);
-    println!("Mean: {:0.3} {:0.3} {:0.3}", mk, mscale, moff);
+
+    let mut mk = mean(&ks[..]);
+    let mut mscale = mean(&scales[..]);
+    let mut moff = mean(&offs[..]);
+
+    for i in 0..50 {
+        println!("i: {}, k: {:0.3}, scale: {:0.4}, off: {:0.3}", i, mk, mscale, moff);
+
+        ks.clear();
+        scales.clear();
+
+        for (i, frame) in frames.iter().enumerate() {
+            // We fix k=12 for now.
+            offs[i] = estimate_offset(12, mscale, offs[i], &frame[..]);
+            let k = estimate_shape(offs[i], &frame[..]);
+            let scale = estimate_scale(k, offs[i], &frame[..]);
+            ks.push(k);
+            scales.push(scale);
+        }
+
+        moff = mean(&offs[..]);
+        mk = mean(&ks[..]);
+        mscale = mean(&scales[..]);
+    }
+    // After a while, the parameters converge. Example (fetted with k=12):
+    // i: 28, k: 12.255, scale: 0.030, off: 13.681
+    // i: 29, k: 12.307, scale: 0.029, off: 13.680
+    // i: 30, k: 12.262, scale: 0.030, off: 13.681
+    // i: 31, k: 12.301, scale: 0.029, off: 13.680
+    // i: 32, k: 12.267, scale: 0.030, off: 13.681
+    // i: 33, k: 12.296, scale: 0.029, off: 13.680
+    // i: 34, k: 12.271, scale: 0.030, off: 13.681
+    println!("Final k: {:0.3}, scale: {:0.4}, off: {:0.3}", mk, mscale, moff);
 }
