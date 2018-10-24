@@ -27,17 +27,47 @@ fn load() -> Vec<Vec<f64>> {
     frames
 }
 
-fn min(xs: &[f64]) -> f64 {
+fn min<I: IntoIterator<Item = f64>>(xs: I) -> f64 {
     // We have to implement this manually because Rust insists on not being able
     // to compare floats in an ergonomic manner, which is good for robustness,
     // and bad for a program like this one.
-    let mut m = xs[0];
-    for &t in xs.iter() {
-        if t < m {
-            m = t;
+    let mut iter = xs.into_iter();
+    let mut m = iter.next().unwrap();
+    for x in iter {
+        if x < m {
+            m = x;
         }
     }
     m
+}
+
+fn sum<I: IntoIterator<Item = f64>>(xs: I) -> f64 {
+    let mut acc = 0.0;
+    let mut res = 0.0;
+    for x in xs {
+        let new = acc + (res + x);
+        res = (res + x) - (new - acc);
+        acc = new;
+    }
+    acc
+}
+
+fn mean(xs: &[f64]) -> f64 {
+    sum(xs.iter().cloned()) / (xs.len() as f64)
+}
+
+fn var(xs: &[f64]) -> f64 {
+    let sx2 = sum(xs.iter().map(|&x| x * x));
+    let sx = sum(xs.iter().cloned());
+    let n = xs.len() as f64;
+    (sx2 / n) - (sx / n) * (sx / n)
+}
+
+fn skewness(xs: &[f64]) -> f64 {
+    let m = mean(xs);
+    let sd = var(xs).sqrt();
+    let s = sum(xs.iter().map(|&x| ((x - m) / sd)).map(|x| x * x * x));
+    s / (xs.len() as f64)
 }
 
 /// For every frame, remove all measurements that are more than 5% slower than
@@ -57,7 +87,7 @@ fn discard_outliers(mut frames: Vec<Vec<f64>>) -> Vec<Vec<f64>> {
         // NOTE: Should not be based on the min, that is not stable when more
         // data comes in.
         num_total += frame.len();
-        let min = min(&frame[..]);
+        let min = min(frame.iter().cloned());
         let threshold = min * 1.05;
         frame.retain(|&t| t < threshold);
         num_remain += frame.len();
@@ -103,4 +133,7 @@ fn main() {
     println!("Loaded {} frames, {} iterations.", frames.len(), frames[0].len());
 
     frames = discard_outliers(frames);
+    let skews: Vec<f64> = frames.iter().map(|f| skewness(&f[..])).collect();
+    let sk = mean(&skews[..]);
+    println!("{:0.3} -> {:0.3}", sk, 4.0 / (sk * sk));
 }
