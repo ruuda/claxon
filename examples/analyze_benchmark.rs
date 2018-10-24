@@ -97,14 +97,17 @@ fn erlang_ln_likelihood(k: u32, scale: f64, offset: f64, xs: &[f64]) -> f64 {
 fn estimate_offset(k: u32, scale: f64, offset: f64, xs: &[f64]) -> f64 {
     let mut off = offset;
     let m = min(xs.iter().cloned());
-    for i in 0..10 {
+    // TODO: Check for convergence.
+    for i in 0..25 {
+        // TODO: Compute analytic derivative.
         let oa = off * 0.999;
         let ob = 0.99 * off + 0.01 * m;
         let llka = erlang_ln_likelihood(k, scale, oa, xs);
         let llkb = erlang_ln_likelihood(k, scale, ob, xs);
         let dllk_do = (llkb - llka) / (ob - oa);
         //println!("{} {} {} {}", i, off, llka, llkb);
-        off += (dllk_do / (xs.len() as f64)) * 0.0005;
+        // TODO: Use Adam optimizer.
+        off += (dllk_do / (xs.len() as f64)) * 0.001;
         off = off.min(m);
         off = off.max(0.0);
     }
@@ -184,7 +187,7 @@ fn main() {
         // offset we take here. We can't use 0.0, the shape estimation would go
         // wrong (although we should fix the shape parameter nonetheless). So we
         // need a really good estimate for the offset to make this work.
-        let off = min(frame.iter().cloned()) * 0.99;
+        let off = min(frame.iter().cloned()) - 0.001;
         let k = estimate_shape(off, &frame[..]);
         let scale = estimate_scale(12.0, off, &frame[..]);
         offs.push(off);
