@@ -205,11 +205,17 @@ fn main() {
         for (i, frame) in frames.iter().enumerate() {
             // We fix k=12 for now.
             offs[i] = estimate_offset(12, mscale, offs[i], &frame[..]);
+            let scale = estimate_scale(12.0, offs[i], &frame[..]);
             let k = estimate_shape(offs[i], &frame[..]);
-            let scale = estimate_scale(k, offs[i], &frame[..]);
             ks.push(k);
             scales.push(scale);
+            if i % 16 == 0 {
+                print!("\rFitting frame {} of {}", i, frames.len());
+                io::stdout().flush().unwrap();
+            }
         }
+
+        print!("\r\x1b[0K"); // Clear the progress update line again.
 
         moff = mean(&offs[..]);
         mk = mean(&ks[..]);
