@@ -78,7 +78,7 @@ fn estimate_scale(k: f64, offset: f64, xs: &[f64]) -> f64 {
 /// Estimate the shape parameter of the Gamma distribution.
 fn estimate_shape(offset: f64, xs: &[f64]) -> f64 {
     let ln_mean = (mean(xs) - offset).ln();
-    let mean_ln = sum(xs.iter().map(|&x| (x - offset).ln())) / (xs.len() as f64);
+    let mean_ln = sum(xs.iter().map(|&x| (x - offset).max(1e-15).ln())) / (xs.len() as f64);
     let s = ln_mean - mean_ln;
     (3.0 - s + ((s - 3.0) * (s - 3.0) + 24.0 * s).sqrt()) / (12.0 * s)
 }
@@ -91,20 +91,20 @@ fn erlang_ln_likelihood(k: u32, scale: f64, offset: f64, xs: &[f64]) -> f64 {
     // to optimize k and scale. But k we should fix, and for the scale we have
     // an estimator already. So we should probably remove the constants.
     ln_const * (xs.len() as f64) +
-        sum(xs.iter().map(|x| (x - offset).ln() * kpred - ((x - offset) / scale)))
+        sum(xs.iter().map(|x| (x - offset).max(1e-15).ln() * kpred - ((x - offset) / scale)))
 }
 
 fn estimate_offset(k: u32, scale: f64, offset: f64, xs: &[f64]) -> f64 {
     let mut off = offset;
     let m = min(xs.iter().cloned());
-    for i in 0..100 {
+    for i in 0..10 {
         let oa = off * 0.999;
         let ob = 0.99 * off + 0.01 * m;
         let llka = erlang_ln_likelihood(k, scale, oa, xs);
         let llkb = erlang_ln_likelihood(k, scale, ob, xs);
         let dllk_do = (llkb - llka) / (ob - oa);
-        // println!("{} {} {} {}", i, off, llka, llkb);
-        off += (dllk_do / (xs.len() as f64)) * 0.001;
+        //println!("{} {} {} {}", i, off, llka, llkb);
+        off += (dllk_do / (xs.len() as f64)) * 0.0005;
         off = off.min(m);
         off = off.max(0.0);
     }
@@ -186,7 +186,7 @@ fn main() {
         // need a really good estimate for the offset to make this work.
         let off = min(frame.iter().cloned()) * 0.99;
         let k = estimate_shape(off, &frame[..]);
-        let scale = estimate_scale(k, off, &frame[..]);
+        let scale = estimate_scale(12.0, off, &frame[..]);
         offs.push(off);
         ks.push(k);
         scales.push(scale);
