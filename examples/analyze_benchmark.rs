@@ -70,6 +70,19 @@ fn skewness(xs: &[f64]) -> f64 {
     s / (xs.len() as f64)
 }
 
+/// Estimate the scale parameter of the Gamma distribution.
+fn estimate_scale(k: f64, offset: f64, xs: &[f64]) -> f64 {
+    (mean(xs) - offset) / k
+}
+
+/// Estimate the shape parameter of the Gamma distribution.
+fn estimate_shape(offset: f64, xs: &[f64]) -> f64 {
+    let ln_mean = (mean(xs) - offset).ln();
+    let mean_ln = sum(xs.iter().map(|&x| (x - offset).ln())) / (xs.len() as f64);
+    let s = ln_mean - mean_ln;
+    (3.0 - s + ((s - 3.0) * (s - 3.0) + 24.0 * s).sqrt()) / (12.0 * s)
+}
+
 /// For every frame, remove all measurements that are more than 5% slower than
 /// the minimum time observed for that frame. In typical measurements there are
 /// two sources of noise: modest, relatively well-behaved noise, the median of
@@ -133,7 +146,25 @@ fn main() {
     println!("Loaded {} frames, {} iterations.", frames.len(), frames[0].len());
 
     frames = discard_outliers(frames);
-    let skews: Vec<f64> = frames.iter().map(|f| skewness(&f[..])).collect();
-    let sk = mean(&skews[..]);
-    println!("{:0.3} -> {:0.3}", sk, 4.0 / (sk * sk));
+
+    let mut offs: Vec<f64> = Vec::new();
+    let mut ks: Vec<f64> = Vec::new();
+    let mut scales: Vec<f64> = Vec::new();
+
+    for frame in frames.iter() {
+        // NOTE: The outcome of the estimate depends very much on the initial
+        // offset we take here. We can't use 0.0, the shape estimation would go
+        // wrong (although we should fix the shape parameter nonetheless). So we
+        // need a really good estimate for the offset to make this work.
+        let off = min(frame.iter().cloned()) * 0.99;
+        let k = estimate_shape(off, &frame[..]);
+        let scale = estimate_scale(k, off, &frame[..]);
+        offs.push(off);
+        ks.push(k);
+        scales.push(scale);
+    }
+    let moff = mean(&offs[..]);
+    let mk = mean(&ks[..]);
+    let mscale = mean(&scales[..]);
+    println!("Mean: {:0.3} {:0.3} {:0.3}", mk, mscale, moff);
 }
