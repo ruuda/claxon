@@ -94,24 +94,77 @@ fn erlang_ln_likelihood(k: u32, scale: f64, offset: f64, xs: &[f64]) -> f64 {
         sum(xs.iter().map(|x| (x - offset).max(1e-15).ln() * kpred - ((x - offset) / scale)))
 }
 
+/// Compute the derivative of the log-likelihood of the data xs, under an offset
+/// Erlang distribution, with respect to the offset, at the given offset.
+///
+/// Likelihood is normalized to the number of observations.
+fn derl_llk_doffset(k: u32, scale: f64, offset: f64, xs: &[f64]) -> f64 {
+    // The Erlang PDF is (1/scale)^k y^(k-1) exp(-y/scale) / (k - 1)!.
+    // We can factor out constants that don't depend on y (where y = x - offset,
+    // and x is what we observed) then we have y^(k-1) exp(-y/scale). The log of
+    // this is ln(y)*(k-1) - y/scale. Taking the derivative with respect to
+    // offset, we get: 1/scale - (k - 1) / (x - offset).
+
+    let numer = (k as f64) - 1.0;
+    (1.0 / scale) - sum(xs.iter().map(|x| numer / (x - offset).max(1e-15))) / (xs.len() as f64)
+}
+
+/// See https://arxiv.org/pdf/1412.6980.pdf.
+struct Adam {
+    theta: f64,
+    m: f64,
+    v: f64,
+}
+
+impl Adam {
+    fn new(initial: f64) -> Adam {
+        Adam { theta: initial, m: 0.0, v: 0.0 }
+    }
+
+    fn get(&self) -> f64 {
+        self.theta
+    }
+
+    fn observe(&mut self, grad: f64, t: i32) {
+        assert!(t > 0);
+        let alpha = 0.0001;
+        let beta1 = 0.9;
+        let beta2 = 0.909;
+        let epsilon = 1e-8;
+        self.m = beta1 * self.m + (1.0 - beta1) * grad;
+        self.v = beta2 * self.v + (1.0 - beta2) * (grad * grad);
+        let m_t = self.m / (1.0 - beta1.powi(t));
+        let v_t = self.v / (1.0 - beta2.powi(t));
+        self.theta = self.theta + alpha * m_t / (v_t.sqrt() + epsilon);
+    }
+}
+
 fn estimate_offset(k: u32, scale: f64, offset: f64, xs: &[f64]) -> f64 {
-    let mut off = offset;
+    let mut off = Adam::new(offset);
     let m = min(xs.iter().cloned());
     // TODO: Check for convergence.
-    for i in 0..25 {
-        // TODO: Compute analytic derivative.
-        let oa = off * 0.999;
-        let ob = 0.99 * off + 0.01 * m;
-        let llka = erlang_ln_likelihood(k, scale, oa, xs);
-        let llkb = erlang_ln_likelihood(k, scale, ob, xs);
-        let dllk_do = (llkb - llka) / (ob - oa);
-        //println!("{} {} {} {}", i, off, llka, llkb);
-        // TODO: Use Adam optimizer.
-        off += (dllk_do / (xs.len() as f64)) * 0.001;
-        off = off.min(m);
-        off = off.max(0.0);
+    for t in 1.. {
+        let grad = derl_llk_doffset(k, scale, off.get(), xs);
+        off.observe(grad, t);
+        // println!("{} {} {}", t, off.get(), grad);
+
+        // Clamp the offset to valid values. It can never be larger than the
+        // observed minimum, because that would make the observation impossible.
+        // Subtract an epsilon to avoid a difference of 0.0, for numerical
+        // stability. The offset *could* be zero (but not negative), but that is
+        // also highly unrealistic: the MLE offset is slightly below the
+        // observed minimum (and closer if we have more data), so limiting the
+        // range to (minimum/2, minimum) is safe.
+        off.theta = off.get().min(m - 1e-15);
+        off.theta = off.get().max(m * 0.5);
+
+        if grad.abs() < 0.001 {
+            break
+        }
+        assert!(t < 2000);
     }
-    off
+
+    off.get()
 }
 
 /// For every frame, remove all measurements that are more than 5% slower than
@@ -209,7 +262,10 @@ fn main() {
             // We fix k=12 for now.
             offs[i] = estimate_offset(12, mscale, offs[i], &frame[..]);
             let scale = estimate_scale(12.0, offs[i], &frame[..]);
-            let k = estimate_shape(offs[i], &frame[..]);
+            let k = match estimate_shape(offs[i], &frame[..]) {
+                x if x > 100.0 => 12.0,
+                x => x,
+            };
             ks.push(k);
             scales.push(scale);
             if i % 16 == 0 {
@@ -233,4 +289,9 @@ fn main() {
     // i: 33, k: 12.296, scale: 0.029, off: 13.680
     // i: 34, k: 12.271, scale: 0.030, off: 13.681
     println!("Final k: {:0.3}, scale: {:0.4}, off: {:0.3}", mk, mscale, moff);
+
+    let mut f = io::BufWriter::new(fs::File::create("diffs.dat").unwrap());
+    for i in 0..frames.len() {
+        write!(f, "{:0.5}\t{:2.7}\n", ks[i], offs[i]).unwrap();
+    }
 }
