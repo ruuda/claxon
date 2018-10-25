@@ -72,7 +72,9 @@ fn skewness(xs: &[f64]) -> f64 {
 
 /// Estimate the scale parameter of the Gamma distribution.
 fn estimate_scale(k: f64, offset: f64, xs: &[f64]) -> f64 {
-    (mean(xs) - offset) / k
+    //(mean(xs) - offset) / k
+    let mean_log = sum(xs.iter().map(|&x| (x - offset).max(1e-15).ln())) / (xs.len() as f64);
+    mean_log.exp() / k
 }
 
 /// Estimate the shape parameter of the Gamma distribution.
@@ -158,10 +160,14 @@ fn estimate_offset(k: u32, scale: f64, offset: f64, xs: &[f64]) -> f64 {
         off.theta = off.get().min(m - 1e-15);
         off.theta = off.get().max(m * 0.5);
 
-        if grad.abs() < 0.001 {
+        // Stop when converged, or when we exceed a maximum number of
+        // iterations. Usually it is not that bad if we haven't fully converged,
+        // because then we'll update the estimate for the scale parameter, and
+        // next round we start optimization from a much better guess already, so
+        // it has a better chance to converge.
+        if grad.abs() < 0.001 || t >= 1000 {
             break
         }
-        assert!(t < 2000);
     }
 
     off.get()
@@ -222,6 +228,20 @@ fn discard_outliers(mut frames: Vec<Vec<f64>>) -> Vec<Vec<f64>> {
 
     println!("Time per sample: {:0.3} ns.", mean_time_per_sample);
 
+    num_remain = 0;
+    for frame in frames_left.iter_mut() {
+        let min = min(frame.iter().cloned());
+        // TODO: This 0.25 is for my machine; express it in a data-dependent
+        // quantity to make this generic.
+        let threshold = min + 0.25;
+        frame.retain(|&t| t < threshold);
+        num_remain += frame.len();
+    }
+    println!(
+        "{:0.2}% of data left after removing fat tail.",
+        100.0 * (num_remain as f64) / (num_total as f64)
+    );
+
     frames_left
 }
 
@@ -240,7 +260,7 @@ fn main() {
         // offset we take here. We can't use 0.0, the shape estimation would go
         // wrong (although we should fix the shape parameter nonetheless). So we
         // need a really good estimate for the offset to make this work.
-        let off = min(frame.iter().cloned()) - 0.001;
+        let off = min(frame.iter().cloned()) - 0.02;
         let k = estimate_shape(off, &frame[..]);
         let scale = estimate_scale(12.0, off, &frame[..]);
         offs.push(off);
@@ -253,7 +273,7 @@ fn main() {
     let mut moff = mean(&offs[..]);
 
     for i in 0..50 {
-        println!("i: {}, k: {:0.3}, scale: {:0.4}, off: {:0.3}", i, mk, mscale, moff);
+        println!("i: {}, k: {:0.3}, scale: {:0.5}, off: {:0.5}", i, mk, mscale, moff);
 
         ks.clear();
         scales.clear();
@@ -263,12 +283,12 @@ fn main() {
             offs[i] = estimate_offset(12, mscale, offs[i], &frame[..]);
             let scale = estimate_scale(12.0, offs[i], &frame[..]);
             let k = match estimate_shape(offs[i], &frame[..]) {
-                x if x > 100.0 => 12.0,
+                x if x > 100.0 => 7.0,
                 x => x,
             };
             ks.push(k);
             scales.push(scale);
-            if i % 16 == 0 {
+            if i % 32 == 0 {
                 print!("\rFitting frame {} of {}", i, frames.len());
                 io::stdout().flush().unwrap();
             }
@@ -288,10 +308,14 @@ fn main() {
     // i: 32, k: 12.267, scale: 0.030, off: 13.681
     // i: 33, k: 12.296, scale: 0.029, off: 13.680
     // i: 34, k: 12.271, scale: 0.030, off: 13.681
-    println!("Final k: {:0.3}, scale: {:0.4}, off: {:0.3}", mk, mscale, moff);
+    println!("Final k: {:0.3}, scale: {:0.5}, off: {:0.5}", mk, mscale, moff);
+    println!("Lambda: {:0.6}", 1.0 / mscale);
 
     let mut f = io::BufWriter::new(fs::File::create("diffs.dat").unwrap());
-    for i in 0..frames.len() {
-        write!(f, "{:0.5}\t{:2.7}\n", ks[i], offs[i]).unwrap();
+    for (i, frame) in frames.iter().enumerate() {
+        let off = offs[i];
+        for t in frame.iter() {
+            write!(f, "{:0.5}\n", t - off).unwrap();
+        }
     }
 }
