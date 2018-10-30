@@ -127,7 +127,7 @@ impl Adam {
         self.theta
     }
 
-    fn observe(&mut self, grad: f64, t: i32) {
+    fn observe(&mut self, grad: f64, t: u32) {
         assert!(t > 0);
         let alpha = 0.0001;
         let beta1 = 0.9;
@@ -135,13 +135,13 @@ impl Adam {
         let epsilon = 1e-8;
         self.m = beta1 * self.m + (1.0 - beta1) * grad;
         self.v = beta2 * self.v + (1.0 - beta2) * (grad * grad);
-        let m_t = self.m / (1.0 - beta1.powi(t));
-        let v_t = self.v / (1.0 - beta2.powi(t));
+        let m_t = self.m / (1.0 - beta1.powi(t as i32));
+        let v_t = self.v / (1.0 - beta2.powi(t as i32));
         self.theta = self.theta + alpha * m_t / (v_t.sqrt() + epsilon);
     }
 }
 
-fn estimate_offset(k: u32, scale: f64, offset: f64, xs: &[f64]) -> f64 {
+fn estimate_offset(k: u32, scale: f64, offset: f64, xs: &[f64], max_iters: u32) -> f64 {
     let mut off = Adam::new(offset);
     let m = min(xs.iter().cloned());
     // TODO: Check for convergence.
@@ -165,7 +165,7 @@ fn estimate_offset(k: u32, scale: f64, offset: f64, xs: &[f64]) -> f64 {
         // because then we'll update the estimate for the scale parameter, and
         // next round we start optimization from a much better guess already, so
         // it has a better chance to converge.
-        if grad.abs() < 0.001 || t >= 1000 {
+        if grad.abs() < 0.001 || t >= max_iters {
             break
         }
     }
@@ -272,15 +272,26 @@ fn main() {
     let mut mscale = mean(&scales[..]);
     let mut moff = mean(&offs[..]);
 
-    for i in 0..50 {
-        println!("i: {}, k: {:0.3}, scale: {:0.5}, off: {:0.5}", i, mk, mscale, moff);
+    for t in 0..50 {
+        println!("i: {}, k: {:0.3}, scale: {:0.5}, off: {:0.5}", t, mk, mscale, moff);
 
         ks.clear();
         scales.clear();
 
+        // Use a less accurate fitting procedure for estimating the offset
+        // during the first few iterations. The accuracy would be wasted,
+        // because we don't have a good estimate of the scale parameter yet.
+        // Only later do we run the fitting until convergence.
+        let max_iters = match t {
+            0 => 10,
+            _ if t < 10 => 30,
+            _ if t < 25 => 100,
+            _ => 500,
+        };
+
         for (i, frame) in frames.iter().enumerate() {
             // We fix k=12 for now.
-            offs[i] = estimate_offset(12, mscale, offs[i], &frame[..]);
+            offs[i] = estimate_offset(12, mscale, offs[i], &frame[..], max_iters);
             let scale = estimate_scale(12.0, offs[i], &frame[..]);
             let k = match estimate_shape(offs[i], &frame[..]) {
                 x if x > 100.0 => 7.0,
