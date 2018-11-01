@@ -2,6 +2,7 @@ use std::env;
 use std::fs;
 use std::io::{BufRead, Write};
 use std::io;
+use std::iter;
 use std::str::FromStr;
 
 fn load() -> Vec<Vec<f64>> {
@@ -231,9 +232,9 @@ fn discard_outliers(mut frames: Vec<Vec<f64>>) -> Vec<Vec<f64>> {
     num_remain = 0;
     for frame in frames_left.iter_mut() {
         let min = min(frame.iter().cloned());
-        // TODO: This 0.25 is for my machine; express it in a data-dependent
+        // TODO: This 1.0 is for my machine; express it in a data-dependent
         // quantity to make this generic.
-        let threshold = min + 0.25;
+        let threshold = min + 1.0;
         frame.retain(|&t| t < threshold);
         num_remain += frame.len();
     }
@@ -250,6 +251,27 @@ fn main() {
     println!("Loaded {} frames, {} iterations.", frames.len(), frames[0].len());
 
     frames = discard_outliers(frames);
+
+    let mut buckets: Vec<u32> = iter::repeat(0).take(1000).collect();
+    for (i, frame) in frames.iter().enumerate() {
+        let m = min(frame.iter().cloned());
+        for &t in frame.iter() {
+            if t == m { continue }
+            let bucket = ((t - m) * 1000.0).trunc() as usize;
+            if bucket < buckets.len() {
+                buckets[bucket] += 1;
+            }
+        }
+        print!("\rBucketed {} of {}", i, frames.len());
+    }
+
+    let mut f = io::BufWriter::new(fs::File::create("hist.dat").unwrap());
+    for (i, k) in buckets.iter().enumerate() {
+        write!(f, "0.{:03}\t{}\n", i, k).unwrap();
+    }
+    drop(f);
+
+    std::process::exit(0);
 
     let mut offs: Vec<f64> = Vec::new();
     let mut ks: Vec<f64> = Vec::new();
@@ -322,6 +344,7 @@ fn main() {
     println!("Final k: {:0.3}, scale: {:0.5}, off: {:0.5}", mk, mscale, moff);
     println!("Lambda: {:0.6}", 1.0 / mscale);
 
+    /*
     let mut f = io::BufWriter::new(fs::File::create("diffs.dat").unwrap());
     for (i, frame) in frames.iter().enumerate() {
         let off = offs[i];
@@ -329,4 +352,5 @@ fn main() {
             write!(f, "{:0.5}\n", t - off).unwrap();
         }
     }
+    */
 }
