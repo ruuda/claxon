@@ -515,10 +515,12 @@ fn decode_fixed<R: ReadBytes>(input: &mut Bitstream<R>,
     Ok(())
 }
 
-fn predict_lpc(raw_coefficients: &[i16],
-               qlp_shift: i16,
-               buffer: &mut [i32])
-               -> Result<()> {
+/// Apply LPC prediction for subframes with LPC order of at most 12.
+fn predict_lpc_low_order(
+    raw_coefficients: &[i16],
+    qlp_shift: i16,
+    buffer: &mut [i32],
+) -> Result<()> {
     debug_assert!(qlp_shift >= 0, "Right-shift by negative value is not allowed.");
     debug_assert!(qlp_shift < 64, "Cannot shift by more than integer width.");
     // The decoded residuals are 25 bits at most (assuming subset FLAC of at
@@ -576,6 +578,39 @@ fn predict_lpc(raw_coefficients: &[i16],
         let prediction = coefficients.iter()
                                      .zip(&buffer[i - 12..i])
                                      .map(|(&c, &s)| c * s as i64)
+                                     .sum::<i64>() >> qlp_shift;
+        let delta = buffer[i] as i64;
+        buffer[i] = (prediction + delta) as i32;
+    }
+
+    Ok(())
+}
+
+/// Apply LPC prediction for non-subset subframes, with LPC order > 12.
+fn predict_lpc_high_order(
+    coefficients: &[i16],
+    qlp_shift: i16,
+    buffer: &mut [i32],
+) -> Result<()> {
+    // NOTE: See `predict_lpc_low_order` for more details. This function is a
+    // copy that lifts the order restrictions (and specializations) at the cost
+    // of performance. It is only used for subframes with a high LPC order,
+    // which only occur in non-subset files. Such files are rare in the wild.
+
+    let order = coefficients.len();
+
+    debug_assert!(qlp_shift >= 0, "Right-shift by negative value is not allowed.");
+    debug_assert!(qlp_shift < 64, "Cannot shift by more than integer width.");
+    debug_assert!(order > 12, "Use the faster predict_lpc_low_order for LPC order <= 12.");
+    debug_assert!(buffer.len() >= order, "Buffer must fit at least `order` warm-up samples.");
+
+    // The linear prediction is essentially an inner product of the known
+    // samples with the coefficients, followed by a shift. The first `order`
+    // samples are stored as-is.
+    for i in order..buffer.len() {
+        let prediction = coefficients.iter()
+                                     .zip(&buffer[i - order..i])
+                                     .map(|(&c, &s)| c as i64 * s as i64)
                                      .sum::<i64>() >> qlp_shift;
         let delta = buffer[i] as i64;
         buffer[i] = (prediction + delta) as i32;
@@ -661,7 +696,15 @@ fn decode_lpc<R: ReadBytes>(input: &mut Bitstream<R>,
                          buffer.len() as u16,
                          &mut buffer[order as usize..]));
 
-    try!(predict_lpc(&coefficients[..order as usize], qlp_shift, buffer));
+    // In "subset"-compliant files, the LPC order is at most 12. For LPC
+    // prediction of such files we have a special fast path that takes advantage
+    // of the low order. We can still decode non-subset file using a less
+    // specialized implementation. Non-subset files are rare in the wild.
+    if order <= 12 {
+        try!(predict_lpc_low_order(&coefficients[..order as usize], qlp_shift, buffer));
+    } else {
+        try!(predict_lpc_high_order(&coefficients[..order as usize], qlp_shift, buffer));
+    }
 
     Ok(())
 }
