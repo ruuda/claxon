@@ -516,11 +516,16 @@ fn decode_fixed<R: ReadBytes>(input: &mut Bitstream<R>,
 }
 
 /// Apply LPC prediction for subframes with LPC order of at most 12.
+///
+/// This function takes advantage of the upper bound on the order. Virtually all
+/// files that occur in the wild are subset-compliant files, which have an order
+/// of at most 12, so it makes sense to optimize for this. A simpler (but
+/// slower) fallback is implemented in `predict_lpc_high_order`.
 fn predict_lpc_low_order(
     raw_coefficients: &[i16],
     qlp_shift: i16,
     buffer: &mut [i32],
-) -> Result<()> {
+) {
     debug_assert!(qlp_shift >= 0, "Right-shift by negative value is not allowed.");
     debug_assert!(qlp_shift < 64, "Cannot shift by more than integer width.");
     // The decoded residuals are 25 bits at most (assuming subset FLAC of at
@@ -529,15 +534,6 @@ fn predict_lpc_low_order(
     // practice the predictor order does not exceed 12, so adding 12 numbers of
     // 41 bits each requires at most 53 bits. Therefore, do all intermediate
     // computations as i64.
-
-    // The spec allocates 5 bits for (order - 1), so the order could be as much
-    // as 32. However, I have never observed an order larger than 12, in
-    // practice, and this function is optimized under that assumption. If there
-    // ever is a need for higher orders, it a fallback predictor could be added
-    // easily.
-    if raw_coefficients.len() > 12 {
-        return Err(Error::Unsupported("LPC order > 12 is not supported"));
-    }
 
     // In the code below, a predictor order of 12 is assumed. This aids
     // optimization and vectorization by making some counts available at compile
@@ -569,7 +565,9 @@ fn predict_lpc_low_order(
         buffer[order + i] = (prediction + delta) as i32;
     }
 
-    if buffer.len() <= 12 { return Ok(()) }
+    if buffer.len() <= 12 {
+        return
+    }
 
     // At this point, buffer[0..12] has been predicted. For the rest of the
     // buffer we can do inner products of 12 samples. This reduces the amount of
@@ -582,8 +580,6 @@ fn predict_lpc_low_order(
         let delta = buffer[i] as i64;
         buffer[i] = (prediction + delta) as i32;
     }
-
-    Ok(())
 }
 
 /// Apply LPC prediction for non-subset subframes, with LPC order > 12.
@@ -591,7 +587,7 @@ fn predict_lpc_high_order(
     coefficients: &[i16],
     qlp_shift: i16,
     buffer: &mut [i32],
-) -> Result<()> {
+) {
     // NOTE: See `predict_lpc_low_order` for more details. This function is a
     // copy that lifts the order restrictions (and specializations) at the cost
     // of performance. It is only used for subframes with a high LPC order,
@@ -615,8 +611,6 @@ fn predict_lpc_high_order(
         let delta = buffer[i] as i64;
         buffer[i] = (prediction + delta) as i32;
     }
-
-    Ok(())
 }
 
 #[test]
@@ -701,9 +695,9 @@ fn decode_lpc<R: ReadBytes>(input: &mut Bitstream<R>,
     // of the low order. We can still decode non-subset file using a less
     // specialized implementation. Non-subset files are rare in the wild.
     if order <= 12 {
-        try!(predict_lpc_low_order(&coefficients[..order as usize], qlp_shift, buffer));
+        predict_lpc_low_order(&coefficients[..order as usize], qlp_shift, buffer);
     } else {
-        try!(predict_lpc_high_order(&coefficients[..order as usize], qlp_shift, buffer));
+        predict_lpc_high_order(&coefficients[..order as usize], qlp_shift, buffer);
     }
 
     Ok(())
