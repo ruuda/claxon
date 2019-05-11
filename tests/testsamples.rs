@@ -256,6 +256,11 @@ fn verify_streaminfo_wasted_bits() {
 }
 
 #[test]
+fn verify_streaminfo_non_subset() {
+    compare_metaflac_streaminfo("testsamples/non_subset.flac");
+}
+
+#[test]
 fn verify_vorbis_comment_p0() {
     compare_metaflac_vorbis_comment("testsamples/p0.flac");
 }
@@ -363,6 +368,14 @@ fn verify_decoded_stream_short() {
 fn verify_decoded_stream_wasted_bits() {
     // This sample has subframes where the number of wasted bits is not 0.
     compare_decoded_stream("testsamples/wasted_bits.flac");
+}
+
+#[test]
+fn verify_decoded_stream_non_subset() {
+    // This sample does not conform to "subset" flac. It has a subframe with LPC
+    // order > 12. The file is a single frame extracted from a larger real-world
+    // sample.
+    compare_decoded_stream("testsamples/non_subset.flac");
 }
 
 #[test]
