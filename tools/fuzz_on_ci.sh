@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Fail on the first error, and print every command as it is executed.
+# Fail on the first error.
 set -e
 
 if [[ "${TRAVIS_RUST_VERSION}" != "nightly" ]]; then
@@ -8,7 +8,7 @@ if [[ "${TRAVIS_RUST_VERSION}" != "nightly" ]]; then
   exit 0
 fi
 
-cargo install cargo-fuzz --vers 0.4.2 || true
+cargo install cargo-fuzz --vers 0.5.2 || true
 
 # Pre-populate the corpus with the test samples, if they did not exist already.
 # Note that we do not cache the corpus directly on Travis, due to this bug:

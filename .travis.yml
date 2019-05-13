@@ -16,8 +16,7 @@ rust:
 
 # Opt for a less ancient distribution with a C++11-compliant compiler, in order
 # to compile libfuzzer.
-dist: trusty
-sudo: false
+dist: xenial
 
 addons:
   apt:
@@ -28,8 +27,7 @@ cache:
   directories:
     # Cache the fuzzing corpus, so it does not have to discover the entire corpus
     # again every time, and it can focus on finding bugs instead.
-    # TODO: This is broken, libfuzzer seems to not recognize the corpus somehow.
-    # - fuzz_corpus
+    - fuzz_corpus
 
     # Cache the test samples to not put so much load on archive.org, but on
     # Travis' S3 buckets instead.
@@ -49,5 +47,4 @@ script:
   - cargo test
 
   # On the nightly configuration, fuzz for 15 minutes.
-  # TODO: This is broken, libfuzzer does not recognize the cached corpus.
-  # - FUZZ_SECONDS=900 tools/fuzz_on_ci.sh
+  - FUZZ_SECONDS=900 tools/fuzz_on_ci.sh
