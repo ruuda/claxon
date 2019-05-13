@@ -36,4 +36,4 @@ script:
   - cargo test
 
   # On the nightly configuration, fuzz for 15 minutes.
-  - FUZZ_SECONDS=900 tools/fuzz_on_ci.sh
+  - FUZZ_SECONDS=899 tools/fuzz_on_ci.sh
