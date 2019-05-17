@@ -28,7 +28,7 @@ program outputs: for every iteration, for every frame, the time per sample.
 
 Although the time per sample can vary across frames (some frames are more
 expensive to decode than others), the time to decode the same frame should be
-constant. We assume that the times we observe are of the for `t + x`, where `t`
+constant. We assume that the times we observe are of the form `t + x`, where `t`
 is the absolute minimum time it takes to decode the frame, and `x` is noise on
 top (which can have many causes, such as interrupts, or cache misses due to a
 different process trashing the caches). From the observations in every
