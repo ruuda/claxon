@@ -1,0 +1,13 @@
+Benchmarking this change, I found no evidence that it affects
+performance (when also including the later change to remove the result
+return value). When marking decode_lpc_high_order with #[cold], I found
+no evidence that that had any impact either. When marking
+decode_lpc_low_order with #[inline(always)], that caused a severe
+regression, from ~13 ns per sample to ~16 ns per sample.
+
+Measured mean time per sample over all samples (time per sample for each
+block is the minimum over 140 runs, for 18k blocks from 5 different
+files).
+
+Before LPC fix: 13.484 ± 0.018 ns
+After LPC fix:  13.480 ± 0.018 ns
