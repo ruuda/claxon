@@ -1,8 +1,10 @@
 Changelog
 =========
 
-master (unreleased)
--------------------
+0.4.2 and 0.3.3
+---------------
+
+Released 2019-05-19.
 
 **Compatibility**:
 
