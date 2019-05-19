@@ -7,12 +7,16 @@ master (unreleased)
 **Compatibility**:
 
 - No breaking changes.
-- Compatible with Rust 1.13 through ??
+- Compatible with Rust 1.13 through 1.34.
 
 New features:
 
 - Claxon can now decode non-subset files that use an LPC order > 12. Decoding
   such a file would previously return `Error::Unsupported`.
+
+Internal changes:
+
+- Defensively zero the decode buffer when growing it.
 
 0.4.1 and 0.3.2
 ---------------
