@@ -630,7 +630,22 @@ fn verify_predict_lpc() {
     predict_lpc_low_order(&coefficients, 10, &mut buffer);
     assert_eq!(&buffer, &[-21363, -21951, -22649, -24364, -27297, -26870, -30017, -29718]);
 
-    // TODO: Add test for high-order prediction.
+    // The following data from a real-world file has a high LPC order, is has
+    // more than 12 coefficients. The excepted output has been verified against
+    // the reference decoder.
+    let coefficients = [
+        709, -2589, 4600, -4612, 1350, 4220, -9743, 12671, -12129, 8586,
+        -3775, -645, 3904, -5543, 4373, 182, -6873, 13265, -15417, 11550,
+    ];
+    let mut buffer = [
+        213238, 210830, 234493, 209515, 235139, 201836, 208151, 186277, 157720, 148176,
+        115037, 104836, 60794, 54523, 412, 17943, -6025, -3713, 8373, 11764, 30094,
+    ];
+    predict_lpc_high_order(&coefficients, 12, &mut buffer);
+    assert_eq!(&buffer, &[
+        213238, 210830, 234493, 209515, 235139, 201836, 208151, 186277, 157720, 148176,
+        115037, 104836, 60794, 54523, 412, 17943, -6025, -3713, 8373, 11764, 33931,
+    ]);
 }
 
 fn decode_lpc<R: ReadBytes>(input: &mut Bitstream<R>,
