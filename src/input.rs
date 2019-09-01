@@ -14,6 +14,13 @@
 
 use std::cmp;
 use std::io;
+use std::mem::MaybeUninit;
+use uninit::{
+    AsUninitSliceMut,
+    InitWithCopyFromSlice,
+    MaybeUninitExt,
+    ReadIntoUninit,
+};
 
 /// Similar to `std::io::BufRead`, but more performant.
 ///
@@ -75,9 +82,6 @@ pub trait ReadBytes {
     /// Reads a single byte, not failing on EOF.
     fn read_u8_or_eof(&mut self) -> io::Result<Option<u8>>;
 
-    /// Reads until the provided buffer is full.
-    fn read_into(&mut self, buffer: &mut [u8]) -> io::Result<()>;
-
     /// Skips over the specified number of bytes.
     ///
     /// For a buffered reader, this can help a lot by just bumping a pointer.
@@ -127,6 +131,87 @@ pub trait ReadBytes {
     }
 }
 
+// # Safety
+//
+//   - `read_into_uninit()` and `read_into_uninit_exact()` do return prefix
+//     subslices of their `buffer`s
+unsafe
+impl<R: io::Read> uninit::ReadIntoUninit for BufferedReader<R>
+{
+    #[inline]
+    fn read_into_uninit<'buf> (
+        self: &'_ mut Self,
+        buffer: &'buf mut [MaybeUninit<u8>],
+    ) -> io::Result<&'buf mut [u8]>
+    {
+        self.read_into_uninit_exact(buffer)
+    }
+
+    fn read_into_uninit_exact<'buf> (
+        self: &'_ mut Self,
+        buffer: &'buf mut [MaybeUninit<u8>],
+    ) -> io::Result<&'buf mut [u8]>
+    {
+        if buffer.is_empty() {
+            return Ok(unsafe {
+                // # Safety
+                //
+                //   - empty buffer can be assumed to have been initialized
+                buffer.assume_init_by_mut()
+            });
+        }
+        let mut bytes_left = &mut buffer[..];
+        loop {
+            let pos = self.pos as usize;
+            let count = cmp::min(
+                bytes_left.len(),
+                self.num_valid as usize - pos,
+            );
+            bytes_left[.. count].init_with_copy_from_slice(
+                &self.buf[pos ..][.. count]
+            );
+            bytes_left = &mut bytes_left[count ..];
+            self.pos = (pos + count) as u32;
+
+            if bytes_left.is_empty() {
+                break;
+            } else {
+                // Replenish the buffer if there is more to be read.
+                self.pos = 0;
+                self.num_valid = try!(self.inner.read(&mut self.buf)) as u32;
+                if self.num_valid == 0 {
+                    return Err(io::Error::new(io::ErrorKind::UnexpectedEof,
+                                              "Expected more bytes."))
+                }
+            }
+        }
+
+        Ok(unsafe {
+            // # Safety
+            //
+            //   - the multiple `init_with_copy_from_slice` have guaranteed
+            //     initialization of the buffer
+            buffer.assume_init_by_mut()
+        })
+    }
+}
+
+impl<R: io::Read> io::Read for BufferedReader<R> {
+    fn read (self: &'_ mut Self, buf: &'_ mut [u8])
+        -> io::Result<usize>
+    {
+        self.read_into_uninit(buf.as_uninit_slice_mut())
+            .map(|out| out.len())
+    }
+
+    fn read_exact (self: &'_ mut Self, buf: &'_ mut [u8])
+        -> io::Result<()>
+    {
+        self.read_into_uninit_exact(buf.as_uninit_slice_mut())
+            .map(drop)
+    }
+}
+
 impl<R: io::Read> ReadBytes for BufferedReader<R>
 {
     #[inline(always)]
@@ -164,31 +249,6 @@ impl<R: io::Read> ReadBytes for BufferedReader<R>
         Ok(Some(try!(self.read_u8())))
     }
 
-    fn read_into(&mut self, buffer: &mut [u8]) -> io::Result<()> {
-        let mut bytes_left = buffer.len();
-
-        while bytes_left > 0 {
-            let from = buffer.len() - bytes_left;
-            let count = cmp::min(bytes_left, (self.num_valid - self.pos) as usize);
-            buffer[from..from + count].copy_from_slice(
-                &self.buf[self.pos as usize..self.pos as usize + count]);
-            bytes_left -= count;
-            self.pos += count as u32;
-
-            if bytes_left > 0 {
-                // Replenish the buffer if there is more to be read.
-                self.pos = 0;
-                self.num_valid = try!(self.inner.read(&mut self.buf)) as u32;
-                if self.num_valid == 0 {
-                    return Err(io::Error::new(io::ErrorKind::UnexpectedEof,
-                                              "Expected more bytes."))
-                }
-            }
-        }
-
-        Ok(())
-    }
-
     fn skip(&mut self, mut amount: u32) -> io::Result<()> {
         while amount > 0 {
             let num_left = self.num_valid - self.pos;
@@ -222,10 +282,6 @@ impl<'r, R: ReadBytes> ReadBytes for &'r mut R {
         (*self).read_u8_or_eof()
     }
 
-    fn read_into(&mut self, buffer: &mut [u8]) -> io::Result<()> {
-        (*self).read_into(buffer)
-    }
-
     fn skip(&mut self, amount: u32) -> io::Result<()> {
         (*self).skip(amount)
     }
@@ -253,19 +309,6 @@ impl<T: AsRef<[u8]>> ReadBytes for io::Cursor<T> {
         }
     }
 
-    fn read_into(&mut self, buffer: &mut [u8]) -> io::Result<()> {
-        let pos = self.position();
-        if pos + buffer.len() as u64 <= self.get_ref().as_ref().len() as u64 {
-            let start = pos as usize;
-            let end = pos as usize + buffer.len();
-            buffer.copy_from_slice(&self.get_ref().as_ref()[start..end]);
-            self.set_position(pos + buffer.len() as u64);
-            Ok(())
-        } else {
-            Err(io::Error::new(io::ErrorKind::UnexpectedEof, "unexpected eof"))
-        }
-    }
-
     fn skip(&mut self, amount: u32) -> io::Result<()> {
         let pos = self.position();
         if pos + amount as u64 <= self.get_ref().as_ref().len() as u64 {
@@ -277,15 +320,18 @@ impl<T: AsRef<[u8]>> ReadBytes for io::Cursor<T> {
     }
 }
 
+#[cfg(test)]
+use ::std::io::Read;
+
 #[test]
 fn verify_read_into_buffered_reader() {
     let mut reader = BufferedReader::new(io::Cursor::new(vec![2u8, 3, 5, 7, 11, 13, 17, 19, 23]));
     let mut buf1 = [0u8; 3];
     let mut buf2 = [0u8; 5];
     let mut buf3 = [0u8; 2];
-    reader.read_into(&mut buf1).ok().unwrap();
-    reader.read_into(&mut buf2).ok().unwrap();
-    assert!(reader.read_into(&mut buf3).is_err());
+    reader.read_exact(&mut buf1).ok().unwrap();
+    reader.read_exact(&mut buf2).ok().unwrap();
+    assert!(reader.read_exact(&mut buf3).is_err());
     assert_eq!(&buf1[..], &[2u8, 3, 5]);
     assert_eq!(&buf2[..], &[7u8, 11, 13, 17, 19]);
 }
@@ -296,9 +342,9 @@ fn verify_read_into_cursor() {
     let mut buf1 = [0u8; 3];
     let mut buf2 = [0u8; 5];
     let mut buf3 = [0u8; 2];
-    cursor.read_into(&mut buf1).ok().unwrap();
-    cursor.read_into(&mut buf2).ok().unwrap();
-    assert!(cursor.read_into(&mut buf3).is_err());
+    cursor.read_exact(&mut buf1).ok().unwrap();
+    cursor.read_exact(&mut buf2).ok().unwrap();
+    assert!(cursor.read_exact(&mut buf3).is_err());
     assert_eq!(&buf1[..], &[2u8, 3, 5]);
     assert_eq!(&buf2[..], &[7u8, 11, 13, 17, 19]);
 }
