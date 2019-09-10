@@ -437,7 +437,7 @@ fn read_vorbis_comment_block<R: ReadBytes>(input: &mut R, length: u32) -> Result
     // bytes to indicate its length, there cannot be more comments than the
     // length of the block divided by 4. This is only an upper bound to ensure
     // that we don't allocate a big vector, to protect against DoS attacks.
-    let comments_len = try!(input.read_le_u32());
+    let mut comments_len = try!(input.read_le_u32());
     if comments_len >= length / 4 {
         return fmt_err("too many entries for Vorbis comment block")
     }
@@ -453,6 +453,11 @@ fn read_vorbis_comment_block<R: ReadBytes>(input: &mut R, length: u32) -> Result
 
         if comment_len > bytes_left {
             return fmt_err("Vorbis comment too long for Vorbis comment block")
+        }
+
+        if comment_len == 0 {
+            comments_len -= 1;
+            continue;
         }
 
         // For the same reason as above, setting the length is safe here.
