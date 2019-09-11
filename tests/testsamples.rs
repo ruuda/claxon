@@ -329,6 +329,29 @@ fn test_flac_reader_get_tag_returns_all_matches() {
 }
 
 #[test]
+fn test_flac_reader_tags_skips_empty_vorbis_comments() {
+    // This file has been prepared to contain one empty Vorbis comment; a string
+    // of length 0, that does not contain the required `=` character. This is
+    // invalid, but it occurs in the wild nonetheless. We should skip over such
+    // Vorbis comments, and we should read the rest just fine.
+    //
+    // Note that we don't include this file in the metaflac tests, because
+    // metaflac does print the empty comment, and we skip it. Behaving like
+    // metaflac would require representing the empty comment, but then we have
+    // to deal with the edge case everywhere, so we drop it instead.
+    let flac_reader = claxon::FlacReader::open("testsamples/empty_vorbis_comment.flac").unwrap();
+
+    // The file was adapted from `repeated_vorbis_comment.flac`, so it contains
+    // the same `FOO=bar` tag, but the `FOO=baz` has been replaced with a 4-byte
+    // length prefix to make the final tag `X=Y`.
+
+    let mut tags = flac_reader.tags();
+    assert_eq!(tags.next(), Some(("FOO", "bar")));
+    assert_eq!(tags.next(), Some(("X", "Y")));
+    assert_eq!(tags.next(), None);
+}
+
+#[test]
 fn verify_decoded_stream_p0() {
     compare_decoded_stream("testsamples/p0.flac");
 }
