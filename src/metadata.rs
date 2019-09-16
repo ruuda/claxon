@@ -447,7 +447,7 @@ fn read_vorbis_comment_block<R: ReadBytes>(input: &mut R, length: u32) -> Result
 
     // For every comment, there is a length-prefixed string of the form
     // "NAME=value".
-    while bytes_left >= 4 {
+    while bytes_left >= 4 && comments.len() < comments_len as usize {
         let comment_len = try!(input.read_le_u32());
         bytes_left -= 4;
 
@@ -455,7 +455,11 @@ fn read_vorbis_comment_block<R: ReadBytes>(input: &mut R, length: u32) -> Result
             return fmt_err("Vorbis comment too long for Vorbis comment block")
         }
 
+        // Some older versions of libflac allowed writing zero-length Vorbis
+        // comments. ALthough such files are invalid, they do occur in the wild,
+        // so we skip over the empty comment.
         if comment_len == 0 {
+            // Does not overflow because `comments_len > comments.len() >= 0`.
             comments_len -= 1;
             continue;
         }
@@ -485,6 +489,10 @@ fn read_vorbis_comment_block<R: ReadBytes>(input: &mut R, length: u32) -> Result
         } else {
             return fmt_err("Vorbis comment does not contain '='")
         }
+    }
+
+    if bytes_left != 0 {
+        return fmt_err("Vorbis comment block has excess data")
     }
 
     if comments.len() != comments_len as usize {
