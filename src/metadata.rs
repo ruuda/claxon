@@ -155,9 +155,15 @@ impl<'a> Iterator for Tags<'a> {
             (&comment[..sep_idx], &comment[sep_idx+1..])
         })
     }
+    
+    #[inline]
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.iter.size_hint()
+    }
 }
 
-// TODO: `Tags` could implement `ExactSizeIterator`.
+impl<'a> ExactSizeIterator for Tags<'a> {}
+impl<'a> std::iter::FusedIterator for Tags<'a> {}
 
 /// Iterates over Vorbis comments looking for a specific one; returns its values as `&str`.
 ///
