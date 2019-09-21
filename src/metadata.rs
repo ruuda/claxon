@@ -163,7 +163,6 @@ impl<'a> Iterator for Tags<'a> {
 }
 
 impl<'a> ExactSizeIterator for Tags<'a> {}
-impl<'a> ::std::iter::FusedIterator for Tags<'a> {}
 
 /// Iterates over Vorbis comments looking for a specific one; returns its values as `&str`.
 ///
