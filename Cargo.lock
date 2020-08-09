@@ -10,7 +10,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
 name = "claxon"
-version = "0.4.2"
+version = "0.4.3"
 dependencies = [
  "hound 3.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "mp4parse 0.8.0 (registry+https://github.com/rust-lang/crates.io-index)",

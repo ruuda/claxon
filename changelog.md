@@ -1,6 +1,23 @@
 Changelog
 =========
 
+0.4.3
+-----
+
+Released 2020-08-09.
+
+**Compatibility**:
+
+- No breaking changes
+- Compatible with Rust 1.13 through 1.46.
+
+New features:
+
+- `metadata::Tags` now implements `ExactSizeIterator`.
+- Skip empty Vorbis comments that would previously cause a parse error.
+
+Thanks to har0ke and Anthony Mikh for contributing to this release.
+
 0.4.2 and 0.3.3
 ---------------
 
