@@ -31,7 +31,7 @@ pub struct StreamInfo {
     /// The maximum block size (in inter-channel samples) used in the stream.
     ///
     /// This number is independent of the number of channels. To get the
-    /// maximum block duratin in seconds, divide by the sample rate. To avoid
+    /// maximum block duration in seconds, divide by the sample rate. To avoid
     /// allocations during decoding, a buffer of this size times the number of
     /// channels can be allocated up front and passed into
     /// `FrameReader::read_next_or_eof()`.
