@@ -10,6 +10,7 @@ readme = "readme.md"
 homepage = "https://github.com/ruuda/claxon#readme"
 repository = "https://github.com/ruuda/claxon"
 documentation = "https://docs.rs/claxon"
+edition = "2018"
 
 [badges]
 travis-ci = { repository = "ruuda/claxon", branch = "v0.4.3" }

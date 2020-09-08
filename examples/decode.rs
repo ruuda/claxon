@@ -59,7 +59,9 @@ fn decode_file(fname: &Path) {
             }
         }
 
-        sample_writer.flush().expect("failed to write samples to wav file");
+        sample_writer
+            .flush()
+            .expect("failed to write samples to wav file");
     }
 
     wav_writer.finalize().expect("failed to finalize wav file");

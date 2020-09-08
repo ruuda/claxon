@@ -10,11 +10,11 @@
 // See the `decode` example for that.
 
 extern crate claxon;
-extern crate walkdir;
 extern crate time;
+extern crate walkdir;
 
-use time::PreciseTime;
 use std::io::{Seek, SeekFrom};
+use time::PreciseTime;
 
 fn main() {
     use std::ffi::OsStr;
@@ -52,12 +52,27 @@ fn main() {
                 reader.get_tag("artist").next().expect("artist");
                 reader.get_tag("albumartist").next().expect("albumartist");
                 reader.get_tag("artistsort").next().expect("artistsort");
-                reader.get_tag("albumartistsort").next().expect("albumartistsort");
+                reader
+                    .get_tag("albumartistsort")
+                    .next()
+                    .expect("albumartistsort");
 
-                reader.get_tag("musicbrainz_trackid").next().expect("musicbrainz_trackid");
-                reader.get_tag("musicbrainz_albumid").next().expect("musicbrainz_albumid");
-                reader.get_tag("musicbrainz_artistid").next().expect("musicbrainz_artistid");
-                reader.get_tag("musicbrainz_albumartistid").next().expect("musicbrainz_albumartistid");
+                reader
+                    .get_tag("musicbrainz_trackid")
+                    .next()
+                    .expect("musicbrainz_trackid");
+                reader
+                    .get_tag("musicbrainz_albumid")
+                    .next()
+                    .expect("musicbrainz_albumid");
+                reader
+                    .get_tag("musicbrainz_artistid")
+                    .next()
+                    .expect("musicbrainz_artistid");
+                reader
+                    .get_tag("musicbrainz_albumartistid")
+                    .next()
+                    .expect("musicbrainz_albumartistid");
 
                 bytes += reader.into_inner().seek(SeekFrom::Current(0)).unwrap();
             }
@@ -78,5 +93,8 @@ fn main() {
     let p10_mibs = bytes_per_sec[10 * bytes_per_sec.len() / 100] / (1024.0 * 1024.0);
 
     // Output numbers compatible with tools/compare_benches.r.
-    println!("{:>6.2} {:>6.2} {:>6.2} {:>6.2} {:>6.2}", p10, p50, p90, mean, p10_mibs);
+    println!(
+        "{:>6.2} {:>6.2} {:>6.2} {:>6.2} {:>6.2}",
+        p10, p50, p90, mean, p10_mibs
+    );
 }

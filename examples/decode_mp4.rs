@@ -14,8 +14,8 @@ extern crate mp4parse;
 
 use std::env;
 use std::fs::File;
-use std::io::Seek;
 use std::io;
+use std::io::Seek;
 use std::path::Path;
 
 use claxon::metadata::read_metadata_block;
@@ -37,7 +37,7 @@ fn decode_file(fname: &Path) {
     // FLAC stream. Iterate over those.
     for track in &context.tracks {
         if track.codec_type != CodecType::FLAC {
-            continue
+            continue;
         }
 
         let streaminfo = get_streaminfo(track).expect("missing streaminfo");
@@ -63,8 +63,16 @@ fn decode_file(fname: &Path) {
         // The "stco" in mp4parse's Track stands for "Chunk Offset Box", "stsc"
         // stands for "Sample to Chunk Box", which actually tells per chunk how
         // many samples it contains, not per sample in which chunk it is.
-        let chunk_offsets = &track.stco.as_ref().expect("missing chunk offset box").offsets;
-        let chunk_samples = &track.stsc.as_ref().expect("missing sample to chunk box").samples;
+        let chunk_offsets = &track
+            .stco
+            .as_ref()
+            .expect("missing chunk offset box")
+            .offsets;
+        let chunk_samples = &track
+            .stsc
+            .as_ref()
+            .expect("missing sample to chunk box")
+            .samples;
 
         let mut samples_iter = chunk_samples.iter();
         let mut next_samples = samples_iter.next();
@@ -73,7 +81,9 @@ fn decode_file(fname: &Path) {
         // Iterate over all chunks in this track. We need all chunks, and every
         // chunk is present in the chunk offset box.
         for (i, offset) in chunk_offsets.iter().enumerate() {
-            bufread.seek(io::SeekFrom::Start(*offset)).expect("failed to seek to chunk");
+            bufread
+                .seek(io::SeekFrom::Start(*offset))
+                .expect("failed to seek to chunk");
 
             // For some chunks, the "Sample to Chunk Box" stores details about
             // how many "samples" (FLAC frames) there are per chunk. When there
@@ -96,14 +106,14 @@ fn decode_file(fname: &Path) {
         // overwrite the previously written output. (This could be avoided by
         // picking a unique file name for every track, or by asking the user
         // which track to decode.)
-        break
+        break;
     }
 }
 
 /// Decode the metadata blocks until the streaminfo block is found.
 fn get_streaminfo(track: &mp4parse::Track) -> Option<StreamInfo> {
-    use mp4parse::{AudioCodecSpecific, SampleEntry};
     use claxon::metadata::MetadataBlock;
+    use mp4parse::{AudioCodecSpecific, SampleEntry};
 
     let audio_entry = match &track.data {
         &Some(SampleEntry::Audio(ref ae)) => ae,
@@ -129,33 +139,43 @@ fn get_streaminfo(track: &mp4parse::Track) -> Option<StreamInfo> {
 }
 
 /// Decode a number of FLAC frames. Takes an input `io::Read` and returns it.
-fn decode_frames<R, W>(input: R,
-                       streaminfo: &StreamInfo,
-                       num_frames: u32,
-                       wav_writer: &mut WavWriter<W>)
-                       -> R
-where R: io::Read, W: io::Write + io::Seek {
+fn decode_frames<R, W>(
+    input: R,
+    streaminfo: &StreamInfo,
+    num_frames: u32,
+    wav_writer: &mut WavWriter<W>,
+) -> R
+where
+    R: io::Read,
+    W: io::Write + io::Seek,
+{
     // The simplest way to read frames now, is unfortunately to double buffer.
     // (The input `R` is a buffered reader.) This might be avoided by not
     // wrapping the original file in an `io::BufReader`, but in a Claxon
     // `BufferedReader`. It would have to implement `io::Read` then.
     let buffered_reader = claxon::input::BufferedReader::new(input);
     let mut frame_reader = claxon::frame::FrameReader::new(buffered_reader);
-    let mut buffer = Vec::with_capacity(streaminfo.max_block_size as usize *
-                                        streaminfo.channels as usize);
+    let mut buffer =
+        Vec::with_capacity(streaminfo.max_block_size as usize * streaminfo.channels as usize);
 
     for _ in 0..num_frames {
         // TODO There should be a read_next method too that does not tolerate
         // EOF.
         let result = frame_reader.read_next_or_eof(buffer);
-        let block = result.expect("failed to decode frame").expect("unexpected EOF");
+        let block = result
+            .expect("failed to decode frame")
+            .expect("unexpected EOF");
 
         // TODO: Here we assume that we are decoding a stereo stream, which
         // is wrong, but very convenient, as there is no interleaved sample
         // iterator for `Block`. One should be added.
         for (sl, sr) in block.stereo_samples() {
-            wav_writer.write_sample(sl).expect("failed to write wav file");
-            wav_writer.write_sample(sr).expect("failed to write wav file");
+            wav_writer
+                .write_sample(sl)
+                .expect("failed to write wav file");
+            wav_writer
+                .write_sample(sr)
+                .expect("failed to write wav file");
         }
 
         buffer = block.into_buffer();

@@ -7,10 +7,10 @@
 
 //! The `subframe` module deals with subframes that make up a frame of the FLAC stream.
 
+use crate::error::{fmt_err, Error, Result};
+use crate::input::{Bitstream, ReadBytes};
 use std::cmp;
 use std::num;
-use error::{Error, Result, fmt_err};
-use input::{Bitstream, ReadBytes};
 
 #[derive(Clone, Copy, Debug)]
 enum SubframeType {
@@ -28,12 +28,12 @@ struct SubframeHeader {
 
 fn read_subframe_header<R: ReadBytes>(input: &mut Bitstream<R>) -> Result<SubframeHeader> {
     // The first bit must be a 0 padding bit.
-    if try!(input.read_bit()) {
+    if input.read_bit()? {
         return fmt_err("invalid subframe header");
     }
 
     // Next is a 6-bit subframe type.
-    let sf_type = match try!(input.read_leq_u8(6)) {
+    let sf_type = match input.read_leq_u8(6)? {
         0 => SubframeType::Constant,
         1 => SubframeType::Verbatim,
 
@@ -42,8 +42,10 @@ fn read_subframe_header<R: ReadBytes>(input: &mut Bitstream<R>) -> Result<Subfra
         // are reserved at the time of writing are a format error, the
         // `Unsupported` error type is for specified features that are not
         // implemented.
-        n if (n & 0b111_110 == 0b000_010) || (n & 0b111_100 == 0b000_100) ||
-             (n & 0b110_000 == 0b010_000) => {
+        n if (n & 0b111_110 == 0b000_010)
+            || (n & 0b111_100 == 0b000_100)
+            || (n & 0b110_000 == 0b010_000) =>
+        {
             return fmt_err("invalid subframe header, encountered reserved value");
         }
 
@@ -67,13 +69,13 @@ fn read_subframe_header<R: ReadBytes>(input: &mut Bitstream<R>) -> Result<Subfra
     };
 
     // Next bits indicates whether there are wasted bits per sample.
-    let wastes_bits = try!(input.read_bit());
+    let wastes_bits = input.read_bit()?;
 
     // If so, k - 1 zero bits follow, where k is the number of wasted bits.
     let wasted_bits = if !wastes_bits {
         0
     } else {
-        1 + try!(input.read_unary())
+        1 + input.read_unary()?
     };
 
     // The spec puts no bounds on the number of wasted bits per sample, but more
@@ -181,10 +183,7 @@ fn verify_rice_to_signed() {
 /// Decodes a subframe into the provided block-size buffer.
 ///
 /// It is assumed that the length of the buffer is the block size.
-pub fn decode<R: ReadBytes>(input: &mut Bitstream<R>,
-                            bps: u32,
-                            buffer: &mut [i32])
-                            -> Result<()> {
+pub fn decode<R: ReadBytes>(input: &mut Bitstream<R>, bps: u32, buffer: &mut [i32]) -> Result<()> {
     // The sample type i32 should be wide enough to accomodate for all bits of
     // the stream, but this can be verified at a higher level than here. Still,
     // it is a good idea to make the assumption explicit. FLAC supports up to
@@ -193,7 +192,7 @@ pub fn decode<R: ReadBytes>(input: &mut Bitstream<R>,
     // 24 bits per sample at most, so restricting ourselves to i32 is fine.
     debug_assert!(32 >= bps);
 
-    let header = try!(read_subframe_header(input));
+    let header = read_subframe_header(input)?;
 
     if header.wasted_bits_per_sample >= bps {
         return fmt_err("subframe has no non-wasted bits");
@@ -204,18 +203,20 @@ pub fn decode<R: ReadBytes>(input: &mut Bitstream<R>,
     let sf_bps = bps - header.wasted_bits_per_sample;
 
     match header.sf_type {
-        SubframeType::Constant => try!(decode_constant(input, sf_bps, buffer)),
-        SubframeType::Verbatim => try!(decode_verbatim(input, sf_bps, buffer)),
-        SubframeType::Fixed(ord) => try!(decode_fixed(input, sf_bps, ord as u32, buffer)),
-        SubframeType::Lpc(ord) => try!(decode_lpc(input, sf_bps, ord as u32, buffer)),
+        SubframeType::Constant => decode_constant(input, sf_bps, buffer)?,
+        SubframeType::Verbatim => decode_verbatim(input, sf_bps, buffer)?,
+        SubframeType::Fixed(ord) => decode_fixed(input, sf_bps, ord as u32, buffer)?,
+        SubframeType::Lpc(ord) => decode_lpc(input, sf_bps, ord as u32, buffer)?,
     }
 
     // Finally, everything must be shifted by 'wasted bits per sample' to
     // the left. Note: it might be better performance-wise to do this on
     // the fly while decoding. That could be done if this is a bottleneck.
     if header.wasted_bits_per_sample > 0 {
-        debug_assert!(header.wasted_bits_per_sample <= 31,
-                      "Cannot shift by more than the sample width.");
+        debug_assert!(
+            header.wasted_bits_per_sample <= 31,
+            "Cannot shift by more than the sample width."
+        );
         for s in buffer {
             // For a valid FLAC file, this shift does not overflow. For an
             // invalid file it might, and then we decode garbage, but we don't
@@ -233,12 +234,13 @@ enum RicePartitionType {
     Rice2,
 }
 
-fn decode_residual<R: ReadBytes>(input: &mut Bitstream<R>,
-                                 block_size: u16,
-                                 buffer: &mut [i32])
-                                 -> Result<()> {
+fn decode_residual<R: ReadBytes>(
+    input: &mut Bitstream<R>,
+    block_size: u16,
+    buffer: &mut [i32],
+) -> Result<()> {
     // Residual starts with two bits of coding method.
-    let partition_type = match try!(input.read_leq_u8(2)) {
+    let partition_type = match input.read_leq_u8(2)? {
         0b00 => RicePartitionType::Rice,
         0b01 => RicePartitionType::Rice2,
         // 10 and 11 are reserved.
@@ -246,7 +248,7 @@ fn decode_residual<R: ReadBytes>(input: &mut Bitstream<R>,
     };
 
     // Next are 4 bits partition order.
-    let order = try!(input.read_leq_u8(4));
+    let order = input.read_leq_u8(4)?;
 
     // There are 2^order partitions. Note: the specification states a 4-bit
     // partition order, so the order is at most 31, so there could be 2^31
@@ -260,13 +262,16 @@ fn decode_residual<R: ReadBytes>(input: &mut Bitstream<R>,
     // multiple of 2^order; if we shifted off some bits, then we would not fill
     // the entire block. Such a partition order is invalid for this block size.
     if block_size & (n_partitions - 1) as u16 != 0 {
-        return fmt_err("invalid partition order")
+        return fmt_err("invalid partition order");
     }
 
     // NOTE: the check above checks that block_size is a multiple of n_partitions
     // (this works because n_partitions is a power of 2). The check below is
     // equivalent but more expensive.
-    debug_assert_eq!(n_partitions * n_samples_per_partition as u32, block_size as u32);
+    debug_assert_eq!(
+        n_partitions * n_samples_per_partition as u32,
+        block_size as u32
+    );
 
     let n_warm_up = block_size - buffer.len() as u16;
 
@@ -283,7 +288,7 @@ fn decode_residual<R: ReadBytes>(input: &mut Bitstream<R>,
             let mut len = n_samples_per_partition - n_warm_up;
             for _ in 0..n_partitions {
                 let slice = &mut buffer[start..start + len as usize];
-                try!(decode_rice_partition(input, slice));
+                decode_rice_partition(input, slice)?;
                 start = start + len as usize;
                 len = n_samples_per_partition;
             }
@@ -293,7 +298,7 @@ fn decode_residual<R: ReadBytes>(input: &mut Bitstream<R>,
             let mut len = n_samples_per_partition - n_warm_up;
             for _ in 0..n_partitions {
                 let slice = &mut buffer[start..start + len as usize];
-                try!(decode_rice2_partition(input, slice));
+                decode_rice2_partition(input, slice)?;
                 start = start + len as usize;
                 len = n_samples_per_partition;
             }
@@ -307,15 +312,15 @@ fn decode_residual<R: ReadBytes>(input: &mut Bitstream<R>,
 // partitions, not Rice2 partitions. Therefore it makes sense to inline this
 // function into decode_residual.
 #[inline(always)]
-fn decode_rice_partition<R: ReadBytes>(input: &mut Bitstream<R>,
-                                       buffer: &mut [i32])
-                                       -> Result<()> {
+fn decode_rice_partition<R: ReadBytes>(input: &mut Bitstream<R>, buffer: &mut [i32]) -> Result<()> {
     // A Rice partition (not Rice2), starts with a 4-bit Rice parameter.
-    let rice_param = try!(input.read_leq_u8(4)) as u32;
+    let rice_param = input.read_leq_u8(4)? as u32;
 
     // All ones is an escape code that indicates unencoded binary.
     if rice_param == 0b1111 {
-        return Err(Error::Unsupported("unencoded binary is not yet implemented"))
+        return Err(Error::Unsupported(
+            "unencoded binary is not yet implemented",
+        ));
     }
 
     // About the decoding below: the first part of the sample is the quotient,
@@ -335,14 +340,14 @@ fn decode_rice_partition<R: ReadBytes>(input: &mut Bitstream<R>,
 
     if rice_param <= 8 {
         for sample in buffer.iter_mut() {
-            let q = try!(input.read_unary());
-            let r = try!(input.read_leq_u8(rice_param)) as u32;
+            let q = input.read_unary()?;
+            let r = input.read_leq_u8(rice_param)? as u32;
             *sample = rice_to_signed((q << rice_param) | r);
         }
     } else {
         for sample in buffer.iter_mut() {
-            let q = try!(input.read_unary());
-            let r = try!(input.read_gt_u8_leq_u16(rice_param));
+            let q = input.read_unary()?;
+            let r = input.read_gt_u8_leq_u16(rice_param)?;
             *sample = rice_to_signed((q << rice_param) | r);
         }
     }
@@ -355,35 +360,39 @@ fn decode_rice_partition<R: ReadBytes>(input: &mut Bitstream<R>,
 // pollute the caller with dead code.
 #[inline(never)]
 #[cold]
-fn decode_rice2_partition<R: ReadBytes>(input: &mut Bitstream<R>,
-                                        buffer: &mut [i32])
-                                        -> Result<()> {
+fn decode_rice2_partition<R: ReadBytes>(
+    input: &mut Bitstream<R>,
+    buffer: &mut [i32],
+) -> Result<()> {
     // A Rice2 partition, starts with a 5-bit Rice parameter.
-    let rice_param = try!(input.read_leq_u8(5)) as u32;
+    let rice_param = input.read_leq_u8(5)? as u32;
 
     // All ones is an escape code that indicates unencoded binary.
     if rice_param == 0b11111 {
-        return Err(Error::Unsupported("unencoded binary is not yet implemented"))
+        return Err(Error::Unsupported(
+            "unencoded binary is not yet implemented",
+        ));
     }
 
     for sample in buffer.iter_mut() {
         // First part of the sample is the quotient, unary encoded.
-        let q = try!(input.read_unary());
+        let q = input.read_unary()?;
 
         // Next is the remainder, in rice_param bits. Because at this
         // point rice_param is at most 30, we can safely read into a u32.
-        let r = try!(input.read_leq_u32(rice_param));
+        let r = input.read_leq_u32(rice_param)?;
         *sample = rice_to_signed((q << rice_param) | r);
     }
 
     Ok(())
 }
 
-fn decode_constant<R: ReadBytes>(input: &mut Bitstream<R>,
-                                 bps: u32,
-                                 buffer: &mut [i32])
-                                 -> Result<()> {
-    let sample_u32 = try!(input.read_leq_u32(bps));
+fn decode_constant<R: ReadBytes>(
+    input: &mut Bitstream<R>,
+    bps: u32,
+    buffer: &mut [i32],
+) -> Result<()> {
+    let sample_u32 = input.read_leq_u32(bps)?;
     let sample = extend_sign_u32(sample_u32, bps);
 
     for s in buffer {
@@ -394,11 +403,11 @@ fn decode_constant<R: ReadBytes>(input: &mut Bitstream<R>,
 }
 
 #[cold]
-fn decode_verbatim<R: ReadBytes>(input: &mut Bitstream<R>,
-                                 bps: u32,
-                                 buffer: &mut [i32])
-                                 -> Result<()> {
-
+fn decode_verbatim<R: ReadBytes>(
+    input: &mut Bitstream<R>,
+    bps: u32,
+    buffer: &mut [i32],
+) -> Result<()> {
     // This function must not be called for a sample wider than the sample type.
     // This has been verified at an earlier stage, but it is good to state the
     // assumption explicitly. FLAC supports up to 32-bit samples, so the
@@ -408,7 +417,7 @@ fn decode_verbatim<R: ReadBytes>(input: &mut Bitstream<R>,
 
     // A verbatim block stores samples without encoding whatsoever.
     for s in buffer {
-        *s = extend_sign_u32(try!(input.read_leq_u32(bps)), bps);
+        *s = extend_sign_u32(input.read_leq_u32(bps)?, bps);
     }
 
     Ok(())
@@ -458,12 +467,14 @@ fn predict_fixed(order: u32, buffer: &mut [i32]) -> Result<()> {
         // samples, so the wrapping mul is safe. If it wraps, the file was
         // invalid, and we make no guarantees about the decoded result. But
         // we explicitly do not crash.
-        let prediction = coefficients.iter()
-                                     .zip(window.iter())
-                                     .map(|(&c, &s)| num::Wrapping(c) * num::Wrapping(s))
-                                     // Rust 1.13 does not support using `sum`
-                                     // with `Wrapping`, so do a fold.
-                                     .fold(num::Wrapping(0), |a, x| a + x).0;
+        let prediction = coefficients
+            .iter()
+            .zip(window.iter())
+            .map(|(&c, &s)| num::Wrapping(c) * num::Wrapping(s))
+            // Rust 1.13 does not support using `sum`
+            // with `Wrapping`, so do a fold.
+            .fold(num::Wrapping(0), |a, x| a + x)
+            .0;
 
         // The delta is stored, so the sample is the prediction + delta.
         let delta = window[coefficients.len()];
@@ -477,11 +488,14 @@ fn predict_fixed(order: u32, buffer: &mut [i32]) -> Result<()> {
 fn verify_predict_fixed() {
     // The following data is from an actual FLAC stream and has been verified
     // against the reference decoder. The data is from a 16-bit stream.
-    let mut buffer = [-729, -722, -667, -19, -16,  17, -23, -7,
-                        16,  -16,   -5,   3,  -8, -13, -15, -1];
+    let mut buffer = [
+        -729, -722, -667, -19, -16, 17, -23, -7, 16, -16, -5, 3, -8, -13, -15, -1,
+    ];
     assert!(predict_fixed(3, &mut buffer).is_ok());
-    assert_eq!(&buffer, &[-729, -722, -667, -583, -486, -359, -225, -91,
-                            59,  209,  354,  497,  630,  740,  812, 845]);
+    assert_eq!(
+        &buffer,
+        &[-729, -722, -667, -583, -486, -359, -225, -91, 59, 209, 354, 497, 630, 740, 812, 845]
+    );
 
     // The following data causes overflow of i32 when not handled with care.
     let mut buffer = [21877, 27482, -6513];
@@ -489,28 +503,27 @@ fn verify_predict_fixed() {
     assert_eq!(&buffer, &[21877, 27482, 26574]);
 }
 
-fn decode_fixed<R: ReadBytes>(input: &mut Bitstream<R>,
-                              bps: u32,
-                              order: u32,
-                              buffer: &mut [i32])
-                              -> Result<()> {
+fn decode_fixed<R: ReadBytes>(
+    input: &mut Bitstream<R>,
+    bps: u32,
+    order: u32,
+    buffer: &mut [i32],
+) -> Result<()> {
     // The length of the buffer which is passed in, is the length of the block.
     // Thus, the number of warm-up samples must not exceed that length.
     if buffer.len() < order as usize {
-        return fmt_err("invalid fixed subframe, order is larger than block size")
+        return fmt_err("invalid fixed subframe, order is larger than block size");
     }
 
     // There are order * bits per sample unencoded warm-up sample bits.
-    try!(decode_verbatim(input, bps, &mut buffer[..order as usize]));
+    decode_verbatim(input, bps, &mut buffer[..order as usize])?;
 
     // Next up is the residual. We decode into the buffer directly, the
     // predictor contributions will be added in a second pass. The first
     // `order` samples have been decoded already, so continue after that.
-    try!(decode_residual(input,
-                         buffer.len() as u16,
-                         &mut buffer[order as usize..]));
+    decode_residual(input, buffer.len() as u16, &mut buffer[order as usize..])?;
 
-    try!(predict_fixed(order, buffer));
+    predict_fixed(order, buffer)?;
 
     Ok(())
 }
@@ -521,12 +534,11 @@ fn decode_fixed<R: ReadBytes>(input: &mut Bitstream<R>,
 /// files that occur in the wild are subset-compliant files, which have an order
 /// of at most 12, so it makes sense to optimize for this. A simpler (but
 /// slower) fallback is implemented in `predict_lpc_high_order`.
-fn predict_lpc_low_order(
-    raw_coefficients: &[i16],
-    qlp_shift: i16,
-    buffer: &mut [i32],
-) {
-    debug_assert!(qlp_shift >= 0, "Right-shift by negative value is not allowed.");
+fn predict_lpc_low_order(raw_coefficients: &[i16], qlp_shift: i16, buffer: &mut [i32]) {
+    debug_assert!(
+        qlp_shift >= 0,
+        "Right-shift by negative value is not allowed."
+    );
     debug_assert!(qlp_shift < 64, "Cannot shift by more than integer width.");
     // The decoded residuals are 25 bits at most (assuming subset FLAC of at
     // most 24 bits per sample, but there is the delta encoding for channels).
@@ -557,37 +569,37 @@ fn predict_lpc_low_order(
     // warm-up samples.
     let left = cmp::min(12, buffer.len()) - order;
     for i in 0..left {
-        let prediction = raw_coefficients.iter()
-                                         .zip(&buffer[i..order + i])
-                                         .map(|(&c, &s)| c as i64 * s as i64)
-                                         .sum::<i64>() >> qlp_shift;
+        let prediction = raw_coefficients
+            .iter()
+            .zip(&buffer[i..order + i])
+            .map(|(&c, &s)| c as i64 * s as i64)
+            .sum::<i64>()
+            >> qlp_shift;
         let delta = buffer[order + i] as i64;
         buffer[order + i] = (prediction + delta) as i32;
     }
 
     if buffer.len() <= 12 {
-        return
+        return;
     }
 
     // At this point, buffer[0..12] has been predicted. For the rest of the
     // buffer we can do inner products of 12 samples. This reduces the amount of
     // conditional code, and improves performance significantly.
     for i in 12..buffer.len() {
-        let prediction = coefficients.iter()
-                                     .zip(&buffer[i - 12..i])
-                                     .map(|(&c, &s)| c * s as i64)
-                                     .sum::<i64>() >> qlp_shift;
+        let prediction = coefficients
+            .iter()
+            .zip(&buffer[i - 12..i])
+            .map(|(&c, &s)| c * s as i64)
+            .sum::<i64>()
+            >> qlp_shift;
         let delta = buffer[i] as i64;
         buffer[i] = (prediction + delta) as i32;
     }
 }
 
 /// Apply LPC prediction for non-subset subframes, with LPC order > 12.
-fn predict_lpc_high_order(
-    coefficients: &[i16],
-    qlp_shift: i16,
-    buffer: &mut [i32],
-) {
+fn predict_lpc_high_order(coefficients: &[i16], qlp_shift: i16, buffer: &mut [i32]) {
     // NOTE: See `predict_lpc_low_order` for more details. This function is a
     // copy that lifts the order restrictions (and specializations) at the cost
     // of performance. It is only used for subframes with a high LPC order,
@@ -595,19 +607,30 @@ fn predict_lpc_high_order(
 
     let order = coefficients.len();
 
-    debug_assert!(qlp_shift >= 0, "Right-shift by negative value is not allowed.");
+    debug_assert!(
+        qlp_shift >= 0,
+        "Right-shift by negative value is not allowed."
+    );
     debug_assert!(qlp_shift < 64, "Cannot shift by more than integer width.");
-    debug_assert!(order > 12, "Use the faster predict_lpc_low_order for LPC order <= 12.");
-    debug_assert!(buffer.len() >= order, "Buffer must fit at least `order` warm-up samples.");
+    debug_assert!(
+        order > 12,
+        "Use the faster predict_lpc_low_order for LPC order <= 12."
+    );
+    debug_assert!(
+        buffer.len() >= order,
+        "Buffer must fit at least `order` warm-up samples."
+    );
 
     // The linear prediction is essentially an inner product of the known
     // samples with the coefficients, followed by a shift. The first `order`
     // samples are stored as-is.
     for i in order..buffer.len() {
-        let prediction = coefficients.iter()
-                                     .zip(&buffer[i - order..i])
-                                     .map(|(&c, &s)| c as i64 * s as i64)
-                                     .sum::<i64>() >> qlp_shift;
+        let prediction = coefficients
+            .iter()
+            .zip(&buffer[i - order..i])
+            .map(|(&c, &s)| c as i64 * s as i64)
+            .sum::<i64>()
+            >> qlp_shift;
         let delta = buffer[i] as i64;
         buffer[i] = (prediction + delta) as i32;
     }
@@ -617,42 +640,55 @@ fn predict_lpc_high_order(
 fn verify_predict_lpc() {
     // The following data is from an actual FLAC stream and has been verified
     // against the reference decoder. The data is from a 16-bit stream.
-    let coefficients = [-75, 166,  121, -269, -75, -399, 1042];
-    let mut buffer = [-796, -547, -285,  -32, 199,  443,  670, -2,
-                       -23,   14,    6,    3,  -4,   12,   -2, 10];
+    let coefficients = [-75, 166, 121, -269, -75, -399, 1042];
+    let mut buffer = [
+        -796, -547, -285, -32, 199, 443, 670, -2, -23, 14, 6, 3, -4, 12, -2, 10,
+    ];
     predict_lpc_low_order(&coefficients, 9, &mut buffer);
-    assert_eq!(&buffer, &[-796, -547, -285,  -32,  199,  443,  670,  875,
-                          1046, 1208, 1343, 1454, 1541, 1616, 1663, 1701]);
+    assert_eq!(
+        &buffer,
+        &[
+            -796, -547, -285, -32, 199, 443, 670, 875, 1046, 1208, 1343, 1454, 1541, 1616, 1663,
+            1701
+        ]
+    );
 
     // The following data causes an overflow when not handled with care.
     let coefficients = [119, -255, 555, -836, 879, -1199, 1757];
     let mut buffer = [-21363, -21951, -22649, -24364, -27297, -26870, -30017, 3157];
     predict_lpc_low_order(&coefficients, 10, &mut buffer);
-    assert_eq!(&buffer, &[-21363, -21951, -22649, -24364, -27297, -26870, -30017, -29718]);
+    assert_eq!(
+        &buffer,
+        &[-21363, -21951, -22649, -24364, -27297, -26870, -30017, -29718]
+    );
 
     // The following data from a real-world file has a high LPC order, is has
     // more than 12 coefficients. The excepted output has been verified against
     // the reference decoder.
     let coefficients = [
-        709, -2589, 4600, -4612, 1350, 4220, -9743, 12671, -12129, 8586,
-        -3775, -645, 3904, -5543, 4373, 182, -6873, 13265, -15417, 11550,
+        709, -2589, 4600, -4612, 1350, 4220, -9743, 12671, -12129, 8586, -3775, -645, 3904, -5543,
+        4373, 182, -6873, 13265, -15417, 11550,
     ];
     let mut buffer = [
-        213238, 210830, 234493, 209515, 235139, 201836, 208151, 186277, 157720, 148176,
-        115037, 104836, 60794, 54523, 412, 17943, -6025, -3713, 8373, 11764, 30094,
+        213238, 210830, 234493, 209515, 235139, 201836, 208151, 186277, 157720, 148176, 115037,
+        104836, 60794, 54523, 412, 17943, -6025, -3713, 8373, 11764, 30094,
     ];
     predict_lpc_high_order(&coefficients, 12, &mut buffer);
-    assert_eq!(&buffer, &[
-        213238, 210830, 234493, 209515, 235139, 201836, 208151, 186277, 157720, 148176,
-        115037, 104836, 60794, 54523, 412, 17943, -6025, -3713, 8373, 11764, 33931,
-    ]);
+    assert_eq!(
+        &buffer,
+        &[
+            213238, 210830, 234493, 209515, 235139, 201836, 208151, 186277, 157720, 148176, 115037,
+            104836, 60794, 54523, 412, 17943, -6025, -3713, 8373, 11764, 33931,
+        ]
+    );
 }
 
-fn decode_lpc<R: ReadBytes>(input: &mut Bitstream<R>,
-                            bps: u32,
-                            order: u32,
-                            buffer: &mut [i32])
-                            -> Result<()> {
+fn decode_lpc<R: ReadBytes>(
+    input: &mut Bitstream<R>,
+    bps: u32,
+    order: u32,
+    buffer: &mut [i32],
+) -> Result<()> {
     // The order minus one fits in 5 bits, so the order is at most 32.
     debug_assert!(order <= 32);
 
@@ -660,14 +696,14 @@ fn decode_lpc<R: ReadBytes>(input: &mut Bitstream<R>,
     // enough. If it can't even fit the warm-up samples, then there is a frame
     // smaller than its lpc order, which is invalid.
     if buffer.len() < order as usize {
-        return fmt_err("invalid LPC subframe, lpc order is larger than block size")
+        return fmt_err("invalid LPC subframe, lpc order is larger than block size");
     }
 
     // There are order * bits per sample unencoded warm-up sample bits.
-    try!(decode_verbatim(input, bps, &mut buffer[..order as usize]));
+    decode_verbatim(input, bps, &mut buffer[..order as usize])?;
 
     // Next are four bits quantised linear predictor coefficient precision - 1.
-    let qlp_precision = try!(input.read_leq_u8(4)) as u32 + 1;
+    let qlp_precision = input.read_leq_u8(4)? as u32 + 1;
 
     // The bit pattern 1111 is invalid.
     if qlp_precision - 1 == 0b1111 {
@@ -676,7 +712,7 @@ fn decode_lpc<R: ReadBytes>(input: &mut Bitstream<R>,
 
     // Next are five bits quantized linear predictor coefficient shift,
     // in signed two's complement. Read 5 bits and then extend the sign bit.
-    let qlp_shift_unsig = try!(input.read_leq_u16(5));
+    let qlp_shift_unsig = input.read_leq_u16(5)?;
     let qlp_shift = extend_sign_u16(qlp_shift_unsig, 5);
 
     // The spec does allow the qlp shift to be negative, but in practice this
@@ -687,7 +723,7 @@ fn decode_lpc<R: ReadBytes>(input: &mut Bitstream<R>,
     if qlp_shift < 0 {
         let msg = "a negative quantized linear predictor coefficient shift is \
                    not supported, please file a bug.";
-        return Err(Error::Unsupported(msg))
+        return Err(Error::Unsupported(msg));
     }
 
     // Finally, the coefficients themselves. The order is at most 32, so all
@@ -696,16 +732,14 @@ fn decode_lpc<R: ReadBytes>(input: &mut Bitstream<R>,
     let mut coefficients = [0; 32];
     for coef in coefficients[..order as usize].iter_mut().rev() {
         // We can safely read into a u16, qlp_precision is at most 15.
-        let coef_unsig = try!(input.read_leq_u16(qlp_precision));
+        let coef_unsig = input.read_leq_u16(qlp_precision)?;
         *coef = extend_sign_u16(coef_unsig, qlp_precision);
     }
 
     // Next up is the residual. We decode it into the buffer directly, the
     // predictor contributions will be added in a second pass. The first
     // `order` samples have been decoded already, so continue after that.
-    try!(decode_residual(input,
-                         buffer.len() as u16,
-                         &mut buffer[order as usize..]));
+    decode_residual(input, buffer.len() as u16, &mut buffer[order as usize..])?;
 
     // In "subset"-compliant files, the LPC order is at most 12. For LPC
     // prediction of such files we have a special fast path that takes advantage
