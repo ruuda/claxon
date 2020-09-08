@@ -72,10 +72,10 @@ use std::fs;
 use std::io;
 use std::mem;
 use std::path;
-use error::fmt_err;
-use frame::FrameReader;
-use input::{BufferedReader, ReadBytes};
-use metadata::{MetadataBlock, MetadataBlockReader, StreamInfo, VorbisComment};
+use crate::error::fmt_err;
+use crate::frame::FrameReader;
+use crate::input::{BufferedReader, ReadBytes};
+use crate::metadata::{MetadataBlock, MetadataBlockReader, StreamInfo, VorbisComment};
 
 mod crc;
 mod error;
@@ -188,7 +188,7 @@ fn read_stream_header<R: ReadBytes>(input: &mut R) -> Result<()> {
     // error message if a file starts like this.
     const ID3_HEADER: u32 = 0x49_44_33_00;
 
-    let header = try!(input.read_be_u32());
+    let header = input.read_be_u32()?;
     if header != FLAC_HEADER {
         if (header & 0xff_ff_ff_00) == ID3_HEADER {
             fmt_err("stream starts with ID3 header rather than FLAC header")
@@ -228,7 +228,7 @@ impl<R: io::Read> FlacReader<R> {
         let mut opts_current = options;
 
         // A flac stream first of all starts with a stream header.
-        try!(read_stream_header(&mut buf_reader));
+        read_stream_header(&mut buf_reader)?;
 
         // Start a new scope, because the input reader must be available again
         // for the frame reader next.
@@ -237,7 +237,7 @@ impl<R: io::Read> FlacReader<R> {
             // dictates that the streaminfo block is the first block. The metadata
             // block reader will yield at least one element, so the unwrap is safe.
             let mut metadata_iter = MetadataBlockReader::new(&mut buf_reader);
-            let streaminfo_block = try!(metadata_iter.next().unwrap());
+            let streaminfo_block = metadata_iter.next().unwrap()?;
             let streaminfo = match streaminfo_block {
                 MetadataBlock::StreamInfo(info) => info,
                 _ => return fmt_err("streaminfo block missing"),
@@ -247,7 +247,7 @@ impl<R: io::Read> FlacReader<R> {
 
             // There might be more metadata blocks, read and store them.
             for block_result in metadata_iter {
-                match try!(block_result) {
+                match block_result? {
                     MetadataBlock::VorbisComment(vc) => {
                         // The Vorbis comment block need not be present, but
                         // when it is, it must be unique.
@@ -426,7 +426,7 @@ impl FlacReader<fs::File> {
     /// `FlacReader` from it. There is no need to wrap the file in a
     /// `BufReader`, as the `FlacReader` employs buffering already.
     pub fn open<P: AsRef<path::Path>>(filename: P) -> Result<FlacReader<fs::File>> {
-        let file = try!(fs::File::open(filename));
+        let file = fs::File::open(filename)?;
         FlacReader::new(file)
     }
 
@@ -438,7 +438,7 @@ impl FlacReader<fs::File> {
     pub fn open_ext<P: AsRef<path::Path>>(filename: P,
                                           options: FlacReaderOptions)
                                           -> Result<FlacReader<fs::File>> {
-        let file = try!(fs::File::open(filename));
+        let file = fs::File::open(filename)?;
         FlacReader::new_ext(file, options)
     }
 }

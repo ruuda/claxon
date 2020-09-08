@@ -9,8 +9,8 @@
 
 use std::cmp;
 use std::num;
-use error::{Error, Result, fmt_err};
-use input::{Bitstream, ReadBytes};
+use crate::error::{Error, Result, fmt_err};
+use crate::input::{Bitstream, ReadBytes};
 
 #[derive(Clone, Copy, Debug)]
 enum SubframeType {
@@ -28,12 +28,12 @@ struct SubframeHeader {
 
 fn read_subframe_header<R: ReadBytes>(input: &mut Bitstream<R>) -> Result<SubframeHeader> {
     // The first bit must be a 0 padding bit.
-    if try!(input.read_bit()) {
+    if input.read_bit()? {
         return fmt_err("invalid subframe header");
     }
 
     // Next is a 6-bit subframe type.
-    let sf_type = match try!(input.read_leq_u8(6)) {
+    let sf_type = match input.read_leq_u8(6)? {
         0 => SubframeType::Constant,
         1 => SubframeType::Verbatim,
 
@@ -67,13 +67,13 @@ fn read_subframe_header<R: ReadBytes>(input: &mut Bitstream<R>) -> Result<Subfra
     };
 
     // Next bits indicates whether there are wasted bits per sample.
-    let wastes_bits = try!(input.read_bit());
+    let wastes_bits = input.read_bit()?;
 
     // If so, k - 1 zero bits follow, where k is the number of wasted bits.
     let wasted_bits = if !wastes_bits {
         0
     } else {
-        1 + try!(input.read_unary())
+        1 + input.read_unary()?
     };
 
     // The spec puts no bounds on the number of wasted bits per sample, but more
@@ -193,7 +193,7 @@ pub fn decode<R: ReadBytes>(input: &mut Bitstream<R>,
     // 24 bits per sample at most, so restricting ourselves to i32 is fine.
     debug_assert!(32 >= bps);
 
-    let header = try!(read_subframe_header(input));
+    let header = read_subframe_header(input)?;
 
     if header.wasted_bits_per_sample >= bps {
         return fmt_err("subframe has no non-wasted bits");
@@ -204,10 +204,10 @@ pub fn decode<R: ReadBytes>(input: &mut Bitstream<R>,
     let sf_bps = bps - header.wasted_bits_per_sample;
 
     match header.sf_type {
-        SubframeType::Constant => try!(decode_constant(input, sf_bps, buffer)),
-        SubframeType::Verbatim => try!(decode_verbatim(input, sf_bps, buffer)),
-        SubframeType::Fixed(ord) => try!(decode_fixed(input, sf_bps, ord as u32, buffer)),
-        SubframeType::Lpc(ord) => try!(decode_lpc(input, sf_bps, ord as u32, buffer)),
+        SubframeType::Constant => decode_constant(input, sf_bps, buffer)?,
+        SubframeType::Verbatim => decode_verbatim(input, sf_bps, buffer)?,
+        SubframeType::Fixed(ord) => decode_fixed(input, sf_bps, ord as u32, buffer)?,
+        SubframeType::Lpc(ord) => decode_lpc(input, sf_bps, ord as u32, buffer)?,
     }
 
     // Finally, everything must be shifted by 'wasted bits per sample' to
@@ -238,7 +238,7 @@ fn decode_residual<R: ReadBytes>(input: &mut Bitstream<R>,
                                  buffer: &mut [i32])
                                  -> Result<()> {
     // Residual starts with two bits of coding method.
-    let partition_type = match try!(input.read_leq_u8(2)) {
+    let partition_type = match input.read_leq_u8(2)? {
         0b00 => RicePartitionType::Rice,
         0b01 => RicePartitionType::Rice2,
         // 10 and 11 are reserved.
@@ -246,7 +246,7 @@ fn decode_residual<R: ReadBytes>(input: &mut Bitstream<R>,
     };
 
     // Next are 4 bits partition order.
-    let order = try!(input.read_leq_u8(4));
+    let order = input.read_leq_u8(4)?;
 
     // There are 2^order partitions. Note: the specification states a 4-bit
     // partition order, so the order is at most 31, so there could be 2^31
@@ -283,7 +283,7 @@ fn decode_residual<R: ReadBytes>(input: &mut Bitstream<R>,
             let mut len = n_samples_per_partition - n_warm_up;
             for _ in 0..n_partitions {
                 let slice = &mut buffer[start..start + len as usize];
-                try!(decode_rice_partition(input, slice));
+                decode_rice_partition(input, slice)?;
                 start = start + len as usize;
                 len = n_samples_per_partition;
             }
@@ -293,7 +293,7 @@ fn decode_residual<R: ReadBytes>(input: &mut Bitstream<R>,
             let mut len = n_samples_per_partition - n_warm_up;
             for _ in 0..n_partitions {
                 let slice = &mut buffer[start..start + len as usize];
-                try!(decode_rice2_partition(input, slice));
+                decode_rice2_partition(input, slice)?;
                 start = start + len as usize;
                 len = n_samples_per_partition;
             }
@@ -311,7 +311,7 @@ fn decode_rice_partition<R: ReadBytes>(input: &mut Bitstream<R>,
                                        buffer: &mut [i32])
                                        -> Result<()> {
     // A Rice partition (not Rice2), starts with a 4-bit Rice parameter.
-    let rice_param = try!(input.read_leq_u8(4)) as u32;
+    let rice_param = input.read_leq_u8(4)? as u32;
 
     // All ones is an escape code that indicates unencoded binary.
     if rice_param == 0b1111 {
@@ -335,14 +335,14 @@ fn decode_rice_partition<R: ReadBytes>(input: &mut Bitstream<R>,
 
     if rice_param <= 8 {
         for sample in buffer.iter_mut() {
-            let q = try!(input.read_unary());
-            let r = try!(input.read_leq_u8(rice_param)) as u32;
+            let q = input.read_unary()?;
+            let r = input.read_leq_u8(rice_param)? as u32;
             *sample = rice_to_signed((q << rice_param) | r);
         }
     } else {
         for sample in buffer.iter_mut() {
-            let q = try!(input.read_unary());
-            let r = try!(input.read_gt_u8_leq_u16(rice_param));
+            let q = input.read_unary()?;
+            let r = input.read_gt_u8_leq_u16(rice_param)?;
             *sample = rice_to_signed((q << rice_param) | r);
         }
     }
@@ -359,7 +359,7 @@ fn decode_rice2_partition<R: ReadBytes>(input: &mut Bitstream<R>,
                                         buffer: &mut [i32])
                                         -> Result<()> {
     // A Rice2 partition, starts with a 5-bit Rice parameter.
-    let rice_param = try!(input.read_leq_u8(5)) as u32;
+    let rice_param = input.read_leq_u8(5)? as u32;
 
     // All ones is an escape code that indicates unencoded binary.
     if rice_param == 0b11111 {
@@ -368,11 +368,11 @@ fn decode_rice2_partition<R: ReadBytes>(input: &mut Bitstream<R>,
 
     for sample in buffer.iter_mut() {
         // First part of the sample is the quotient, unary encoded.
-        let q = try!(input.read_unary());
+        let q = input.read_unary()?;
 
         // Next is the remainder, in rice_param bits. Because at this
         // point rice_param is at most 30, we can safely read into a u32.
-        let r = try!(input.read_leq_u32(rice_param));
+        let r = input.read_leq_u32(rice_param)?;
         *sample = rice_to_signed((q << rice_param) | r);
     }
 
@@ -383,7 +383,7 @@ fn decode_constant<R: ReadBytes>(input: &mut Bitstream<R>,
                                  bps: u32,
                                  buffer: &mut [i32])
                                  -> Result<()> {
-    let sample_u32 = try!(input.read_leq_u32(bps));
+    let sample_u32 = input.read_leq_u32(bps)?;
     let sample = extend_sign_u32(sample_u32, bps);
 
     for s in buffer {
@@ -408,7 +408,7 @@ fn decode_verbatim<R: ReadBytes>(input: &mut Bitstream<R>,
 
     // A verbatim block stores samples without encoding whatsoever.
     for s in buffer {
-        *s = extend_sign_u32(try!(input.read_leq_u32(bps)), bps);
+        *s = extend_sign_u32(input.read_leq_u32(bps)?, bps);
     }
 
     Ok(())
@@ -501,16 +501,16 @@ fn decode_fixed<R: ReadBytes>(input: &mut Bitstream<R>,
     }
 
     // There are order * bits per sample unencoded warm-up sample bits.
-    try!(decode_verbatim(input, bps, &mut buffer[..order as usize]));
+    decode_verbatim(input, bps, &mut buffer[..order as usize])?;
 
     // Next up is the residual. We decode into the buffer directly, the
     // predictor contributions will be added in a second pass. The first
     // `order` samples have been decoded already, so continue after that.
-    try!(decode_residual(input,
+    decode_residual(input,
                          buffer.len() as u16,
-                         &mut buffer[order as usize..]));
+                         &mut buffer[order as usize..])?;
 
-    try!(predict_fixed(order, buffer));
+    predict_fixed(order, buffer)?;
 
     Ok(())
 }
@@ -664,10 +664,10 @@ fn decode_lpc<R: ReadBytes>(input: &mut Bitstream<R>,
     }
 
     // There are order * bits per sample unencoded warm-up sample bits.
-    try!(decode_verbatim(input, bps, &mut buffer[..order as usize]));
+    decode_verbatim(input, bps, &mut buffer[..order as usize])?;
 
     // Next are four bits quantised linear predictor coefficient precision - 1.
-    let qlp_precision = try!(input.read_leq_u8(4)) as u32 + 1;
+    let qlp_precision = input.read_leq_u8(4)? as u32 + 1;
 
     // The bit pattern 1111 is invalid.
     if qlp_precision - 1 == 0b1111 {
@@ -676,7 +676,7 @@ fn decode_lpc<R: ReadBytes>(input: &mut Bitstream<R>,
 
     // Next are five bits quantized linear predictor coefficient shift,
     // in signed two's complement. Read 5 bits and then extend the sign bit.
-    let qlp_shift_unsig = try!(input.read_leq_u16(5));
+    let qlp_shift_unsig = input.read_leq_u16(5)?;
     let qlp_shift = extend_sign_u16(qlp_shift_unsig, 5);
 
     // The spec does allow the qlp shift to be negative, but in practice this
@@ -696,16 +696,16 @@ fn decode_lpc<R: ReadBytes>(input: &mut Bitstream<R>,
     let mut coefficients = [0; 32];
     for coef in coefficients[..order as usize].iter_mut().rev() {
         // We can safely read into a u16, qlp_precision is at most 15.
-        let coef_unsig = try!(input.read_leq_u16(qlp_precision));
+        let coef_unsig = input.read_leq_u16(qlp_precision)?;
         *coef = extend_sign_u16(coef_unsig, qlp_precision);
     }
 
     // Next up is the residual. We decode it into the buffer directly, the
     // predictor contributions will be added in a second pass. The first
     // `order` samples have been decoded already, so continue after that.
-    try!(decode_residual(input,
+    decode_residual(input,
                          buffer.len() as u16,
-                         &mut buffer[order as usize..]));
+                         &mut buffer[order as usize..])?;
 
     // In "subset"-compliant files, the LPC order is at most 12. For LPC
     // prediction of such files we have a special fast path that takes advantage

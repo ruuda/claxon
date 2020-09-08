@@ -6,7 +6,7 @@
 // A copy of the License has been included in the root of the repository.
 
 use std::io;
-use input::ReadBytes;
+use crate::input::ReadBytes;
 
 // These tables were taken from the tables in crc.c in libflac.
 
@@ -178,7 +178,7 @@ impl<R: ReadBytes> ReadBytes for Crc16Reader<R> {
 
 #[cfg(test)]
 fn verify_crc8(test_vector: Vec<u8>, result: u8) {
-    use input::BufferedReader;
+    use crate::input::BufferedReader;
     let data = BufferedReader::new(io::Cursor::new(test_vector));
     let mut reader = Crc8Reader::new(data);
     while let Some(_) = reader.read_u8_or_eof().unwrap() {}
@@ -187,7 +187,7 @@ fn verify_crc8(test_vector: Vec<u8>, result: u8) {
 
 #[cfg(test)]
 fn verify_crc16(test_vector: Vec<u8>, result: u16) {
-    use input::BufferedReader;
+    use crate::input::BufferedReader;
     let data = BufferedReader::new(io::Cursor::new(test_vector));
     let mut reader = Crc16Reader::new(data);
     while let Some(_) = reader.read_u8_or_eof().unwrap() {}

@@ -85,15 +85,15 @@ pub trait ReadBytes {
 
     /// Reads two bytes and interprets them as a big-endian 16-bit unsigned integer.
     fn read_be_u16(&mut self) -> io::Result<u16> {
-        let b0 = try!(self.read_u8()) as u16;
-        let b1 = try!(self.read_u8()) as u16;
+        let b0 = self.read_u8()? as u16;
+        let b1 = self.read_u8()? as u16;
         Ok(b0 << 8 | b1)
     }
 
     /// Reads two bytes and interprets them as a big-endian 16-bit unsigned integer.
     fn read_be_u16_or_eof(&mut self) -> io::Result<Option<u16>> {
-        if let Some(b0) = try!(self.read_u8_or_eof()) {
-            if let Some(b1) = try!(self.read_u8_or_eof()) {
+        if let Some(b0) = self.read_u8_or_eof()? {
+            if let Some(b1) = self.read_u8_or_eof()? {
                 return Ok(Some((b0 as u16) << 8 | (b1 as u16)));
             }
         }
@@ -102,27 +102,27 @@ pub trait ReadBytes {
 
     /// Reads three bytes and interprets them as a big-endian 24-bit unsigned integer.
     fn read_be_u24(&mut self) -> io::Result<u32> {
-        let b0 = try!(self.read_u8()) as u32;
-        let b1 = try!(self.read_u8()) as u32;
-        let b2 = try!(self.read_u8()) as u32;
+        let b0 = self.read_u8()? as u32;
+        let b1 = self.read_u8()? as u32;
+        let b2 = self.read_u8()? as u32;
         Ok(b0 << 16 | b1 << 8 | b2)
     }
 
     /// Reads four bytes and interprets them as a big-endian 32-bit unsigned integer.
     fn read_be_u32(&mut self) -> io::Result<u32> {
-        let b0 = try!(self.read_u8()) as u32;
-        let b1 = try!(self.read_u8()) as u32;
-        let b2 = try!(self.read_u8()) as u32;
-        let b3 = try!(self.read_u8()) as u32;
+        let b0 = self.read_u8()? as u32;
+        let b1 = self.read_u8()? as u32;
+        let b2 = self.read_u8()? as u32;
+        let b3 = self.read_u8()? as u32;
         Ok(b0 << 24 | b1 << 16 | b2 << 8 | b3)
     }
 
     /// Reads four bytes and interprets them as a little-endian 32-bit unsigned integer.
     fn read_le_u32(&mut self) -> io::Result<u32> {
-        let b0 = try!(self.read_u8()) as u32;
-        let b1 = try!(self.read_u8()) as u32;
-        let b2 = try!(self.read_u8()) as u32;
-        let b3 = try!(self.read_u8()) as u32;
+        let b0 = self.read_u8()? as u32;
+        let b1 = self.read_u8()? as u32;
+        let b2 = self.read_u8()? as u32;
+        let b3 = self.read_u8()? as u32;
         Ok(b3 << 24 | b2 << 16 | b1 << 8 | b0)
     }
 }
@@ -134,7 +134,7 @@ impl<R: io::Read> ReadBytes for BufferedReader<R>
         if self.pos == self.num_valid {
             // The buffer was depleted, replenish it first.
             self.pos = 0;
-            self.num_valid = try!(self.inner.read(&mut self.buf)) as u32;
+            self.num_valid = self.inner.read(&mut self.buf)? as u32;
 
             if self.num_valid == 0 {
                 return Err(io::Error::new(io::ErrorKind::UnexpectedEof,
@@ -154,14 +154,14 @@ impl<R: io::Read> ReadBytes for BufferedReader<R>
         if self.pos == self.num_valid {
             // The buffer was depleted, try to replenish it first.
             self.pos = 0;
-            self.num_valid = try!(self.inner.read(&mut self.buf)) as u32;
+            self.num_valid = self.inner.read(&mut self.buf)? as u32;
 
             if self.num_valid == 0 {
                 return Ok(None);
             }
         }
 
-        Ok(Some(try!(self.read_u8())))
+        Ok(Some(self.read_u8()?))
     }
 
     fn read_into(&mut self, buffer: &mut [u8]) -> io::Result<()> {
@@ -178,7 +178,7 @@ impl<R: io::Read> ReadBytes for BufferedReader<R>
             if bytes_left > 0 {
                 // Replenish the buffer if there is more to be read.
                 self.pos = 0;
-                self.num_valid = try!(self.inner.read(&mut self.buf)) as u32;
+                self.num_valid = self.inner.read(&mut self.buf)? as u32;
                 if self.num_valid == 0 {
                     return Err(io::Error::new(io::ErrorKind::UnexpectedEof,
                                               "Expected more bytes."))
@@ -199,7 +199,7 @@ impl<R: io::Read> ReadBytes for BufferedReader<R>
             if amount > 0 {
                 // If there is more to skip, refill the buffer first.
                 self.pos = 0;
-                self.num_valid = try!(self.inner.read(&mut self.buf)) as u32;
+                self.num_valid = self.inner.read(&mut self.buf)? as u32;
 
                 if self.num_valid == 0 {
                     return Err(io::Error::new(io::ErrorKind::UnexpectedEof,
@@ -448,7 +448,7 @@ impl<R: ReadBytes> Bitstream<R> {
 
         // If no bits are left, we will need to read the next byte.
         let result = if self.bits_left == 0 {
-            let fresh_byte = try!(self.reader.read_u8());
+            let fresh_byte = self.reader.read_u8()?;
 
             // What remains later are the 7 least significant bits.
             self.data = fresh_byte << 1;
@@ -495,7 +495,7 @@ impl<R: ReadBytes> Bitstream<R> {
 
             // Continue reading bytes until we encounter a one.
             loop {
-                let fresh_byte = try!(self.reader.read_u8());
+                let fresh_byte = self.reader.read_u8()?;
                 let zeros = fresh_byte.leading_zeros();
                 n = n + zeros;
                 if zeros < 8 {
@@ -523,7 +523,7 @@ impl<R: ReadBytes> Bitstream<R> {
             let msb = self.data;
 
             // Read a single byte.
-            self.data = try!(self.reader.read_u8());
+            self.data = self.reader.read_u8()?;
 
             // From the next byte, we take the additional bits that we need.
             // Those start at the most significant bit, so we need to shift so
@@ -570,7 +570,7 @@ impl<R: ReadBytes> Bitstream<R> {
         // Continue reading the next bits, because no matter how many bits were
         // still left, there were less than 10.
         let bits_to_read = bits - self.bits_left;
-        let fresh_byte = try!(self.reader.read_u8()) as u32;
+        let fresh_byte = self.reader.read_u8()? as u32;
         let lsb = if bits_to_read >= 8 {
             fresh_byte << (bits_to_read - 8)
         } else {
@@ -587,7 +587,7 @@ impl<R: ReadBytes> Bitstream<R> {
             combined
         } else {
             // We need to read one more byte to get the final bits.
-            let fresher_byte = try!(self.reader.read_u8()) as u32;
+            let fresher_byte = self.reader.read_u8()? as u32;
             let lsb = fresher_byte >> (16 - bits_to_read);
 
             // Update the reader state. The wrapping shift is appropriate for
@@ -611,12 +611,12 @@ impl<R: ReadBytes> Bitstream<R> {
         // possible, but it avoids duplicating the complexity of `read_leq_u8`.
 
         if bits <= 8 {
-            let result = try!(self.read_leq_u8(bits));
+            let result = self.read_leq_u8(bits)?;
             Ok(result as u16)
         } else {
             // First read the 8 most significant bits, then read what is left.
-            let msb = try!(self.read_leq_u8(8)) as u16;
-            let lsb = try!(self.read_leq_u8(bits - 8)) as u16;
+            let msb = self.read_leq_u8(8)? as u16;
+            let lsb = self.read_leq_u8(bits - 8)? as u16;
             Ok((msb << (bits - 8)) | lsb)
         }
     }
@@ -631,12 +631,12 @@ impl<R: ReadBytes> Bitstream<R> {
         // possible, but it avoids duplicating the complexity of `read_leq_u8`.
 
         if bits <= 16 {
-            let result = try!(self.read_leq_u16(bits));
+            let result = self.read_leq_u16(bits)?;
             Ok(result as u32)
         } else {
             // First read the 16 most significant bits, then read what is left.
-            let msb = try!(self.read_leq_u16(16)) as u32;
-            let lsb = try!(self.read_leq_u16(bits - 16)) as u32;
+            let msb = self.read_leq_u16(16)? as u32;
+            let lsb = self.read_leq_u16(bits - 16)? as u32;
             Ok((msb << (bits - 16)) | lsb)
         }
     }
