@@ -9,8 +9,8 @@
 
 use std::i32;
 
-use crate::crc::{Crc8Reader, Crc16Reader};
-use crate::error::{Error, Result, fmt_err};
+use crate::crc::{Crc16Reader, Crc8Reader};
+use crate::error::{fmt_err, Error, Result};
 use crate::input::{Bitstream, ReadBytes};
 use crate::subframe;
 
@@ -106,13 +106,13 @@ fn read_var_length_int<R: ReadBytes>(input: &mut R) -> Result<u64> {
 
 #[test]
 fn verify_read_var_length_int() {
-    use std::io;
     use crate::error::Error;
     use crate::input::BufferedReader;
+    use std::io;
 
-    let mut reader = BufferedReader::new(
-        io::Cursor::new(vec![0x24, 0xc2, 0xa2, 0xe2, 0x82, 0xac, 0xf0, 0x90, 0x8d,
-                            0x88, 0xc2, 0x00, 0x80]));
+    let mut reader = BufferedReader::new(io::Cursor::new(vec![
+        0x24, 0xc2, 0xa2, 0xe2, 0x82, 0xac, 0xf0, 0x90, 0x8d, 0x88, 0xc2, 0x00, 0x80,
+    ]));
 
     assert_eq!(read_var_length_int(&mut reader).unwrap(), 0x24);
     assert_eq!(read_var_length_int(&mut reader).unwrap(), 0xa2);
@@ -120,12 +120,16 @@ fn verify_read_var_length_int() {
     assert_eq!(read_var_length_int(&mut reader).unwrap(), 0x010348);
 
     // Two-byte integer with invalid continuation byte should fail.
-    assert_eq!(read_var_length_int(&mut reader).err().unwrap(),
-               Error::FormatError("invalid variable-length integer"));
+    assert_eq!(
+        read_var_length_int(&mut reader).err().unwrap(),
+        Error::FormatError("invalid variable-length integer")
+    );
 
     // Continuation byte can never be the first byte.
-    assert_eq!(read_var_length_int(&mut reader).err().unwrap(),
-               Error::FormatError("invalid variable-length integer"));
+    assert_eq!(
+        read_var_length_int(&mut reader).err().unwrap(),
+        Error::FormatError("invalid variable-length integer")
+    );
 }
 
 fn read_frame_header_or_eof<R: ReadBytes>(input: &mut R) -> Result<Option<FrameHeader>> {
@@ -202,7 +206,7 @@ fn read_frame_header_or_eof<R: ReadBytes>(input: &mut R) -> Result<Option<FrameH
         0b1001 => sample_rate = Some(44_100),
         0b1010 => sample_rate = Some(48_000),
         0b1011 => sample_rate = Some(96_000),
-        0b1100 => read_8bit_sr = true, // Read Hz from end of header.
+        0b1100 => read_8bit_sr = true,  // Read Hz from end of header.
         0b1101 => read_16bit_sr = true, // Read Hz from end of header.
         0b1110 => read_16bit_sr_ten = true, // Read tens of Hz from end of header.
         // 1111 is invalid to prevent sync-fooling.
@@ -335,8 +339,12 @@ fn decode_left_side(buffer: &mut [i32]) {
 
 #[test]
 fn verify_decode_left_side() {
-    let mut buffer = vec![2, 5, 83, 113, 127, -63, -45, -15, 7, 38, 142, 238, 0, -152, -52, -18];
-    let result = vec![2, 5, 83, 113, 127, -63, -45, -15, -5, -33, -59, -125, 127, 89, 7, 3];
+    let mut buffer = vec![
+        2, 5, 83, 113, 127, -63, -45, -15, 7, 38, 142, 238, 0, -152, -52, -18,
+    ];
+    let result = vec![
+        2, 5, 83, 113, 127, -63, -45, -15, -5, -33, -59, -125, 127, 89, 7, 3,
+    ];
     decode_left_side(&mut buffer);
     assert_eq!(buffer, result);
 }
@@ -361,8 +369,12 @@ fn decode_right_side(buffer: &mut [i32]) {
 
 #[test]
 fn verify_decode_right_side() {
-    let mut buffer = vec![7, 38, 142, 238, 0, -152, -52, -18, -5, -33, -59, -125, 127, 89, 7, 3];
-    let result = vec![2, 5, 83, 113, 127, -63, -45, -15, -5, -33, -59, -125, 127, 89, 7, 3];
+    let mut buffer = vec![
+        7, 38, 142, 238, 0, -152, -52, -18, -5, -33, -59, -125, 127, 89, 7, 3,
+    ];
+    let result = vec![
+        2, 5, 83, 113, 127, -63, -45, -15, -5, -33, -59, -125, 127, 89, 7, 3,
+    ];
     decode_right_side(&mut buffer);
     assert_eq!(buffer, result);
 }
@@ -390,10 +402,12 @@ fn decode_mid_side(buffer: &mut [i32]) {
 
 #[test]
 fn verify_decode_mid_side() {
-    let mut buffer = vec!(-2, -14,  12,   -6, 127,   13, -19,  -6,
-                           7,  38, 142,  238,   0, -152, -52, -18);
-    let result =      vec!(2,   5,  83,  113, 127,  -63, -45, -15,
-                          -5, -33, -59, -125, 127,   89,   7,   3);
+    let mut buffer = vec![
+        -2, -14, 12, -6, 127, 13, -19, -6, 7, 38, 142, 238, 0, -152, -52, -18,
+    ];
+    let result = vec![
+        2, 5, 83, 113, 127, -63, -45, -15, -5, -33, -59, -125, 127, 89, 7, 3,
+    ];
     decode_mid_side(&mut buffer);
     assert_eq!(buffer, result);
 }
@@ -650,9 +664,7 @@ fn ensure_buffer_len_returns_buffer_with_new_len() {
 impl<R: ReadBytes> FrameReader<R> {
     /// Creates a new frame reader that will yield at least one element.
     pub fn new(input: R) -> FrameReader<R> {
-        FrameReader {
-            input: input,
-        }
+        FrameReader { input: input }
     }
 
     /// Decodes the next frame or returns an error if the data was invalid.
@@ -705,17 +717,13 @@ impl<R: ReadBytes> FrameReader<R> {
             match header.channel_assignment {
                 ChannelAssignment::Independent(n_ch) => {
                     for ch in 0..n_ch as usize {
-                        subframe::decode(&mut bitstream,
-                                              bps,
-                                              &mut buffer[ch * bs..(ch + 1) * bs])?;
+                        subframe::decode(&mut bitstream, bps, &mut buffer[ch * bs..(ch + 1) * bs])?;
                     }
                 }
                 ChannelAssignment::LeftSideStereo => {
                     // The side channel has one extra bit per sample.
                     subframe::decode(&mut bitstream, bps, &mut buffer[..bs])?;
-                    subframe::decode(&mut bitstream,
-                                          bps + 1,
-                                          &mut buffer[bs..bs * 2])?;
+                    subframe::decode(&mut bitstream, bps + 1, &mut buffer[bs..bs * 2])?;
 
                     // Then decode the side channel into the right channel.
                     decode_left_side(&mut buffer[..bs * 2]);
@@ -732,9 +740,7 @@ impl<R: ReadBytes> FrameReader<R> {
                     // Decode mid as the first channel, then side with one
                     // extra bitp per sample.
                     subframe::decode(&mut bitstream, bps, &mut buffer[..bs])?;
-                    subframe::decode(&mut bitstream,
-                                          bps + 1,
-                                          &mut buffer[bs..bs * 2])?;
+                    subframe::decode(&mut bitstream, bps + 1, &mut buffer[bs..bs * 2])?;
 
                     // Then decode mid-side channel into left-right.
                     decode_mid_side(&mut buffer[..bs * 2]);

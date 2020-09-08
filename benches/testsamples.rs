@@ -53,7 +53,9 @@ fn bench_decode<P: AsRef<Path>>(path: P, bencher: &mut Bencher) {
         {
             let mut blocks = reader.blocks();
             let stolen_buffer = std::mem::replace(&mut buffer, Vec::new());
-            let block = blocks.read_next_or_eof(stolen_buffer).expect("decode error");
+            let block = blocks
+                .read_next_or_eof(stolen_buffer)
+                .expect("decode error");
             if let Some(b) = block {
                 bytes += b.len() * (bps / 8);
                 iterations += 1;
