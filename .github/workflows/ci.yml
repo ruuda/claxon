@@ -1,0 +1,32 @@
+name: CI 
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install development dependencies
+        run: sudo apt-get -qy install flac
+
+      - name: Update test samples
+        run: |
+          cd testsamples/ && ./populate.sh && cd ..
+
+      - name: Test
+        uses: actions/checkout@v2
+        run: cargo test --all --verbose
+
+      - name: Cache multiple paths
+        uses: actions/cache@v2
+        with:
+          path: |
+            fuzz_corpus
+            testsamples
+            ~/.cargo
+            target
+          key: ${{ runner.os }}-${{ hashFiles('**/lockfiles') }}
