@@ -64,15 +64,7 @@ impl fmt::Display for Error {
 }
 
 impl error::Error for Error {
-    fn description(&self) -> &str {
-        match *self {
-            Error::IoError(ref err) => err.description(),
-            Error::FormatError(reason) => reason,
-            Error::Unsupported(_) => "unsupported feature",
-        }
-    }
-
-    fn cause(&self) -> Option<&dyn error::Error> {
+    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         match *self {
             Error::IoError(ref err) => Some(err),
             Error::FormatError(_) => None,
