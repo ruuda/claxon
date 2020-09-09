@@ -74,7 +74,7 @@ impl<R: ReadBytes> Crc8Reader<R> {
     /// Wraps the reader with a CRC-8 computing reader with initial value 0.
     pub fn new(inner: R) -> Crc8Reader<R> {
         Crc8Reader {
-            inner: inner,
+            inner,
             state: 0,
         }
     }
@@ -94,7 +94,7 @@ impl<R: ReadBytes> Crc16Reader<R> {
     /// Wraps the reader with a CRC-16 computing reader with initial value 0.
     pub fn new(inner: R) -> Crc16Reader<R> {
         Crc16Reader {
-            inner: inner,
+            inner,
             state: 0,
         }
     }
