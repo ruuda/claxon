@@ -594,7 +594,7 @@ impl<R: ReadBytes> Iterator for MetadataBlockReader<R> {
 
             // After a failure, no more attempts to read will be made,
             // because we don't know where we are in the stream.
-            if !block.is_ok() {
+            if block.is_err() {
                 self.done = true;
             }
 
