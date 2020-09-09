@@ -19,10 +19,10 @@ use test::Bencher;
 fn refresh_reader(reader: &mut claxon::FlacReader<Cursor<Vec<u8>>>) {
     // We want to replace the reader in-place, but in order to do so, we must
     // first destruct it. Rust does not allow us to do that without providing a
-    // replacement, so we temporarily put `mem::uninitialized()` in there. At
+    // replacement, so we temporarily put `mem::zeroed()` in there. At
     // the end, that memory is released without running a destructor with
     // `mem::forget()`.
-    let fake_reader = unsafe { std::mem::uninitialized() };
+    let fake_reader = unsafe { std::mem::zeroed() };
     let stolen_reader = std::mem::replace(reader, fake_reader);
     let cursor = stolen_reader.into_inner();
     let vec = cursor.into_inner();
