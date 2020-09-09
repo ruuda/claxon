@@ -289,7 +289,7 @@ fn decode_residual<R: ReadBytes>(
             for _ in 0..n_partitions {
                 let slice = &mut buffer[start..start + len as usize];
                 decode_rice_partition(input, slice)?;
-                start = start + len as usize;
+                start += len as usize;
                 len = n_samples_per_partition;
             }
         }
@@ -299,7 +299,7 @@ fn decode_residual<R: ReadBytes>(
             for _ in 0..n_partitions {
                 let slice = &mut buffer[start..start + len as usize];
                 decode_rice2_partition(input, slice)?;
-                start = start + len as usize;
+                start += len as usize;
                 len = n_samples_per_partition;
             }
         }
@@ -557,7 +557,7 @@ fn predict_lpc_low_order(raw_coefficients: &[i16], qlp_shift: i16, buffer: &mut 
         let mut i = 12 - order;
         for c in raw_coefficients {
             buf[i] = *c as i64;
-            i = i + 1;
+            i += 1;
         }
         buf
     };
