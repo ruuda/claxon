@@ -135,8 +135,8 @@ impl<R: ReadBytes> ReadBytes for Crc8Reader<R> {
         }
     }
 
-    fn read_into(&mut self, _buffer: &mut [u8]) -> io::Result<()> {
-        panic!("CRC reader does not support read_into.");
+    fn read_vec(&mut self, _len: usize) -> io::Result<Vec<u8>> {
+        panic!("CRC reader does not support read_vec.");
     }
 
     fn skip(&mut self, _amount: u32) -> io::Result<()> {
@@ -167,8 +167,8 @@ impl<R: ReadBytes> ReadBytes for Crc16Reader<R> {
         }
     }
 
-    fn read_into(&mut self, _buffer: &mut [u8]) -> io::Result<()> {
-        panic!("CRC reader does not support read_into.");
+    fn read_vec(&mut self, _len: usize) -> io::Result<Vec<u8>> {
+        panic!("CRC reader does not support read_vec.");
     }
 
     fn skip(&mut self, _amount: u32) -> io::Result<()> {

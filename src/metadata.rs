@@ -9,8 +9,9 @@
 
 use error::{Error, Result, fmt_err};
 use input::ReadBytes;
-use std::str;
+use std::mem;
 use std::slice;
+use std::str;
 
 #[derive(Clone, Copy)]
 struct MetadataBlockHeader {
@@ -352,8 +353,11 @@ fn read_streaminfo_block<R: ReadBytes>(input: &mut R) -> Result<StreamInfo> {
     let n_samples = (n_samples_msb as u64) << 32 | n_samples_lsb as u64;
 
     // Next are 128 bits (16 bytes) of MD5 signature.
+    // TODO: Try and see if expanding this into 16 read_u8 calls is any faster.
     let mut md5sum = [0u8; 16];
-    try!(input.read_into(&mut md5sum));
+    let md5sum_vec = try!(input.read_vec(16));
+    md5sum.copy_from_slice(&md5sum_vec[..]);
+    mem::drop(md5sum_vec);
 
     // Lower bounds can never be larger than upper bounds. Note that 0 indicates
     // unknown for the frame size. Also, the block size must be at least 16.
@@ -429,13 +433,7 @@ fn read_vorbis_comment_block<R: ReadBytes>(input: &mut R, length: u32) -> Result
     // 32-bit vendor string length, and comment count.
     let vendor_len = try!(input.read_le_u32());
     if vendor_len > length - 8 { return fmt_err("vendor string too long") }
-    let mut vendor_bytes = Vec::with_capacity(vendor_len as usize);
-
-    // We can safely set the lenght of the vector here; the uninitialized memory
-    // is not exposed. If `read_into` succeeds, it will have overwritten all
-    // bytes. If not, an error is returned and the memory is never exposed.
-    unsafe { vendor_bytes.set_len(vendor_len as usize); }
-    try!(input.read_into(&mut vendor_bytes));
+    let vendor_bytes = try!(input.read_vec(vendor_len as usize));
     let vendor = try!(String::from_utf8(vendor_bytes));
 
     // Next up is the number of comments. Because every comment is at least 4
@@ -469,11 +467,7 @@ fn read_vorbis_comment_block<R: ReadBytes>(input: &mut R, length: u32) -> Result
             continue;
         }
 
-        // For the same reason as above, setting the length is safe here.
-        let mut comment_bytes = Vec::with_capacity(comment_len as usize);
-        unsafe { comment_bytes.set_len(comment_len as usize); }
-        try!(input.read_into(&mut comment_bytes));
-
+        let comment_bytes = try!(input.read_vec(comment_len as usize));
         bytes_left -= comment_len;
 
         if let Some(sep_index) = comment_bytes.iter().position(|&x| x == b'=') {
@@ -537,13 +531,7 @@ fn read_application_block<R: ReadBytes>(input: &mut R, length: u32) -> Result<(u
     let id = try!(input.read_be_u32());
 
     // Four bytes of the block have been used for the ID, the rest is payload.
-    // Create a vector of uninitialized memory, and read the block into it. The
-    // uninitialized memory is never exposed: read_into will either fill the
-    // buffer completely, or return an err, in which case the memory is not
-    // exposed.
-    let mut data = Vec::with_capacity(length as usize - 4);
-    unsafe { data.set_len(length as usize - 4); }
-    try!(input.read_into(&mut data));
+    let data = try!(input.read_vec(length as usize - 4));
 
     Ok((id, data))
 }

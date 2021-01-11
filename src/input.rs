@@ -75,8 +75,8 @@ pub trait ReadBytes {
     /// Reads a single byte, not failing on EOF.
     fn read_u8_or_eof(&mut self) -> io::Result<Option<u8>>;
 
-    /// Reads until the provided buffer is full.
-    fn read_into(&mut self, buffer: &mut [u8]) -> io::Result<()>;
+    /// Read exactly `len` bytes into a new vector.
+    fn read_vec(&mut self, len: usize) -> io::Result<Vec<u8>>;
 
     /// Skips over the specified number of bytes.
     ///
@@ -164,8 +164,16 @@ impl<R: io::Read> ReadBytes for BufferedReader<R>
         Ok(Some(try!(self.read_u8())))
     }
 
-    fn read_into(&mut self, buffer: &mut [u8]) -> io::Result<()> {
-        let mut bytes_left = buffer.len();
+    fn read_vec(&mut self, len: usize) -> io::Result<Vec<u8>> {
+        // Watch out, we allocate a vector of uninitialized memory here. We only
+        // call `copy_from_slice` on this vector, it is never read from. We only
+        // return the vector if bytes_left is zero, and bytes_left can only
+        // reach zero if we fully overwrote it. Therefore, the uninitialized
+        // memory is not exposed outside of this function.
+        let mut buffer = Vec::with_capacity(len);
+        unsafe { buffer.set_len(len); }
+
+        let mut bytes_left = len;
 
         while bytes_left > 0 {
             let from = buffer.len() - bytes_left;
@@ -186,7 +194,7 @@ impl<R: io::Read> ReadBytes for BufferedReader<R>
             }
         }
 
-        Ok(())
+        Ok(buffer)
     }
 
     fn skip(&mut self, mut amount: u32) -> io::Result<()> {
@@ -222,8 +230,8 @@ impl<'r, R: ReadBytes> ReadBytes for &'r mut R {
         (*self).read_u8_or_eof()
     }
 
-    fn read_into(&mut self, buffer: &mut [u8]) -> io::Result<()> {
-        (*self).read_into(buffer)
+    fn read_vec(&mut self, len: usize) -> io::Result<Vec<u8>> {
+        (*self).read_vec(len)
     }
 
     fn skip(&mut self, amount: u32) -> io::Result<()> {
@@ -253,14 +261,13 @@ impl<T: AsRef<[u8]>> ReadBytes for io::Cursor<T> {
         }
     }
 
-    fn read_into(&mut self, buffer: &mut [u8]) -> io::Result<()> {
+    fn read_vec(&mut self, len: usize) -> io::Result<Vec<u8>> {
         let pos = self.position();
-        if pos + buffer.len() as u64 <= self.get_ref().as_ref().len() as u64 {
+        if pos + len as u64 <= self.get_ref().as_ref().len() as u64 {
             let start = pos as usize;
-            let end = pos as usize + buffer.len();
-            buffer.copy_from_slice(&self.get_ref().as_ref()[start..end]);
-            self.set_position(pos + buffer.len() as u64);
-            Ok(())
+            let end = pos as usize + len;
+            self.set_position(pos + len as u64);
+            Ok(self.get_ref().as_ref()[start..end].to_vec())
         } else {
             Err(io::Error::new(io::ErrorKind::UnexpectedEof, "unexpected eof"))
         }
@@ -278,27 +285,21 @@ impl<T: AsRef<[u8]>> ReadBytes for io::Cursor<T> {
 }
 
 #[test]
-fn verify_read_into_buffered_reader() {
+fn verify_read_vec_buffered_reader() {
     let mut reader = BufferedReader::new(io::Cursor::new(vec![2u8, 3, 5, 7, 11, 13, 17, 19, 23]));
-    let mut buf1 = [0u8; 3];
-    let mut buf2 = [0u8; 5];
-    let mut buf3 = [0u8; 2];
-    reader.read_into(&mut buf1).ok().unwrap();
-    reader.read_into(&mut buf2).ok().unwrap();
-    assert!(reader.read_into(&mut buf3).is_err());
+    let buf1 = reader.read_vec(3).ok().unwrap();
+    let buf2 = reader.read_vec(5).ok().unwrap();
+    assert!(reader.read_vec(2).is_err());
     assert_eq!(&buf1[..], &[2u8, 3, 5]);
     assert_eq!(&buf2[..], &[7u8, 11, 13, 17, 19]);
 }
 
 #[test]
-fn verify_read_into_cursor() {
+fn verify_read_vec_cursor() {
     let mut cursor = io::Cursor::new(vec![2u8, 3, 5, 7, 11, 13, 17, 19, 23]);
-    let mut buf1 = [0u8; 3];
-    let mut buf2 = [0u8; 5];
-    let mut buf3 = [0u8; 2];
-    cursor.read_into(&mut buf1).ok().unwrap();
-    cursor.read_into(&mut buf2).ok().unwrap();
-    assert!(cursor.read_into(&mut buf3).is_err());
+    let buf1 = cursor.read_vec(3).ok().unwrap();
+    let buf2 = cursor.read_vec(5).ok().unwrap();
+    assert!(cursor.read_vec(2).is_err());
     assert_eq!(&buf1[..], &[2u8, 3, 5]);
     assert_eq!(&buf2[..], &[7u8, 11, 13, 17, 19]);
 }
