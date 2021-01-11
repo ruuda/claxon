@@ -177,7 +177,11 @@ pub struct FlacSamples<R: ReadBytes> {
     has_failed: bool,
 }
 
-// TODO: Add a `FlacIntoSamples`.
+/// An iterator that yields samples read from a `FlacReader`.
+pub struct FlacIntoSamples<R: ReadBytes> {
+    // This works because `ReadBytes` is implemented for both `&mut R` and `R`.
+    inner: FlacSamples<R>,
+}
 
 fn read_stream_header<R: ReadBytes>(input: &mut R) -> Result<()> {
     // A FLAC stream starts with a 32-bit header 'fLaC' (big endian).
@@ -407,6 +411,29 @@ impl<R: io::Read> FlacReader<R> {
         }
     }
 
+    /// Same as `samples`, but takes ownership of the `FlacReader`.
+    ///
+    /// See `samples()` for more info.
+    pub fn into_samples(self) -> FlacIntoSamples<BufferedReader<R>> {
+        match self.input {
+            FlacReaderState::Full(inp) => {
+                FlacIntoSamples {
+                    inner: FlacSamples {
+                        frame_reader: frame::FrameReader::new(inp),
+                        block: Block::empty(),
+                        sample: 0,
+                        channel: 0,
+                        has_failed: false,
+                    }
+                }
+            }
+            FlacReaderState::MetadataOnly(..) => {
+                panic!("FlacReaderOptions::metadata_only must be false \
+                       to be able to use FlacReader::into_samples()")
+            }
+        }
+    }
+
     /// Destroys the FLAC reader and returns the underlying reader.
     ///
     /// Because the reader employs buffering internally, anything in the buffer
@@ -489,5 +516,17 @@ impl<R: ReadBytes> Iterator for FlacSamples<R> {
         }
 
         Some(Ok(self.block.sample(self.channel, self.sample)))
+    }
+}
+
+impl<R: ReadBytes> Iterator for FlacIntoSamples<R> {
+    type Item = Result<i32>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.inner.next()
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.inner.size_hint()
     }
 }
