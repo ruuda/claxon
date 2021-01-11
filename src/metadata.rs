@@ -429,12 +429,7 @@ fn read_vorbis_comment_block<R: ReadBytes>(input: &mut R, length: u32) -> Result
     // 32-bit vendor string length, and comment count.
     let vendor_len = try!(input.read_le_u32());
     if vendor_len > length - 8 { return fmt_err("vendor string too long") }
-    let mut vendor_bytes = Vec::with_capacity(vendor_len as usize);
-
-    // We can safely set the lenght of the vector here; the uninitialized memory
-    // is not exposed. If `read_into` succeeds, it will have overwritten all
-    // bytes. If not, an error is returned and the memory is never exposed.
-    unsafe { vendor_bytes.set_len(vendor_len as usize); }
+    let mut vendor_bytes = vec![0; vendor_len as usize];
     try!(input.read_into(&mut vendor_bytes));
     let vendor = try!(String::from_utf8(vendor_bytes));
 
@@ -469,9 +464,7 @@ fn read_vorbis_comment_block<R: ReadBytes>(input: &mut R, length: u32) -> Result
             continue;
         }
 
-        // For the same reason as above, setting the length is safe here.
-        let mut comment_bytes = Vec::with_capacity(comment_len as usize);
-        unsafe { comment_bytes.set_len(comment_len as usize); }
+        let mut comment_bytes = vec![0; comment_len as usize];
         try!(input.read_into(&mut comment_bytes));
 
         bytes_left -= comment_len;
@@ -537,12 +530,8 @@ fn read_application_block<R: ReadBytes>(input: &mut R, length: u32) -> Result<(u
     let id = try!(input.read_be_u32());
 
     // Four bytes of the block have been used for the ID, the rest is payload.
-    // Create a vector of uninitialized memory, and read the block into it. The
-    // uninitialized memory is never exposed: read_into will either fill the
-    // buffer completely, or return an err, in which case the memory is not
-    // exposed.
-    let mut data = Vec::with_capacity(length as usize - 4);
-    unsafe { data.set_len(length as usize - 4); }
+    // Create a vector of zeroed memory, and read the block into it.
+    let mut data = vec![0; length as usize - 4];
     try!(input.read_into(&mut data));
 
     Ok((id, data))
