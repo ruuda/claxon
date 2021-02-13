@@ -51,7 +51,7 @@ impl<'a, R: 'a + io::Read> Drop for EmbeddedReader<'a, R> {
 }
 
 /// Provides convenience methods to make input less cumbersome.
-pub trait ReadBytes : io::Read {
+pub trait ReadBytes: io::Read {
     /// Skips over the specified number of bytes.
     ///
     /// For a buffered reader, this can help a lot by just bumping a pointer.
@@ -68,7 +68,10 @@ pub trait ReadBytes : io::Read {
             let n_left = amount as usize - n_read_total;
             let n_read = self.read(&mut buffer[..cmp::min(n_left, 512)])?;
             if n_read == 0 {
-                let err = io::Error::new(io::ErrorKind::UnexpectedEof, "Expected more bytes to skip over.");
+                let err = io::Error::new(
+                    io::ErrorKind::UnexpectedEof,
+                    "Expected more bytes to skip over.",
+                );
                 return Err(err);
             }
             n_read_total += n_read;
@@ -138,7 +141,7 @@ pub trait ReadBytes : io::Read {
     }
 }
 
-impl<R: io::Read> ReadBytes for R { }
+impl<R: io::Read> ReadBytes for R {}
 
 #[test]
 fn verify_read_u8_cursor() {
@@ -321,8 +324,8 @@ impl<R: ReadBytes> Bitstream<R> {
             // From the next byte, we take the additional bits that we need.
             // Those start at the most significant bit, so we need to shift so
             // that it does not overlap with what we have already.
-            let lsb = (self.data & Bitstream::<R>::mask_u8(bits - self.bits_left))
-                >> self.bits_left;
+            let lsb = (self.data & Bitstream::<R>::mask_u8(bits - self.bits_left)) >>
+                self.bits_left;
 
             // Shift out the bits that we have consumed.
             self.data = shift_left(self.data, bits - self.bits_left);
@@ -477,7 +480,12 @@ fn verify_read_bit() {
 #[test]
 fn verify_read_unary() {
     let data = io::Cursor::new(vec![
-        0b1010_0100, 0b1000_0000, 0b0010_0000, 0b0000_0000, 0b0000_1010]);
+        0b1010_0100,
+        0b1000_0000,
+        0b0010_0000,
+        0b0000_0000,
+        0b0000_1010,
+    ]);
     let mut bits = Bitstream::new(data);
 
     assert_eq!(bits.read_unary().unwrap(), 0);
@@ -499,14 +507,16 @@ fn verify_read_unary() {
 
 #[test]
 fn verify_read_leq_u8() {
-    let data = io::Cursor::new(vec![0b1010_0101,
-                                    0b1110_0001,
-                                    0b1101_0010,
-                                    0b0101_0101,
-                                    0b0111_0011,
-                                    0b0011_1111,
-                                    0b1010_1010,
-                                    0b0000_1100]);
+    let data = io::Cursor::new(vec![
+        0b1010_0101,
+        0b1110_0001,
+        0b1101_0010,
+        0b0101_0101,
+        0b0111_0011,
+        0b0011_1111,
+        0b1010_1010,
+        0b0000_1100,
+    ]);
     let mut bits = Bitstream::new(data);
 
     assert_eq!(bits.read_leq_u8(0).unwrap(), 0);
@@ -531,7 +541,13 @@ fn verify_read_leq_u8() {
 
 #[test]
 fn verify_read_gt_u8_get_u16() {
-    let data = io::Cursor::new(vec![0b1010_0101, 0b1110_0001, 0b1101_0010, 0b0101_0101, 0b1111_0000]);
+    let data = io::Cursor::new(vec![
+        0b1010_0101,
+        0b1110_0001,
+        0b1101_0010,
+        0b0101_0101,
+        0b1111_0000,
+    ]);
     let mut bits = Bitstream::new(data);
 
     assert_eq!(bits.read_gt_u8_leq_u16(10).unwrap(), 0b1010_0101_11);

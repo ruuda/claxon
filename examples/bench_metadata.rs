@@ -36,8 +36,9 @@ fn main() {
             for _ in 0..10 {
                 let file = fs::File::open(path).expect("Failed to open file");
                 let mut reader = io::BufReader::new(file);
-                let vc = claxon::read_vorbis_comment(&mut reader)
-                    .expect("Failed to read Vorbis comment");
+                let vc = claxon::read_vorbis_comment(&mut reader).expect(
+                    "Failed to read Vorbis comment",
+                );
 
                 // Note that these are not optimized away even though the results
                 // are not used, because the expectation may fail.
@@ -79,5 +80,12 @@ fn main() {
     let p10_mibs = bytes_per_sec[10 * bytes_per_sec.len() / 100] / (1024.0 * 1024.0);
 
     // Output numbers compatible with tools/compare_benches.r.
-    println!("{:>6.2} {:>6.2} {:>6.2} {:>6.2} {:>6.2}", p10, p50, p90, mean, p10_mibs);
+    println!(
+        "{:>6.2} {:>6.2} {:>6.2} {:>6.2} {:>6.2}",
+        p10,
+        p50,
+        p90,
+        mean,
+        p10_mibs
+    );
 }

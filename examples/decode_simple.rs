@@ -31,7 +31,9 @@ fn decode_file(fname: &Path) {
 
     for opt_sample in reader.samples() {
         let sample = opt_sample.expect("failed to decode FLAC stream");
-        wav_writer.write_sample(sample).expect("failed to write wav file");
+        wav_writer.write_sample(sample).expect(
+            "failed to write wav file",
+        );
     }
 }
 

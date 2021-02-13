@@ -293,7 +293,7 @@ impl<R: io::Read> FlacReader<R> {
                 sample: 0,
                 channel: 0,
                 has_failed: false,
-            }
+            },
         }
     }
 
@@ -340,7 +340,9 @@ impl<R: io::Read> Iterator for FlacSamples<R> {
                 // reuse the current buffer to decode again.
                 let current_block = mem::replace(&mut self.block, Block::empty());
 
-                match self.frame_reader.read_next_or_eof(current_block.into_buffer()) {
+                match self.frame_reader.read_next_or_eof(
+                    current_block.into_buffer(),
+                ) {
                     Ok(Some(next_block)) => {
                         self.block = next_block;
                     }

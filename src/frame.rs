@@ -121,12 +121,16 @@ fn verify_read_var_length_int() {
     assert_eq!(read_var_length_int(&mut reader).unwrap(), 0x010348);
 
     // Two-byte integer with invalid continuation byte should fail.
-    assert_eq!(read_var_length_int(&mut reader).err().unwrap(),
-               Error::FormatError("invalid variable-length integer"));
+    assert_eq!(
+        read_var_length_int(&mut reader).err().unwrap(),
+        Error::FormatError("invalid variable-length integer")
+    );
 
     // Continuation byte can never be the first byte.
-    assert_eq!(read_var_length_int(&mut reader).err().unwrap(),
-               Error::FormatError("invalid variable-length integer"));
+    assert_eq!(
+        read_var_length_int(&mut reader).err().unwrap(),
+        Error::FormatError("invalid variable-length integer")
+    );
 }
 
 fn read_frame_header_or_eof<R: io::Read>(input: &mut R) -> Result<Option<FrameHeader>> {
@@ -651,9 +655,7 @@ fn ensure_buffer_len_returns_buffer_with_new_len() {
 impl<R: io::Read> FrameReader<R> {
     /// Creates a new frame reader that will yield at least one element.
     pub fn new(input: R) -> FrameReader<R> {
-        FrameReader {
-            input: input,
-        }
+        FrameReader { input: input }
     }
 
     /// Decodes the next frame or returns an error if the data was invalid.
