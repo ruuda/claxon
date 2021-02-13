@@ -130,7 +130,7 @@ pub fn read_flac_header<R: io::Read>(mut input: R) -> Result<()> {
     // error message if a file starts like this.
     const ID3_HEADER: u32 = 0x49_44_33_00;
 
-    let header = try!(input.read_be_u32());
+    let header = input.read_be_u32()?;
     if header != FLAC_HEADER {
         if (header & 0xff_ff_ff_00) == ID3_HEADER {
             fmt_err("stream starts with ID3 header rather than FLAC header")
@@ -153,16 +153,16 @@ impl<R: io::Read> FlacReader<R> {
     /// small damaged or malicous file could cause gigabytes of memory
     /// to be allocated. `Error::Unsupported` is returned in that case.
     pub fn new(input: R) -> Result<FlacReader<R>> {
-        let mut metadata_reader = try!(MetadataReader::new(input));
+        let mut metadata_reader = MetadataReader::new(input)?;
 
         // The metadata reader will yield at least one element after
         // construction. If data is missing, that well be a `Some(Err)`.
-        let streaminfo = match try!(metadata_reader.next().unwrap()) {
+        let streaminfo = match metadata_reader.next().unwrap()? {
             MetadataBlock::StreamInfo(si) => si,
             other => {
                 // TODO: Maybe mark MetadataBlock as #[must_use] to avoid
                 // dropping it without discard?
-                try!(other.discard());
+                other.discard()?;
                 return fmt_err("streaminfo block missing");
             }
         };
@@ -274,7 +274,7 @@ impl FlacReader<fs::File> {
     /// This is a convenience constructor that opens a `File`, wraps it in a
     /// `BufReader`, and constructs a `FlacReader` from it.
     pub fn open<P: AsRef<path::Path>>(filename: P) -> Result<FlacReader<io::BufReader<fs::File>>> {
-        let file = try!(fs::File::open(filename));
+        let file = fs::File::open(filename)?;
         FlacReader::new(io::BufReader::new(file))
     }
 }

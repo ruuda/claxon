@@ -65,7 +65,7 @@ impl FrameHeader {
 fn read_var_length_int<R: io::Read>(input: &mut R) -> Result<u64> {
     // The number of consecutive 1s followed by a 0 is the number of additional
     // bytes to read.
-    let first = try!(input.read_u8());
+    let first = input.read_u8()?;
     let mut read_additional = 0u8;
     let mut mask_data = 0b0111_1111u8;
     let mut mask_mark = 0b1000_0000u8;
@@ -92,7 +92,7 @@ fn read_var_length_int<R: io::Read>(input: &mut R) -> Result<u64> {
     // significant bits into the correct position.
     let mut result = ((first & mask_data) as u64) << (6 * read_additional);
     for i in (0..read_additional as i16).rev() {
-        let byte = try!(input.read_u8());
+        let byte = input.read_u8()?;
 
         // The two most significant bits _must_ be 10.
         if byte & 0b1100_0000 != 0b1000_0000 {
@@ -138,7 +138,7 @@ fn read_frame_header_or_eof<R: io::Read>(input: &mut R) -> Result<Option<FrameHe
     // First are 14 bits frame sync code, a reserved bit, and blocking stategy.
     // If instead of the two bytes we find the end of the stream, return
     // `Nothing`, indicating EOF.
-    let sync_res_block = match try!(crc_input.read_be_u16_or_eof()) {
+    let sync_res_block = match crc_input.read_be_u16_or_eof()? {
         None => return Ok(None),
         Some(x) => x,
     };
@@ -166,7 +166,7 @@ fn read_frame_header_or_eof<R: io::Read>(input: &mut R) -> Result<Option<FrameHe
     };
 
     // Next are 4 bits block size and 4 bits sample rate.
-    let bs_sr = try!(crc_input.read_u8());
+    let bs_sr = crc_input.read_u8()?;
     let mut block_size = 0u16;
     let mut read_8bit_bs = false;
     let mut read_16bit_bs = false;
@@ -212,7 +212,7 @@ fn read_frame_header_or_eof<R: io::Read>(input: &mut R) -> Result<Option<FrameHe
     }
 
     // Next are 4 bits channel assignment, 3 bits sample size, and 1 reserved bit.
-    let chan_bps_res = try!(crc_input.read_u8());
+    let chan_bps_res = crc_input.read_u8()?;
 
     // The most significant 4 bits determine channel assignment.
     let channel_assignment = match chan_bps_res >> 4 {
@@ -245,12 +245,12 @@ fn read_frame_header_or_eof<R: io::Read>(input: &mut R) -> Result<Option<FrameHe
     let block_time = match blocking_strategy {
         BlockingStrategy::Variable => {
             // The sample number is encoded in 8-56 bits, at most a 36-bit int.
-            let sample = try!(read_var_length_int(&mut crc_input));
+            let sample = read_var_length_int(&mut crc_input)?;
             BlockTime::SampleNumber(sample)
         }
         BlockingStrategy::Fixed => {
             // The frame number is encoded in 8-48 bits, at most a 31-bit int.
-            let frame = try!(read_var_length_int(&mut crc_input));
+            let frame = read_var_length_int(&mut crc_input)?;
             // A frame number larger than 31 bits is therefore invalid.
             if frame > 0x7fffffff {
                 return fmt_err("invalid frame header, frame number too large");
@@ -261,7 +261,7 @@ fn read_frame_header_or_eof<R: io::Read>(input: &mut R) -> Result<Option<FrameHe
 
     if read_8bit_bs {
         // 8 bit block size - 1 is stored.
-        let bs = try!(crc_input.read_u8());
+        let bs = crc_input.read_u8()?;
         block_size = bs as u16 + 1;
     }
     if read_16bit_bs {
@@ -269,7 +269,7 @@ fn read_frame_header_or_eof<R: io::Read>(input: &mut R) -> Result<Option<FrameHe
         // can be indicated in the streaminfo block is a 16-bit number, so a
         // value of 0xffff would be invalid because it exceeds the max block
         // size, though this is not mentioned explicitly in the specification.
-        let bs = try!(crc_input.read_be_u16());
+        let bs = crc_input.read_be_u16()?;
         if bs == 0xffff {
             return fmt_err("invalid block size, exceeds 65535");
         }
@@ -277,21 +277,21 @@ fn read_frame_header_or_eof<R: io::Read>(input: &mut R) -> Result<Option<FrameHe
     }
 
     if read_8bit_sr {
-        let sr = try!(crc_input.read_u8());
+        let sr = crc_input.read_u8()?;
         sample_rate = Some(sr as u32);
     }
     if read_16bit_sr {
-        let sr = try!(crc_input.read_be_u16());
+        let sr = crc_input.read_be_u16()?;
         sample_rate = Some(sr as u32);
     }
     if read_16bit_sr_ten {
-        let sr_ten = try!(crc_input.read_be_u16());
+        let sr_ten = crc_input.read_be_u16()?;
         sample_rate = Some(sr_ten as u32 * 10);
     }
 
     // Next is an 8-bit CRC that is computed over the entire header so far.
     let computed_crc = crc_input.crc();
-    let presumed_crc = try!(crc_input.read_u8());
+    let presumed_crc = crc_input.read_u8()?;
 
     // Do not verify checksum during fuzzing, otherwise malformed input from
     // fuzzer won't reach the actually interesting code.
@@ -672,7 +672,7 @@ impl<R: io::Read> FrameReader<R> {
         // header (so not in the middle of the frame header), return `None`,
         // indicating EOF.
         let mut crc_input = Crc16Reader::new(&mut self.input);
-        let header = match try!(read_frame_header_or_eof(&mut crc_input)) {
+        let header = match read_frame_header_or_eof(&mut crc_input)? {
             None => return Ok(None),
             Some(h) => h,
         };
@@ -706,25 +706,21 @@ impl<R: io::Read> FrameReader<R> {
             match header.channel_assignment {
                 ChannelAssignment::Independent(n_ch) => {
                     for ch in 0..n_ch as usize {
-                        try!(subframe::decode(&mut bitstream,
-                                              bps,
-                                              &mut buffer[ch * bs..(ch + 1) * bs]));
+                        subframe::decode(&mut bitstream, bps, &mut buffer[ch * bs..(ch + 1) * bs])?;
                     }
                 }
                 ChannelAssignment::LeftSideStereo => {
                     // The side channel has one extra bit per sample.
-                    try!(subframe::decode(&mut bitstream, bps, &mut buffer[..bs]));
-                    try!(subframe::decode(&mut bitstream,
-                                          bps + 1,
-                                          &mut buffer[bs..bs * 2]));
+                    subframe::decode(&mut bitstream, bps, &mut buffer[..bs])?;
+                    subframe::decode(&mut bitstream, bps + 1, &mut buffer[bs..bs * 2])?;
 
                     // Then decode the side channel into the right channel.
                     decode_left_side(&mut buffer[..bs * 2]);
                 }
                 ChannelAssignment::RightSideStereo => {
                     // The side channel has one extra bit per sample.
-                    try!(subframe::decode(&mut bitstream, bps + 1, &mut buffer[..bs]));
-                    try!(subframe::decode(&mut bitstream, bps, &mut buffer[bs..bs * 2]));
+                    subframe::decode(&mut bitstream, bps + 1, &mut buffer[..bs])?;
+                    subframe::decode(&mut bitstream, bps, &mut buffer[bs..bs * 2])?;
 
                     // Then decode the side channel into the left channel.
                     decode_right_side(&mut buffer[..bs * 2]);
@@ -732,10 +728,8 @@ impl<R: io::Read> FrameReader<R> {
                 ChannelAssignment::MidSideStereo => {
                     // Decode mid as the first channel, then side with one
                     // extra bitp per sample.
-                    try!(subframe::decode(&mut bitstream, bps, &mut buffer[..bs]));
-                    try!(subframe::decode(&mut bitstream,
-                                          bps + 1,
-                                          &mut buffer[bs..bs * 2]));
+                    subframe::decode(&mut bitstream, bps, &mut buffer[..bs])?;
+                    subframe::decode(&mut bitstream, bps + 1, &mut buffer[bs..bs * 2])?;
 
                     // Then decode mid-side channel into left-right.
                     decode_mid_side(&mut buffer[..bs * 2]);
@@ -752,7 +746,7 @@ impl<R: io::Read> FrameReader<R> {
 
         // The frame footer is a 16-bit CRC.
         let computed_crc = crc_input.crc();
-        let presumed_crc = try!(crc_input.read_be_u16());
+        let presumed_crc = crc_input.read_be_u16()?;
 
         // Do not verify checksum during fuzzing, otherwise malformed input from
         // the fuzzer won't reach the actually interesting code.

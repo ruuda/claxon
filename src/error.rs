@@ -49,12 +49,14 @@ impl fmt::Display for Error {
         match *self {
             Error::IoError(ref err) => err.fmt(formatter),
             Error::FormatError(reason) => {
-                try!(formatter.write_str("Ill-formed FLAC stream: "));
+                formatter.write_str("Ill-formed FLAC stream: ")?;
                 formatter.write_str(reason)
             }
             Error::Unsupported(feature) => {
-                try!(formatter.write_str("A currently unsupported feature of the FLAC format \
-                                          was encountered: "));
+                formatter.write_str(
+                    "A currently unsupported feature of the FLAC \
+                     format was encountered: ",
+                )?;
                 formatter.write_str(feature)
             }
         }
@@ -88,8 +90,10 @@ impl From<io::Error> for Error {
 impl From<string::FromUtf8Error> for Error {
     fn from(_: string::FromUtf8Error) -> Error {
         // These are the only places where UTF-8 is parsed into a String.
-        Error::FormatError("Vorbis comment, vendor string, or picture \
-                            description is not valid UTF-8")
+        Error::FormatError(
+            "Vorbis comment, vendor string, or picture \
+            description is not valid UTF-8",
+        )
     }
 }
 

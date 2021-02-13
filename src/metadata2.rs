@@ -562,7 +562,7 @@ impl <'a, R: 'a + io::Read> LazyPicture<'a, R> {
 
 #[inline]
 fn read_metadata_block_header<R: io::Read>(input: &mut R) -> Result<MetadataBlockHeader> {
-    let byte = try!(input.read_u8());
+    let byte = input.read_u8()?;
 
     // The first bit specifies whether this is the last block, the next 7 bits
     // specify the type of the metadata block to follow.
@@ -570,7 +570,7 @@ fn read_metadata_block_header<R: io::Read>(input: &mut R) -> Result<MetadataBloc
     let block_type = byte & 0b0111_1111;
 
     // The length field is 24 bits, or 3 bytes.
-    let length = try!(input.read_be_u24());
+    let length = input.read_be_u24()?;
 
     let header = MetadataBlockHeader {
         is_last: is_last,
@@ -592,9 +592,11 @@ fn read_metadata_block_header<R: io::Read>(input: &mut R) -> Result<MetadataBloc
 /// can be used to decode that raw data.
 #[inline]
 pub fn read_metadata_block_with_header<'a, R>(input: &'a mut R) -> Result<MetadataBlock<'a, R>>
-where R: 'a + io::Read {
-  let header = try!(read_metadata_block_header(input));
-  read_metadata_block(input, header.block_type, header.length)
+where
+    R: 'a + io::Read,
+{
+    let header = read_metadata_block_header(input)?;
+    read_metadata_block(input, header.block_type, header.length)
 }
 
 /// Read a single metadata block of the given type and length from the input.
@@ -617,18 +619,18 @@ where R: 'a + io::Read {
         0 => {
             // The streaminfo block has a fixed size of 34 bytes.
             if length == 34 {
-                let streaminfo = try!(read_streaminfo_block(input));
+                let streaminfo = read_streaminfo_block(input)?;
                 Ok(MetadataBlock::StreamInfo(streaminfo))
             } else {
                 fmt_err("invalid streaminfo metadata block length")
             }
         }
         1 => {
-            try!(input.skip(length));
+            input.skip(length)?;
             Ok(MetadataBlock::Padding(length))
         }
         2 => {
-            let application_block = try!(read_application_block(input, length));
+            let application_block = read_application_block(input, length)?;
             Ok(MetadataBlock::Application(application_block))
         }
         3 => {
@@ -667,23 +669,23 @@ where R: 'a + io::Read {
             // Any other block type is 'reserved' at the moment of writing.
             // TODO: Add test to ensure that after a reserved block, the next
             // block can be read properly.
-            try!(input.skip(length));
+            input.skip(length)?;
             fmt_err("invalid metadata block, encountered reserved block type")
         }
     }
 }
 
 fn read_streaminfo_block<R: io::Read>(input: &mut R) -> Result<StreamInfo> {
-    let min_block_size = try!(input.read_be_u16());
-    let max_block_size = try!(input.read_be_u16());
+    let min_block_size = input.read_be_u16()?;
+    let max_block_size = input.read_be_u16()?;
 
     // The frame size fields are 24 bits, or 3 bytes.
-    let min_frame_size = try!(input.read_be_u24());
-    let max_frame_size = try!(input.read_be_u24());
+    let min_frame_size = input.read_be_u24()?;
+    let max_frame_size = input.read_be_u24()?;
 
     // Next up are 20 bits that determine the sample rate.
-    let sample_rate_msb = try!(input.read_be_u16());
-    let sample_rate_lsb = try!(input.read_u8());
+    let sample_rate_msb = input.read_be_u16()?;
+    let sample_rate_lsb = input.read_u8()?;
 
     // Stitch together the value from the first 16 bits,
     // and then the 4 most significant bits of the next byte.
@@ -696,19 +698,19 @@ fn read_streaminfo_block<R: io::Read>(input: &mut R) -> Result<StreamInfo> {
     // The final bit is the most significant of bits per sample - 1. Bits per
     // sample - 1 is 5 bits in total.
     let bps_msb = n_channels_bps & 1;
-    let bps_lsb_n_samples = try!(input.read_u8());
+    let bps_lsb_n_samples = input.read_u8()?;
 
     // Stitch together these values, add 1 because # - 1 is stored.
     let bits_per_sample = (bps_msb << 4 | (bps_lsb_n_samples >> 4)) + 1;
 
     // Number of samples in 36 bits, we have 4 already, 32 to go.
     let n_samples_msb = bps_lsb_n_samples & 0b0000_1111;
-    let n_samples_lsb = try!(input.read_be_u32());
+    let n_samples_lsb = input.read_be_u32()?;
     let n_samples = (n_samples_msb as u64) << 32 | n_samples_lsb as u64;
 
     // Next are 128 bits (16 bytes) of MD5 signature.
     let mut md5sum = [0u8; 16];
-    try!(input.read_exact(&mut md5sum));
+    input.read_exact(&mut md5sum)?;
 
     // Lower bounds can never be larger than upper bounds. Note that 0 indicates
     // unknown for the frame size. Also, the block size must be at least 16.
@@ -782,22 +784,26 @@ fn read_vorbis_comment_block<R: io::Read>(input: &mut R, length: u32) -> Result<
     // The Vorbis comment block starts with a length-prefixed "vendor string".
     // It cannot be larger than the block length - 8, because there are the
     // 32-bit vendor string length, and comment count.
-    let vendor_len = try!(input.read_le_u32());
-    if vendor_len > length - 8 { return fmt_err("vendor string too long") }
+    let vendor_len = input.read_le_u32()?;
+    if vendor_len > length - 8 {
+        return fmt_err("vendor string too long");
+    }
     let mut vendor_bytes = Vec::with_capacity(vendor_len as usize);
 
     // We can safely set the length of the vector here; the uninitialized memory
     // is not exposed. If `read_exact` succeeds, it will have overwritten all
     // bytes. If not, an error is returned and the memory is never exposed.
-    unsafe { vendor_bytes.set_len(vendor_len as usize); }
-    try!(input.read_exact(&mut vendor_bytes));
-    let vendor = try!(String::from_utf8(vendor_bytes));
+    unsafe {
+        vendor_bytes.set_len(vendor_len as usize);
+    }
+    input.read_exact(&mut vendor_bytes)?;
+    let vendor = String::from_utf8(vendor_bytes)?;
 
     // Next up is the number of comments. Because every comment is at least 4
     // bytes to indicate its length, there cannot be more comments than the
     // length of the block divided by 4. This is only an upper bound to ensure
     // that we don't allocate a big vector, to protect against DoS attacks.
-    let comments_len = try!(input.read_le_u32());
+    let comments_len = input.read_le_u32()?;
     if comments_len >= length / 4 {
         return fmt_err("too many entries for Vorbis comment block")
     }
@@ -808,7 +814,7 @@ fn read_vorbis_comment_block<R: io::Read>(input: &mut R, length: u32) -> Result<
     // For every comment, there is a length-prefixed string of the form
     // "NAME=value".
     while bytes_left >= 4 {
-        let comment_len = try!(input.read_le_u32());
+        let comment_len = input.read_le_u32()?;
         bytes_left -= 4;
 
         if comment_len > bytes_left {
@@ -817,8 +823,10 @@ fn read_vorbis_comment_block<R: io::Read>(input: &mut R, length: u32) -> Result<
 
         // For the same reason as above, setting the length is safe here.
         let mut comment_bytes = Vec::with_capacity(comment_len as usize);
-        unsafe { comment_bytes.set_len(comment_len as usize); }
-        try!(input.read_exact(&mut comment_bytes));
+        unsafe {
+            comment_bytes.set_len(comment_len as usize);
+        }
+        input.read_exact(&mut comment_bytes)?;
 
         bytes_left -= comment_len;
 
@@ -835,7 +843,7 @@ fn read_vorbis_comment_block<R: io::Read>(input: &mut R, length: u32) -> Result<
                 }
             }
 
-            let comment = try!(String::from_utf8(comment_bytes));
+            let comment = String::from_utf8(comment_bytes)?;
             comments.push((comment, sep_index));
         } else {
             return fmt_err("Vorbis comment does not contain '='")
@@ -860,7 +868,7 @@ fn read_padding_block<R: io::Read>(input: &mut R, length: u32) -> Result<()> {
     // is not the case, and frankly, when you are going to skip over these
     // bytes and do nothing with them whatsoever, why waste all those CPU
     // cycles checking that the padding is valid?
-    Ok(try!(input.skip(length)))
+    Ok(input.skip(length)?)
 }
 
 fn read_application_block<'a, R: 'a + io::Read>(input: &'a mut R, length: u32) -> Result<ApplicationBlock<'a, R>> {
@@ -880,7 +888,7 @@ fn read_application_block<'a, R: 'a + io::Read>(input: &'a mut R, length: u32) -
         return Err(Error::Unsupported(msg))
     }
 
-    let id = try!(input.read_be_u32());
+    let id = input.read_be_u32()?;
 
     let application = ApplicationBlock {
         id: id,
@@ -901,7 +909,7 @@ fn read_picture_block<R: io::Read>(input: &mut R, length: u32) -> Result<Picture
         return fmt_err("picture block is too short")
     }
 
-    let picture_type = try!(input.read_be_u32());
+    let picture_type = input.read_be_u32()?;
 
     let kind = match picture_type {
         0 => PictureKind::Other,
@@ -929,7 +937,7 @@ fn read_picture_block<R: io::Read>(input: &mut R, length: u32) -> Result<Picture
         _ => return fmt_err("invalid picture type"),
     };
 
-    let mime_len = try!(input.read_be_u32());
+    let mime_len = input.read_be_u32()?;
 
     // The mime type string must fit within the picture block. Also put a limit
     // on the length, to ensure we don't allocate large strings, in order to
@@ -944,8 +952,10 @@ fn read_picture_block<R: io::Read>(input: &mut R, length: u32) -> Result<Picture
     // We can safely set the length of the vector here; the uninitialized memory
     // is not exposed. If `read_exact` succeeds, it will have overwritten all
     // bytes. If not, an error is returned and the memory is never exposed.
-    unsafe { mime_bytes.set_len(mime_len as usize); }
-    try!(input.read_exact(&mut mime_bytes));
+    unsafe {
+        mime_bytes.set_len(mime_len as usize);
+    }
+    input.read_exact(&mut mime_bytes)?;
 
     // According to the spec, the MIME type string must consist of printable
     // ASCII characters in the range 0x20-0x7e; validate that. This also means
@@ -955,7 +965,7 @@ fn read_picture_block<R: io::Read>(input: &mut R, length: u32) -> Result<Picture
     }
     let mime_type = unsafe { String::from_utf8_unchecked(mime_bytes) };
 
-    let description_len = try!(input.read_be_u32());
+    let description_len = input.read_be_u32()?;
 
     // The description must fit within the picture block. Also put a limit
     // on the length, to ensure we don't allocate large strings, in order to
@@ -970,9 +980,11 @@ fn read_picture_block<R: io::Read>(input: &mut R, length: u32) -> Result<Picture
     // We can safely set the length of the vector here; the uninitialized memory
     // is not exposed. If `read_exact` succeeds, it will have overwritten all
     // bytes. If not, an error is returned and the memory is never exposed.
-    unsafe { description_bytes.set_len(description_len as usize); }
-    try!(input.read_exact(&mut description_bytes));
-    let description = try!(String::from_utf8(description_bytes));
+    unsafe {
+        description_bytes.set_len(description_len as usize);
+    }
+    input.read_exact(&mut description_bytes)?;
+    let description = String::from_utf8(description_bytes)?;
 
     // Next are a few fields with pixel metadata. It seems a bit weird to me
     // that FLAC stores the bits per pixel, and especially the number of indexed
@@ -980,12 +992,12 @@ fn read_picture_block<R: io::Read>(input: &mut R, length: u32) -> Result<Picture
     // but peeking the image data itself would be better anyway. I have no use
     // case for these fields, so they are not exposed, to keep the API cleaner,
     // and to save a few bytes of memory.
-    let width = try!(input.read_be_u32());
-    let height = try!(input.read_be_u32());
-    let _bits_per_pixel = try!(input.read_be_u32());
-    let _num_indexed_colors = try!(input.read_be_u32());
+    let width = input.read_be_u32()?;
+    let height = input.read_be_u32()?;
+    let _bits_per_pixel = input.read_be_u32()?;
+    let _num_indexed_colors = input.read_be_u32()?;
 
-    let data_len = try!(input.read_be_u32());
+    let data_len = input.read_be_u32()?;
 
     // The length field is redundant, because we already have the size of the
     // block. The picture should fill up the remainder of the block.
@@ -1083,7 +1095,7 @@ impl<R: io::Read> MetadataReader<R> {
     /// [new-aligned]:      #method.new_block_aligned
     /// [read-flac-header]: ../fn.read_flac_header.html
     pub fn new(mut input: R) -> Result<MetadataReader<R>> {
-        try!(::read_flac_header(&mut input));
+        ::read_flac_header(&mut input)?;
         let reader = MetadataReader {
             input: input,
             done: false,
@@ -1105,8 +1117,8 @@ impl<R: io::Read> MetadataReader<R> {
 
     #[inline]
     fn read_next(&mut self) -> MetadataResult<R> {
-        let header = try!(read_metadata_block_header(&mut self.input));
-        let block = try!(read_metadata_block(&mut self.input, header.block_type, header.length));
+        let header = read_metadata_block_header(&mut self.input)?;
+        let block = read_metadata_block(&mut self.input, header.block_type, header.length)?;
         self.done = header.is_last;
         Ok(block)
     }
@@ -1147,7 +1159,7 @@ impl<R: io::Read> MetadataReader<R> {
     /// the first metadata block in the stream.
     pub fn next_streaminfo(&mut self) -> Result<StreamInfo> {
         if let Some(block) = self.next() {
-            if let MetadataBlock::StreamInfo(streaminfo) = try!(block) {
+            if let MetadataBlock::StreamInfo(streaminfo) = block? {
                 Ok(streaminfo)
             } else {
                 fmt_err("first metadata block is not a streaminfo block")
@@ -1162,12 +1174,12 @@ impl<R: io::Read> MetadataReader<R> {
     /// There is at most one Vorbis comment block in a valid FLAC stream.
     pub fn next_vorbis_comment(&mut self) -> Result<OptionalVorbisComment> {
         while let Some(block) = self.next() {
-            match try!(block) {
+            match block? {
                 MetadataBlock::VorbisComment(lazy_block) => {
-                    let vc = try!(lazy_block.get());
-                    return Ok(OptionalVorbisComment(Some(vc)))
+                    let vc = lazy_block.get()?;
+                    return Ok(OptionalVorbisComment(Some(vc)));
                 }
-                other => try!(other.discard()),
+                other => other.discard()?,
             }
         }
 
@@ -1177,10 +1189,10 @@ impl<R: io::Read> MetadataReader<R> {
     /// Skip to the next picture block and read it.
     pub fn next_picture(&mut self) -> Result<Option<Picture<R>>> {
         while let Some(block) = self.next() {
-            match try!(block) {
+            match block? {
                 // TODO: Implement `get()` for picture.
                 // MetadataBlock::Picture(lazy_block) => return Ok(Some(try!(lazy_block.get()))),
-                other => try!(other.discard()),
+                other => other.discard()?,
             }
         }
         Ok(None)
@@ -1215,23 +1227,19 @@ impl<R: io::Read> MetadataReader<R> {
         seektable: Option<SeekTable>
     ) -> Result<::FlacReader<R>> {
         while let Some(metadata_block) = self.next() {
-            match try!(metadata_block) {
-                MetadataBlock::StreamInfo(..) => {
-                    return fmt_err("encountered second streaminfo")
-                }
-                MetadataBlock::Padding(..) => {
-
-                }
+            match metadata_block? {
+                MetadataBlock::StreamInfo(..) => return fmt_err("encountered second streaminfo"),
+                MetadataBlock::Padding(..) => {}
                 // TODO: Maybe add a method MetadataBlock::discard()?
                 MetadataBlock::Application(mut _app) => { } // TODO: Discard on app block.
                 MetadataBlock::SeekTable(mut lazy_table) => {
                     // TODO: Read table once we can.
                     // seektable = Some(try!(lazy_table.get()));
-                    try!(lazy_table.discard());
+                    lazy_table.discard()?;
                 }
-                MetadataBlock::VorbisComment(mut lazy_block) => try!(lazy_block.discard()),
-                MetadataBlock::CueSheet(mut lazy_block) => try!(lazy_block.discard()),
-                MetadataBlock::Picture(mut lazy_block) => try!(lazy_block.discard()),
+                MetadataBlock::VorbisComment(mut lazy_block) => lazy_block.discard()?,
+                MetadataBlock::CueSheet(mut lazy_block) => lazy_block.discard()?,
+                MetadataBlock::Picture(mut lazy_block) => lazy_block.discard()?,
             }
         }
 
@@ -1245,8 +1253,10 @@ impl MetadataReader<io::BufReader<fs::File>> {
     /// This is a convenience constructor that opens a `File`, wraps it in a
     /// `BufReader`, and constructs a `MetadataReader` from it. It can be used
     /// to open a flac file and read its metadata.
-    pub fn open<P: AsRef<path::Path>>(filename: P) -> Result<MetadataReader<io::BufReader<fs::File>>> {
-        let file = try!(fs::File::open(filename));
+    pub fn open<P: AsRef<path::Path>>(
+        filename: P,
+    ) -> Result<MetadataReader<io::BufReader<fs::File>>> {
+        let file = fs::File::open(filename)?;
         MetadataReader::new(io::BufReader::new(file))
     }
 }
