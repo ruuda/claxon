@@ -101,7 +101,7 @@ fn compare_metaflac_streaminfo<P: AsRef<Path>>(fname: P) {
 
 fn compare_metaflac_vorbis_comment<P: AsRef<Path>>(fname: P) {
     let metaflac = run_metaflac_vorbis_comment(&fname);
-    let vc: claxon::metadata3::VorbisComment = unimplemented!("TODO: add an easy way to get at the Vorbis Comment");
+    let vc = claxon::open_vorbis_comment(&fname).unwrap();
 
     let mut mf_lines = metaflac.lines();
 
@@ -114,10 +114,10 @@ fn compare_metaflac_vorbis_comment<P: AsRef<Path>>(fname: P) {
             // If the vendor string starts with a null byte, metaflac will not
             // print it -- my guess is because metaflac is written in C and uses
             // C-style string manipulation. In that case we skip it.
-            if vc.vendor.starts_with('\0') {
-                assert_eq!("", mf_vendor_string);
-            } else {
-                assert_eq!(vc.vendor, mf_vendor_string);
+            match vc.vendor() {
+                Some(vendor) if vendor.starts_with('\0') => assert_eq!("", mf_vendor_string),
+                Some(vendor) => assert_eq!(vendor, mf_vendor_string),
+                None => panic!("Expected vendor string"),
             }
 
             break
@@ -284,8 +284,7 @@ fn verify_vorbis_comment_p4() {
 
 #[test]
 fn test_flac_reader_get_tag_is_case_insensitive() {
-    // let mut metadata_reader = claxon::MetadataReader::open("testsamples/p4.flac").unwrap();
-    let vc: claxon::metadata3::VorbisComment = unimplemented!("TODO: Vorbis comment");
+    let vc = claxon::open_vorbis_comment("testsamples/p4.flac").unwrap();
 
     // This file contains the following metadata:
     // METADATA block #2
@@ -316,8 +315,7 @@ fn test_flac_reader_get_tag_is_case_insensitive() {
 
 #[test]
 fn test_flac_reader_get_tag_returns_all_matches() {
-    // let mut metadata_reader = claxon::MetadataReader::open("testsamples/repeated_vorbis_comment.flac").unwrap();
-    let vc: claxon::metadata3::VorbisComment = unimplemented!("TODO: Add way to get at the Vorbis comment.");
+    let vc = claxon::open_vorbis_comment("testsamples/repeated_vorbis_comment.flac").unwrap();
 
     // This file contains two FOO tags, `FOO=bar` and `FOO=baz`.
 
@@ -338,13 +336,13 @@ fn test_flac_reader_tags_skips_empty_vorbis_comments() {
     // metaflac does print the empty comment, and we skip it. Behaving like
     // metaflac would require representing the empty comment, but then we have
     // to deal with the edge case everywhere, so we drop it instead.
-    let flac_reader = claxon::FlacReader::open("testsamples/empty_vorbis_comment.flac").unwrap();
+    let vc = claxon::open_vorbis_comment("testsamples/empty_vorbis_comment.flac").unwrap();
 
     // The file was adapted from `repeated_vorbis_comment.flac`, so it contains
     // the same `FOO=bar` tag, but the `FOO=baz` has been replaced with a 4-byte
     // length prefix to make the final tag `X=Y`.
 
-    let mut tags: claxon::metadata3::Tags = unimplemented!("TODO: Get convenient way to get the tags");
+    let mut tags = vc.tags();
     assert_eq!(tags.next(), Some(("FOO", "bar")));
     assert_eq!(tags.next(), Some(("X", "Y")));
     assert_eq!(tags.next(), None);
@@ -404,9 +402,7 @@ fn verify_decoded_stream_non_subset() {
 fn verify_limits_on_vendor_string() {
     // This file claims to have a vendor string which would not fit in the
     // block.
-    // let mut reader = claxon::MetadataReader::open("testsamples/large_vendor_string.flac").unwrap();
-    let vc: claxon::Result<claxon::metadata3::VorbisComment> = unimplemented!("TODO: Add way to get at the Vorbis comment.");
-    match vc {
+    match claxon::open_vorbis_comment("testsamples/large_vendor_string.flac") {
         Ok(..) => panic!("This file should fail to load"),
         Err(err) => {
             assert_eq!(err, claxon::Error::FormatError("vendor string too long"))
@@ -418,19 +414,17 @@ fn verify_limits_on_vendor_string() {
 fn verify_limits_on_vorbis_comment_block() {
     // This file claims to have a very large Vorbis comment block, which could
     // make the decoder go OOM.
-    // let mut reader = claxon::MetadataReader::open("testsamples/large_vorbis_comment_block.flac").unwrap();
-    // match reader.next_vorbis_comment() {
-    //     Ok(..) => panic!("This file should fail to load"),
-    //     Err(claxon::Error::Unsupported(..)) => { }
-    //     Err(..) => panic!("Expected 'Unsupported' error."),
-    // }
+    match claxon::open_vorbis_comment("testsamples/large_vorbis_comment_block.flac") {
+        Ok(..) => panic!("This file should fail to load"),
+        Err(claxon::Error::Unsupported(..)) => { }
+        Err(..) => panic!("Expected 'Unsupported' error."),
+    }
 }
 
 #[test]
-fn next_vorbis_comment_reads_vorbis_comment_block() {
-    // let mut reader = claxon::MetadataReader::open("testsamples/short.flac").unwrap();
-    let vc: claxon::metadata3::VorbisComment = unimplemented!("TODO: Add a way to get at the Vorbis comment.");
-    assert_eq!(vc.vendor, "reference libFLAC 1.3.2 20170101");
+fn open_vorbis_comment_reads_vorbis_comment_block() {
+    let vc = claxon::open_vorbis_comment("testsamples/short.flac").unwrap();
+    assert_eq!(vc.vendor(), Some("reference libFLAC 1.3.2 20170101"));
 }
 
 #[test]

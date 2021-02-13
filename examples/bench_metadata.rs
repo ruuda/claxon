@@ -9,8 +9,10 @@ extern crate claxon;
 extern crate walkdir;
 extern crate time;
 
-use time::PreciseTime;
+use std::fs;
+use std::io;
 use std::io::{Seek, SeekFrom};
+use time::PreciseTime;
 
 fn main() {
     use std::ffi::OsStr;
@@ -32,7 +34,10 @@ fn main() {
 
             // Read the file multiple times to amortize the walkdir cost.
             for _ in 0..10 {
-                let vc: claxon::metadata3::VorbisComment = unimplemented!("TODO: Add a shorthand to get at the Vorbis comment.");
+                let file = fs::File::open(path).expect("Failed to open file");
+                let mut reader = io::BufReader::new(file);
+                let vc = claxon::read_vorbis_comment(&mut reader)
+                    .expect("Failed to read Vorbis comment");
 
                 // Note that these are not optimized away even though the results
                 // are not used, because the expectation may fail.
@@ -55,7 +60,7 @@ fn main() {
                 vc.get_tag("musicbrainz_artistid").next().expect("musicbrainz_artistid");
                 vc.get_tag("musicbrainz_albumartistid").next().expect("musicbrainz_albumartistid");
 
-                // TODO bytes += reader.into_inner().seek(SeekFrom::Current(0)).unwrap();
+                bytes += reader.seek(SeekFrom::Current(0)).unwrap();
             }
 
             let duration_ns = epoch.to(PreciseTime::now()).num_nanoseconds().unwrap();

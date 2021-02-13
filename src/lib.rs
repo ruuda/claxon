@@ -57,8 +57,8 @@
 //!
 //! ```
 //! # use claxon;
-//! let mut reader = claxon::MetadataReader::open("testsamples/pop.flac").unwrap();
-//! for artist in reader.next_vorbis_comment().unwrap().get_tag("ARTIST") {
+//! let vc = claxon::open_vorbis_comment("testsamples/pop.flac").unwrap();
+//! for artist in vc.get_tag("ARTIST") {
 //!     println!("{}", artist);
 //! }
 //! ```
@@ -75,7 +75,7 @@ use std::path;
 use error::fmt_err;
 use frame::FrameReader;
 use input::ReadBytes;
-use metadata3::StreamInfo;
+use metadata3::{StreamInfo, OptionalVorbisComment};
 
 mod crc;
 mod error;
@@ -139,7 +139,7 @@ pub fn read_flac_header<R: io::Read>(input: &mut R) -> Result<()> {
     }
 }
 
-/// Read until the start of the audio data.
+/// Read a FLAC file until the start of the audio data.
 ///
 /// This reads the header, the STREAMINFO block, and skips over any other
 /// metadata blocks. After this, the reader is positioned at the start of the
@@ -164,6 +164,43 @@ pub fn read_until_audio<R: io::Read>(input: &mut R) -> Result<StreamInfo> {
     }
 
     Ok(streaminfo)
+}
+
+/// Read the tag metadata (Vorbis comment block) from a FLAC stream.
+///
+/// This reads the FLAC header, skips over any uninteresting metadata blocks,
+/// and then reads the VORBIS_COMMENT block, if present. If there are any other
+/// metadata blocks after the VORBIS_COMMENT block, they are left unconsumed.
+pub fn read_vorbis_comment<R: io::Read>(input: &mut R) -> Result<OptionalVorbisComment> {
+    // TODO: Sort this skip out.
+    use input::ReadBytes;
+
+    read_flac_header(input)?;
+
+    loop {
+        let block = metadata3::read_block_header(input)?;
+        match block.block_type {
+            metadata3::BlockType::VorbisComment => {
+                let vc = metadata3::read_vorbis_comment_block(input, block.length)?;
+                return Ok(OptionalVorbisComment(Some(vc)));
+            }
+            _ => input.skip(block.length)?,
+        }
+
+        if block.is_last {
+            return Ok(OptionalVorbisComment(None));
+        }
+    }
+}
+
+/// Read the tag metadata (Vorbis comment block) from a FLAC file.
+///
+/// This is a convenience that opens the file and calls
+/// [`read_vorbis_comment`](fn.read_vorbis_comment.html).
+pub fn open_vorbis_comment<P: AsRef<path::Path>>(filename: P) -> Result<OptionalVorbisComment> {
+    let file = fs::File::open(filename)?;
+    let mut reader = io::BufReader::new(file);
+    read_vorbis_comment(&mut reader)
 }
 
 impl<R: io::Read> FlacReader<R> {

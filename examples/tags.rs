@@ -15,7 +15,7 @@ use std::env;
 
 fn main() {
     for fname in env::args().skip(1) {
-        let tags: claxon::metadata3::VorbisComment = unimplemented!("TODO: Add way to get at the VorbisComment");
+        let tags = claxon::open_vorbis_comment(&fname).expect("Failed to read file.");
 
         // We can iterate directly over all tags. When looking for a specific
         // tag, `OptionalVorbisComment::get_tag()` may be useful instead.

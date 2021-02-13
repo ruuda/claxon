@@ -7,9 +7,11 @@
 
 //! The `metadata` module deals with metadata at the beginning of a FLAC stream.
 
+use std::convert;
 use std::io;
-use std::slice;
 use std::iter::FusedIterator;
+use std::ops;
+use std::slice;
 
 use error::{Error, Result, fmt_err};
 use input::ReadBytes;
@@ -345,6 +347,77 @@ impl<'a> IntoIterator for &'a VorbisComment {
 
     fn into_iter(self) -> Tags<'a> {
         self.tags()
+    }
+}
+
+/// Wrapper for `Option<VorbisComment>` with convenient tag iterators.
+///
+/// This struct avoids the need for a case distinction between streams that do
+/// have a Vorbis comment block and streams that do not. It is always possible
+/// to iterate over tags or look up a tag. If there was no Vorbis comment block,
+/// those lookups will simply return no results.
+///
+/// [`claxon::read_vorbis_comment()`](../fn.read_vorbis_comment.html) returns
+/// this struct.
+pub struct OptionalVorbisComment(pub Option<VorbisComment>);
+
+impl OptionalVorbisComment {
+    /// Returns the vendor string of the Vorbis comment block, if present.
+    ///
+    /// This string usually contains the name and version of the program that
+    /// encoded the FLAC stream, such as `reference libFLAC 1.3.2 20170101`
+    /// or `Lavf57.25.100`.
+    pub fn vendor(&self) -> Option<&str> {
+        self.as_ref().map(|vc| &vc.vendor[..])
+    }
+
+    /// Returns name-value pairs of Vorbis comments, such as `("ARTIST", "Queen")`.
+    ///
+    /// See [`VorbisComment::tags()`](struct.VorbisComment.html#method.tags).
+    pub fn tags(&self) -> Tags {
+        match self.as_ref() {
+            Some(vc) => Tags::new(&vc.comments[..]),
+            None => Tags::new(&[]),
+        }
+    }
+
+    /// Look up a Vorbis comment such as `ARTIST` in a case-insensitive way.
+    ///
+    /// See [`VorbisComment::get_tag()`](struct.VorbisComment.html#method.get_tag).
+    pub fn get_tag<'a>(&'a self, tag_name: &'a str) -> GetTag<'a> {
+        match self.as_ref() {
+            Some(vc) => GetTag::new(&vc.comments[..], tag_name),
+            None => GetTag::new(&[], tag_name),
+        }
+    }
+}
+
+impl convert::From<OptionalVorbisComment> for Option<VorbisComment> {
+    fn from(opt: OptionalVorbisComment) -> Option<VorbisComment> {
+        opt.0
+    }
+}
+
+impl<'a> IntoIterator for &'a OptionalVorbisComment {
+    type Item = (&'a str, &'a str);
+    type IntoIter = Tags<'a>;
+
+    fn into_iter(self) -> Tags<'a> {
+        self.tags()
+    }
+}
+
+impl ops::Deref for OptionalVorbisComment {
+    type Target = Option<VorbisComment>;
+
+    fn deref(&self) -> &Option<VorbisComment> {
+        &self.0
+    }
+}
+
+impl ops::DerefMut for OptionalVorbisComment {
+    fn deref_mut(&mut self) -> &mut Option<VorbisComment> {
+        &mut self.0
     }
 }
 
