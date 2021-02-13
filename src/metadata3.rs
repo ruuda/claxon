@@ -9,6 +9,7 @@
 
 use std::io;
 use std::slice;
+use std::iter::FusedIterator;
 
 use error::{Error, Result, fmt_err};
 use input::ReadBytes;
@@ -124,7 +125,7 @@ pub struct StreamInfo {
     /// The maximum block size (in inter-channel samples) used in the stream.
     ///
     /// This number is independent of the number of channels. To get the
-    /// maximum block duratin in seconds, divide by the sample rate. To avoid
+    /// maximum block duration in seconds, divide by the sample rate. To avoid
     /// allocations during decoding, a buffer of this size times the number of
     /// channels can be allocated up front and passed into
     /// `FrameReader::read_next_or_eof()`.
@@ -379,6 +380,8 @@ impl<'a> ExactSizeIterator for Tags<'a> {
     }
 }
 
+impl<'a> FusedIterator for Tags<'a> {}
+
 /// Iterates over Vorbis comments looking for a specific one; returns its values as `&str`.
 ///
 /// See [`VorbisComment::get_tag()`](struct.VorbisComment#method.get_tag) for more details.
@@ -422,6 +425,8 @@ impl<'a> Iterator for GetTag<'a> {
         return None;
     }
 }
+
+impl<'a> FusedIterator for GetTag<'a> {}
 
 /// Read a VORBIS_COMMENT block.
 ///
@@ -497,7 +502,7 @@ pub fn read_vorbis_comment_block_unchecked<R: io::Read>(
     // bytes to indicate its length, there cannot be more comments than the
     // length of the block divided by 4. This is only an upper bound to ensure
     // that we don't allocate a big vector, to protect against DoS attacks.
-    let comments_len = input.read_le_u32()?;
+    let mut comments_len = input.read_le_u32()?;
     if comments_len >= length / 4 {
         return fmt_err("too many entries for Vorbis comment block");
     }
@@ -507,12 +512,21 @@ pub fn read_vorbis_comment_block_unchecked<R: io::Read>(
 
     // For every comment, there is a length-prefixed string of the form
     // "NAME=value".
-    while bytes_left >= 4 {
+    while bytes_left >= 4 && comments.len() < comments_len as usize {
         let comment_len = input.read_le_u32()?;
         bytes_left -= 4;
 
         if comment_len > bytes_left {
             return fmt_err("Vorbis comment too long for Vorbis comment block");
+        }
+
+        // Some older versions of libflac allowed writing zero-length Vorbis
+        // comments. ALthough such files are invalid, they do occur in the wild,
+        // so we skip over the empty comment.
+        if comment_len == 0 {
+            // Does not overflow because `comments_len > comments.len() >= 0`.
+            comments_len -= 1;
+            continue;
         }
 
         // For the same reason as above, setting the length is safe here.
@@ -542,6 +556,10 @@ pub fn read_vorbis_comment_block_unchecked<R: io::Read>(
         } else {
             return fmt_err("Vorbis comment does not contain '='");
         }
+    }
+
+    if bytes_left != 0 {
+        return fmt_err("Vorbis comment block has excess data");
     }
 
     if comments.len() != comments_len as usize {
