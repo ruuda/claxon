@@ -8,6 +8,7 @@
 //! The `metadata` module deals with metadata at the beginning of a FLAC stream.
 
 use std::io;
+use std::slice;
 
 use error::{Error, Result, fmt_err};
 use input::ReadBytes;
@@ -16,17 +17,36 @@ use input::ReadBytes;
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
 pub enum BlockType {
     /// A STREAMINFO block, with technical details about the stream.
+    ///
+    /// Use [`read_streaminfo_block`](fn.read_streaminfo_block.html) to read.
     StreamInfo = 0,
+
     /// A PADDING block, filled with zeros.
+    ///
+    /// To read, skip over `header.length` bytes.
     Padding = 1,
+
     /// An APPLICATION block that holds application-defined data.
+    ///
+    /// Use [`read_application_block`](fn.read_application_block.html) to read
+    /// the application id.
     Application = 2,
+
     /// A SEEKTABLE block, with data for supporting faster seeks.
+    ///
+    /// There is currently no support for reading the seek table.
     SeekTable = 3,
+
     /// A VORBIS_COMMENT block, with metadata tags.
+    ///
+    /// Use [`read_vorbis_comment_block`](fn.read_vorbis_comment_block.html) to read.
     VorbisComment = 4,
+
     /// A CUESHEET block.
+    ///
+    /// There is currently no support for reading the CUE sheet.
     CueSheet = 5,
+
     /// A PICTURE block, with cover art or other image metadata.
     Picture = 6,
 }
@@ -217,7 +237,7 @@ pub fn read_streaminfo_block<R: io::Read>(input: &mut R) -> Result<StreamInfo> {
 
 /// Application id used in an APPLICATION block.
 ///
-/// Registered application ids are listed at https://www.xiph.org/flac/id.html.
+/// Registered application ids are listed at <https://www.xiph.org/flac/id.html>.
 pub struct ApplicationId(pub u32);
 
 /// Read the application id from an APPLICATION block.
@@ -228,4 +248,310 @@ pub struct ApplicationId(pub u32);
 #[inline]
 pub fn read_application_block<R: io::Read>(input: &mut R) -> Result<ApplicationId> {
     Ok(ApplicationId(input.read_be_u32()?))
+}
+
+/// A seek point in the seek table.
+#[derive(Clone, Copy)]
+pub struct SeekPoint {
+    /// Sample number of the first sample in the target frame.
+    ///
+    /// Or 2<sup>64</sup> - 1 for a placeholder.
+    pub sample: u64,
+
+    /// Offset in bytes from the first byte of the first frame header to the
+    /// first byte of the target frame’s header.
+    pub offset: u64,
+
+    /// Number of samples in the target frame.
+    pub samples: u16,
+}
+
+/// A seek table to aid seeking in the stream.
+pub struct SeekTable {
+    /// The seek points, sorted in ascending order by sample number.
+    pub seekpoints: Vec<SeekPoint>,
+}
+
+/// Vorbis comments, also known as FLAC tags (e.g. artist, title, etc.).
+pub struct VorbisComment {
+    /// The “vendor string”, chosen by the encoder vendor.
+    ///
+    /// This string usually contains the name and version of the program that
+    /// encoded the FLAC stream, such as `reference libFLAC 1.3.2 20170101`
+    /// or `Lavf57.25.100`.
+    pub vendor: String,
+
+    /// Name-value pairs of Vorbis comments, such as `ARTIST=Queen`.
+    ///
+    /// This struct stores a raw low-level representation of tags. The tuple
+    /// consists of the string in `"NAME=value"` format, and the index of the
+    /// `'='` into that string.
+    ///
+    /// Use [`tags()`](#method.tags) for a friendlier iterator.
+    ///
+    /// The tag name is supposed to be interpreted case-insensitively, and is
+    /// guaranteed to consist of ASCII characters. Claxon does not normalize
+    /// the casing of the name. Use [`get_tag()`](#method.get_tag) to do a
+    /// case-insensitive lookup.
+    ///
+    /// Names need not be unique. For instance, multiple `ARTIST` comments might
+    /// be present on a collaboration track.
+    ///
+    /// See <https://www.xiph.org/vorbis/doc/v-comment.html> for more details.
+    pub comments: Vec<(String, usize)>,
+}
+
+impl VorbisComment {
+    /// Return name-value pairs of Vorbis comments, such as `("ARTIST", "Queen")`.
+    ///
+    /// The name is supposed to be interpreted case-insensitively, and is
+    /// guaranteed to consist of ASCII characters. Claxon does not normalize
+    /// the casing of the name. Use [`get_tag()`](#method.get_tag) to do a
+    /// case-insensitive lookup.
+    ///
+    /// Names need not be unique. For instance, multiple `ARTIST` comments might
+    /// be present on a collaboration track.
+    ///
+    /// See <https://www.xiph.org/vorbis/doc/v-comment.html> for more details
+    /// about tag conventions.
+    pub fn tags(&self) -> Tags {
+        Tags::new(&self.comments)
+    }
+
+    /// Look up a Vorbis comment such as `ARTIST` in a case-insensitive way.
+    ///
+    /// Returns an iterator, because tags may occur more than once. There could
+    /// be multiple `ARTIST` tags on a collaboration track, for instance.
+    ///
+    /// Note that tag names are ASCII and never contain `'='`; trying to look up
+    /// a non-ASCII tag will return no results. Furthermore, the Vorbis comment
+    /// spec dictates that tag names should be handled case-insensitively, so
+    /// this method performs a case-insensitive lookup.
+    ///
+    /// See also [`tags()`](#method.tags) for access to all tags.
+    /// See <https://www.xiph.org/vorbis/doc/v-comment.html> for more details
+    /// about tag conventions.
+    pub fn get_tag<'a>(&'a self, tag_name: &'a str) -> GetTag<'a> {
+        GetTag::new(&self.comments, tag_name)
+    }
+}
+
+impl<'a> IntoIterator for &'a VorbisComment {
+    type Item = (&'a str, &'a str);
+    type IntoIter = Tags<'a>;
+
+    fn into_iter(self) -> Tags<'a> {
+        self.tags()
+    }
+}
+
+/// Iterates over Vorbis comments (FLAC tags) in a FLAC stream.
+///
+/// See [`VorbisComment::tags()`](struct.VorbisComment#method.tags) for more details.
+pub struct Tags<'a> {
+    /// The underlying iterator.
+    iter: slice::Iter<'a, (String, usize)>,
+}
+
+impl<'a> Tags<'a> {
+    /// Return a new `Tags` iterator.
+    #[inline]
+    fn new(comments: &'a [(String, usize)]) -> Tags<'a> {
+        Tags { iter: comments.iter() }
+    }
+}
+
+impl<'a> Iterator for Tags<'a> {
+    type Item = (&'a str, &'a str);
+
+    #[inline]
+    fn next(&mut self) -> Option<(&'a str, &'a str)> {
+        return self.iter.next().map(|&(ref comment, sep_idx)| {
+            (&comment[..sep_idx], &comment[sep_idx + 1..])
+        });
+    }
+}
+
+impl<'a> ExactSizeIterator for Tags<'a> {
+    #[inline]
+    fn len(&self) -> usize {
+        self.iter.len()
+    }
+}
+
+/// Iterates over Vorbis comments looking for a specific one; returns its values as `&str`.
+///
+/// See [`VorbisComment::get_tag()`](struct.VorbisComment#method.get_tag) for more details.
+pub struct GetTag<'a> {
+    /// The Vorbis comments to search through.
+    vorbis_comments: &'a [(String, usize)],
+
+    /// The tag to look for.
+    needle: &'a str,
+
+    /// The index of the (name, value) pair that should be inspected next.
+    index: usize,
+}
+
+impl<'a> GetTag<'a> {
+    /// Returns a new `GetTag` iterator.
+    #[inline]
+    fn new(vorbis_comments: &'a [(String, usize)], needle: &'a str) -> GetTag<'a> {
+        GetTag {
+            vorbis_comments: vorbis_comments,
+            needle: needle,
+            index: 0,
+        }
+    }
+}
+
+impl<'a> Iterator for GetTag<'a> {
+    type Item = &'a str;
+
+    #[inline]
+    fn next(&mut self) -> Option<&'a str> {
+        while self.index < self.vorbis_comments.len() {
+            let (ref comment, sep_idx) = self.vorbis_comments[self.index];
+            self.index += 1;
+
+            if comment[..sep_idx].eq_ignore_ascii_case(self.needle) {
+                return Some(&comment[sep_idx + 1..]);
+            }
+        }
+
+        return None;
+    }
+}
+
+/// Read a VORBIS_COMMENT block.
+///
+/// Takes `header.length` as input.
+///
+/// To prevent malicious inputs from causing large allocations, this function
+/// returns `Error::Unsupported` if the length is greater than 10 MiB. Use
+/// [`read_vorbis_comment_block_unchecked`](fn.read_vorbis_comment_block_unchecked.html)
+/// to sidestep this check.
+pub fn read_vorbis_comment_block<R: io::Read>(input: &mut R, length: u32) -> Result<VorbisComment> {
+    // Fail if the length of the Vorbis comment block is larger than 1 MiB. This
+    // block is full of length-prefixed strings for which we allocate memory up
+    // front. If there were no limit on these, a maliciously crafted file could
+    // cause OOM by claiming to contain large strings. But at least the strings
+    // cannot be longer than the size of the Vorbis comment block, and by
+    // limiting the size of that block, we can mitigate such DoS attacks.
+    //
+    // The typical size of a the Vorbis comment block is 1 KiB; on a corpus of
+    // real-world flac files, the 0.05 and 0.95 quantiles were 792 and 1257
+    // bytes respectively, with even the 0.99 quantile below 2 KiB. The only
+    // reason for having a large Vorbis comment block is when cover art is
+    // incorrectly embedded there, but the Vorbis comment block is not the right
+    // place for that anyway.
+    if length > 10 * 1024 * 1024 {
+        let msg = "Vorbis comment blocks larger than 10 MiB are not supported";
+        return Err(Error::Unsupported(msg));
+    }
+
+    // The unchecked variant is now safe; we performed the check above.
+    read_vorbis_comment_block_unchecked(input, length)
+}
+
+/// Read a VORBIS_COMMENT block from a trusted source.
+///
+/// Takes `header.length` as input.
+///
+/// This function imposes no upper limit on the length of a block (other than
+/// the limits of the FLAC format itself). Because the result contains
+/// heap-allocated values that are preallocated to the right size, using this
+/// function on untrusted inputs may trigger an out of memory condition.
+///
+/// Use [`read_vorbis_comment_block`](fn.read_vorbis_comment_block.html) to read
+/// untrusted inputs.
+pub fn read_vorbis_comment_block_unchecked<R: io::Read>(
+    input: &mut R,
+    length: u32,
+) -> Result<VorbisComment> {
+    if length < 8 {
+        // We expect at a minimum a 32-bit vendor string length, and a 32-bit
+        // comment count.
+        return fmt_err("Vorbis comment block is too short");
+    }
+
+    // The Vorbis comment block starts with a length-prefixed "vendor string".
+    // It cannot be larger than the block length - 8, because there are the
+    // 32-bit vendor string length, and comment count.
+    let vendor_len = input.read_le_u32()?;
+    if vendor_len > length - 8 {
+        return fmt_err("vendor string too long");
+    }
+    let mut vendor_bytes = Vec::with_capacity(vendor_len as usize);
+
+    // We can safely set the length of the vector here; the uninitialized memory
+    // is not exposed. If `read_exact` succeeds, it will have overwritten all
+    // bytes. If not, an error is returned and the memory is never exposed.
+    unsafe {
+        vendor_bytes.set_len(vendor_len as usize);
+    }
+    input.read_exact(&mut vendor_bytes)?;
+    let vendor = String::from_utf8(vendor_bytes)?;
+
+    // Next up is the number of comments. Because every comment is at least 4
+    // bytes to indicate its length, there cannot be more comments than the
+    // length of the block divided by 4. This is only an upper bound to ensure
+    // that we don't allocate a big vector, to protect against DoS attacks.
+    let comments_len = input.read_le_u32()?;
+    if comments_len >= length / 4 {
+        return fmt_err("too many entries for Vorbis comment block");
+    }
+    let mut comments = Vec::with_capacity(comments_len as usize);
+
+    let mut bytes_left = length - 8 - vendor_len;
+
+    // For every comment, there is a length-prefixed string of the form
+    // "NAME=value".
+    while bytes_left >= 4 {
+        let comment_len = input.read_le_u32()?;
+        bytes_left -= 4;
+
+        if comment_len > bytes_left {
+            return fmt_err("Vorbis comment too long for Vorbis comment block");
+        }
+
+        // For the same reason as above, setting the length is safe here.
+        let mut comment_bytes = Vec::with_capacity(comment_len as usize);
+        unsafe {
+            comment_bytes.set_len(comment_len as usize);
+        }
+        input.read_exact(&mut comment_bytes)?;
+
+        bytes_left -= comment_len;
+
+        if let Some(sep_index) = comment_bytes.iter().position(|&x| x == b'=') {
+            {
+                let name_bytes = &comment_bytes[..sep_index];
+
+                // According to the Vorbis spec, the field name may consist of ascii
+                // bytes 0x20 through 0x7d, 0x3d (`=`) excluded. Verifying this has
+                // the advantage that if the check passes, the result is valid
+                // UTF-8, so the conversion to string will not fail.
+                if name_bytes.iter().any(|&x| x < 0x20 || x > 0x7d) {
+                    return fmt_err("Vorbis comment field name contains invalid byte");
+                }
+            }
+
+            let comment = String::from_utf8(comment_bytes)?;
+            comments.push((comment, sep_index));
+        } else {
+            return fmt_err("Vorbis comment does not contain '='");
+        }
+    }
+
+    if comments.len() != comments_len as usize {
+        return fmt_err("Vorbis comment block contains wrong number of entries");
+    }
+
+    let vorbis_comment = VorbisComment {
+        vendor: vendor,
+        comments: comments,
+    };
+
+    Ok(vorbis_comment)
 }
