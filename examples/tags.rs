@@ -15,8 +15,7 @@ use std::env;
 
 fn main() {
     for fname in env::args().skip(1) {
-        let mut reader = claxon::MetadataReader::open(&fname).expect("failed to open FLAC stream");
-        let tags = reader.next_vorbis_comment().expect("failed to read metadata");
+        let tags: claxon::metadata3::VorbisComment = unimplemented!("TODO: Add way to get at the VorbisComment");
 
         // We can iterate directly over all tags. When looking for a specific
         // tag, `OptionalVorbisComment::get_tag()` may be useful instead.

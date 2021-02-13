@@ -20,7 +20,7 @@ use std::io;
 use std::path::Path;
 
 use claxon::input::ReadBytes;
-use claxon::metadata::{StreamInfo, read_metadata_block_with_header};
+use claxon::metadata3::{StreamInfo};
 use hound::{WavSpec, WavWriter};
 
 fn decode_file(fname: &Path) {
@@ -39,7 +39,7 @@ fn decode_file(fname: &Path) {
     for _ in 0..header_packets_left {
         let packet = preader.read_packet_expected().expect("failed to read ogg");
         let mut cursor = io::Cursor::new(&packet.data);
-        let _metadata_block = read_metadata_block_with_header(&mut cursor).unwrap();
+        let _block = claxon::metadata3::read_block_header(&mut cursor).unwrap();
     }
 
     // Build a wav writer to write the decoded audio to a wav file.
@@ -68,8 +68,6 @@ fn decode_file(fname: &Path) {
 
 /// Decode the streaminfo block, and the number of metadata packets that still follow.
 fn read_first_packet(packet: &ogg::Packet) -> (StreamInfo, u16) {
-    use claxon::metadata::MetadataBlock;
-
     let mut cursor = io::Cursor::new(&packet.data);
 
     // The first 7 bytes contain magic values and version info. We don't
@@ -86,10 +84,14 @@ fn read_first_packet(packet: &ogg::Packet) -> (StreamInfo, u16) {
     cursor.skip(4).unwrap();
 
     // Next is the streaminfo metadata block, which we return.
-    match read_metadata_block_with_header(&mut cursor) {
-      Ok(MetadataBlock::StreamInfo(si)) => (si, header_packets_left),
-      Ok(..) => panic!("expected streaminfo, found other metadata block"),
-      Err(err) => panic!("failed to read streaminfo: {:?}", err),
+    match claxon::metadata3::read_block_header(&mut cursor) {
+        Ok(b) if b.block_type == claxon::metadata3::BlockType::StreamInfo => {
+            let si = claxon::metadata3::read_streaminfo_block(&mut cursor)
+                .expect("failed to read STREAMINFO block");
+            (si, header_packets_left)
+        }
+        Ok(..) => panic!("expected streaminfo, found other metadata block"),
+        Err(err) => panic!("failed to read streaminfo: {:?}", err),
     }
 }
 

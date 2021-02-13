@@ -75,19 +75,17 @@ use std::path;
 use error::fmt_err;
 use frame::FrameReader;
 use input::ReadBytes;
-use metadata2::{MetadataBlock, SeekTable, StreamInfo};
+use metadata3::StreamInfo;
 
 mod crc;
 mod error;
 pub mod frame;
 pub mod input;
 pub mod subframe;
-pub mod metadata2;
 pub mod metadata3;
 
 pub use error::{Error, Result};
 pub use frame::Block;
-pub use metadata2::MetadataReader;
 
 /// A FLAC decoder that can decode the stream from the underlying reader.
 ///
@@ -110,8 +108,7 @@ pub struct FlacSamples<R: io::Read> {
 }
 
 /// An iterator that yields samples read from a `FlacReader`.
-pub struct FlacIntoSamples<R: ReadBytes> {
-    // This works because `ReadBytes` is implemented for both `&mut R` and `R`.
+pub struct FlacIntoSamples<R: io::Read> {
     inner: FlacSamples<R>,
 }
 
@@ -121,7 +118,7 @@ pub struct FlacIntoSamples<R: ReadBytes> {
 /// by reading 4 bytes of the header. If an `Ok` is returned, the file is likely
 /// a flac file. If an `Err` is returned, the file is definitely not a flac
 /// file.
-pub fn read_flac_header<R: io::Read>(mut input: R) -> Result<()> {
+pub fn read_flac_header<R: io::Read>(input: &mut R) -> Result<()> {
     // A FLAC stream starts with a 32-bit header 'fLaC' (big endian).
     const FLAC_HEADER: u32 = 0x66_4c_61_43;
 
@@ -142,58 +139,60 @@ pub fn read_flac_header<R: io::Read>(mut input: R) -> Result<()> {
     }
 }
 
+/// Read until the start of the audio data.
+///
+/// This reads the header, the STREAMINFO block, and skips over any other
+/// metadata blocks. After this, the reader is positioned at the start of the
+/// first frame, for use with `FlacReader::new_frame_aligned`.
+pub fn read_until_audio<R: io::Read>(input: &mut R) -> Result<StreamInfo> {
+    // TODO: Sort this skip out.
+    use input::ReadBytes;
+
+    read_flac_header(input)?;
+
+    // Every FLAC file must contain a STREAMINFO block, and it must be first.
+    let mut block = metadata3::read_block_header(input)?;
+    let streaminfo = match block.block_type {
+        metadata3::BlockType::StreamInfo => metadata3::read_streaminfo_block(input)?,
+        _ => return fmt_err("invalid metadata block, expected STREAMINFO first"),
+    };
+
+    // Skip over any other blocks.
+    while !block.is_last {
+        block = metadata3::read_block_header(input)?;
+        input.skip(block.length)?;
+    }
+
+    Ok(streaminfo)
+}
+
 impl<R: io::Read> FlacReader<R> {
     /// Create a reader that reads the FLAC format.
     ///
-    /// The header and relevant metadata blocks are read immediately. Audio
-    /// frames will be read on demand.
+    /// The header is read immediately. Audio frames will be read on demand.
     ///
     /// Claxon rejects files that claim to contain excessively large metadata
     /// blocks, to protect against denial of service attacks where a
     /// small damaged or malicous file could cause gigabytes of memory
     /// to be allocated. `Error::Unsupported` is returned in that case.
-    pub fn new(input: R) -> Result<FlacReader<R>> {
-        let mut metadata_reader = MetadataReader::new(input)?;
-
-        // The metadata reader will yield at least one element after
-        // construction. If data is missing, that well be a `Some(Err)`.
-        let streaminfo = match metadata_reader.next().unwrap()? {
-            MetadataBlock::StreamInfo(si) => si,
-            other => {
-                // TODO: Maybe mark MetadataBlock as #[must_use] to avoid
-                // dropping it without discard?
-                other.discard()?;
-                return fmt_err("streaminfo block missing");
-            }
-        };
-
-        metadata_reader.into_flac_reader(streaminfo, None)
+    pub fn new(mut input: R) -> Result<FlacReader<R>> {
+        let streaminfo = read_until_audio(&mut input)?;
+        Ok(FlacReader::new_frame_aligned(input, streaminfo))
     }
 
     /// Create a reader, assuming the input reader is positioned at a frame header.
     ///
     /// This constructor takes a reader that is positioned at the start of the
     /// first frame (the start of the audio data). This is useful when the
-    /// preceding metadata was read manually using a
-    /// [`MetadataReader`][metadatareader]. After
-    /// [`MetadataReader::next()`][metadatareader-next] returns `None`, the
+    /// preceding metadata was read manually. After consuming the final
+    /// metadata block (the block that has `is_last: true` in its header), the
     /// underlying reader will be positioned at the start of the first frame
     /// header. Constructing a `FlacReader` at this point requires the
-    /// [`StreamInfo`][streaminfo] metadata block, and optionally a
-    /// [`SeekTable`][seektable] to aid seeking. Seeking is not implemented
-    /// yet.
+    /// [`StreamInfo`][streaminfo] metadata block.
     ///
-    /// [metadatareader]:      metadata2/struct.MetadataReader.html
-    /// [metadatareader-next]: metadata2/struct.MetadataReader.html#method.next
-    /// [streaminfo]:          metadata2/struct.StreamInfo.html
-    /// [seektable]:           metadata2/struct.SeekTable.html
+    /// [streaminfo]: metadata3/struct.StreamInfo.html
     // TODO: Patch url when renaming metadata2.
-    pub fn new_frame_aligned(input: R, streaminfo: StreamInfo, seektable: Option<SeekTable>) -> FlacReader<R> {
-        // Ignore the seek table for now. When we implement seeking in the
-        // future, it will be stored in the FlacReader and used for seeking. We
-        // already take it as a constructor argument now, to avoid breaking
-        // changes in the future.
-        let _ = seektable;
+    pub fn new_frame_aligned(input: R, streaminfo: StreamInfo) -> FlacReader<R> {
         FlacReader {
             streaminfo: streaminfo,
             input: input,
@@ -328,7 +327,7 @@ impl<R: io::Read> Iterator for FlacSamples<R> {
     }
 }
 
-impl<R: ReadBytes> Iterator for FlacIntoSamples<R> {
+impl<R: io::Read> Iterator for FlacIntoSamples<R> {
     type Item = Result<i32>;
 
     fn next(&mut self) -> Option<Self::Item> {

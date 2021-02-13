@@ -5,10 +5,6 @@
 // you may not use this file except in compliance with the License.
 // A copy of the License has been included in the root of the repository.
 
-// This file contains a minimal example of using Claxon and Hound to decode a
-// flac file. This can be done more efficiently, but it is also more verbose.
-// See the `decode` example for that.
-
 extern crate claxon;
 extern crate walkdir;
 extern crate time;
@@ -36,8 +32,7 @@ fn main() {
 
             // Read the file multiple times to amortize the walkdir cost.
             for _ in 0..10 {
-                let mut reader = claxon::MetadataReader::open(path).unwrap();
-                let vc = reader.next_vorbis_comment().unwrap();
+                let vc: claxon::metadata3::VorbisComment = unimplemented!("TODO: Add a shorthand to get at the Vorbis comment.");
 
                 // Note that these are not optimized away even though the results
                 // are not used, because the expectation may fail.
@@ -60,7 +55,7 @@ fn main() {
                 vc.get_tag("musicbrainz_artistid").next().expect("musicbrainz_artistid");
                 vc.get_tag("musicbrainz_albumartistid").next().expect("musicbrainz_albumartistid");
 
-                bytes += reader.into_inner().seek(SeekFrom::Current(0)).unwrap();
+                // TODO bytes += reader.into_inner().seek(SeekFrom::Current(0)).unwrap();
             }
 
             let duration_ns = epoch.to(PreciseTime::now()).num_nanoseconds().unwrap();
