@@ -20,7 +20,7 @@ use std::io;
 use std::path::Path;
 
 use claxon::input::ReadBytes;
-use claxon::metadata3::{StreamInfo};
+use claxon::metadata::{StreamInfo};
 use hound::{WavSpec, WavWriter};
 
 fn decode_file(fname: &Path) {
@@ -39,7 +39,7 @@ fn decode_file(fname: &Path) {
     for _ in 0..header_packets_left {
         let packet = preader.read_packet_expected().expect("failed to read ogg");
         let mut cursor = io::Cursor::new(&packet.data);
-        let _block = claxon::metadata3::read_block_header(&mut cursor).unwrap();
+        let _block = claxon::metadata::read_block_header(&mut cursor).unwrap();
     }
 
     // Build a wav writer to write the decoded audio to a wav file.
@@ -84,9 +84,9 @@ fn read_first_packet(packet: &ogg::Packet) -> (StreamInfo, u16) {
     cursor.skip(4).unwrap();
 
     // Next is the streaminfo metadata block, which we return.
-    match claxon::metadata3::read_block_header(&mut cursor) {
-        Ok(b) if b.block_type == claxon::metadata3::BlockType::StreamInfo => {
-            let si = claxon::metadata3::read_streaminfo_block(&mut cursor)
+    match claxon::metadata::read_block_header(&mut cursor) {
+        Ok(b) if b.block_type == claxon::metadata::BlockType::StreamInfo => {
+            let si = claxon::metadata::read_streaminfo_block(&mut cursor)
                 .expect("failed to read STREAMINFO block");
             (si, header_packets_left)
         }

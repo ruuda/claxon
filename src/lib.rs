@@ -75,14 +75,14 @@ use std::path;
 use error::fmt_err;
 use frame::FrameReader;
 use input::ReadBytes;
-use metadata3::{StreamInfo, OptionalVorbisComment};
+use metadata::{StreamInfo, OptionalVorbisComment};
 
 mod crc;
 mod error;
 pub mod frame;
 pub mod input;
 pub mod subframe;
-pub mod metadata3;
+pub mod metadata;
 
 pub use error::{Error, Result};
 pub use frame::Block;
@@ -151,15 +151,15 @@ pub fn read_until_audio<R: io::Read>(input: &mut R) -> Result<StreamInfo> {
     read_flac_header(input)?;
 
     // Every FLAC file must contain a STREAMINFO block, and it must be first.
-    let mut block = metadata3::read_block_header(input)?;
+    let mut block = metadata::read_block_header(input)?;
     let streaminfo = match block.block_type {
-        metadata3::BlockType::StreamInfo => metadata3::read_streaminfo_block(input)?,
+        metadata::BlockType::StreamInfo => metadata::read_streaminfo_block(input)?,
         _ => return fmt_err("invalid metadata block, expected STREAMINFO first"),
     };
 
     // Skip over any other blocks.
     while !block.is_last {
-        block = metadata3::read_block_header(input)?;
+        block = metadata::read_block_header(input)?;
         input.skip(block.length)?;
     }
 
@@ -178,10 +178,10 @@ pub fn read_vorbis_comment<R: io::Read>(input: &mut R) -> Result<OptionalVorbisC
     read_flac_header(input)?;
 
     loop {
-        let block = metadata3::read_block_header(input)?;
+        let block = metadata::read_block_header(input)?;
         match block.block_type {
-            metadata3::BlockType::VorbisComment => {
-                let vc = metadata3::read_vorbis_comment_block(input, block.length)?;
+            metadata::BlockType::VorbisComment => {
+                let vc = metadata::read_vorbis_comment_block(input, block.length)?;
                 return Ok(OptionalVorbisComment(Some(vc)));
             }
             _ => input.skip(block.length)?,
@@ -227,8 +227,7 @@ impl<R: io::Read> FlacReader<R> {
     /// header. Constructing a `FlacReader` at this point requires the
     /// [`StreamInfo`][streaminfo] metadata block.
     ///
-    /// [streaminfo]: metadata3/struct.StreamInfo.html
-    // TODO: Patch url when renaming metadata2.
+    /// [streaminfo]: metadata/struct.StreamInfo.html
     pub fn new_frame_aligned(input: R, streaminfo: StreamInfo) -> FlacReader<R> {
         FlacReader {
             streaminfo: streaminfo,

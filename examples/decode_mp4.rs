@@ -18,7 +18,7 @@ use std::io::Seek;
 use std::io;
 use std::path::Path;
 
-use claxon::metadata3::StreamInfo;
+use claxon::metadata::StreamInfo;
 use hound::{WavSpec, WavWriter};
 use mp4parse::CodecType;
 
@@ -116,11 +116,11 @@ fn get_streaminfo(track: &mp4parse::Track) -> Option<StreamInfo> {
     for raw_block in &flac_box.blocks {
         let len = raw_block.data.len() as u32;
         let mut cursor = io::Cursor::new(&raw_block.data);
-        let result = claxon::metadata3::read_block_header(&mut cursor);
+        let result = claxon::metadata::read_block_header(&mut cursor);
         match raw_block.block_type {
             // Block type 0 is the STREAMINFO block.
             0 => {
-                let si = claxon::metadata3::read_streaminfo_block(&mut cursor)
+                let si = claxon::metadata::read_streaminfo_block(&mut cursor)
                     .expect("failed to read STREAMINFO block");
                 return Some(si)
             }
