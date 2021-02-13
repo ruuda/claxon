@@ -35,7 +35,7 @@ pub enum BlockType {
 
     /// A SEEKTABLE block, with data for supporting faster seeks.
     ///
-    /// There is currently no support for reading the seek table.
+    /// There is currently no support for reading the seek table itself.
     SeekTable = 3,
 
     /// A VORBIS_COMMENT block, with metadata tags.
@@ -45,10 +45,12 @@ pub enum BlockType {
 
     /// A CUESHEET block.
     ///
-    /// There is currently no support for reading the CUE sheet.
+    /// There is currently no support for reading the CUE sheet itself.
     CueSheet = 5,
 
     /// A PICTURE block, with cover art or other image metadata.
+    ///
+    /// Use [`read_picture_block`](fn.read_picture_block.html) to read.
     Picture = 6,
 }
 
@@ -572,4 +574,218 @@ pub fn read_vorbis_comment_block_unchecked<R: io::Read>(
     };
 
     Ok(vorbis_comment)
+}
+
+/// The picture kind: front cover, leaflet, etc.
+///
+/// The FLAC format uses the picture kinds from the ID3v2 API frame.
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
+pub enum PictureKind {
+    /// Front cover.
+    FrontCover = 3,
+    /// Back cover.
+    BackCover = 4,
+    /// Leaflet page.
+    LeafletPage = 5,
+    /// Media (e.g. label side of CD).
+    Media = 6,
+    /// Lead artist, lead performer, or soloist.
+    LeadArtist = 7,
+    /// Artist or performer.
+    Artist = 8,
+    /// Conductor.
+    Conductor = 9,
+    /// Band or orchestra.
+    Band = 10,
+    /// Composer.
+    Composer = 11,
+    /// Lyricist or text writer.
+    Lyricist = 12,
+    /// Recording location.
+    RecordingLocation = 13,
+    /// Picture taken during recording.
+    DuringRecording = 14,
+    /// Picture taken during performance.
+    DuringPerformance = 15,
+    /// A screen capture of a movie or video.
+    VideoScreenCapture = 16,
+    /// A bright colored fish, presumably a xiph.org joke.
+    BrightColoredFish = 17,
+    /// Illustration.
+    Illustration = 18,
+    /// Band or artist logotype.
+    BandLogotype = 19,
+    /// Publisher or studio logotype.
+    PublisherLogotype = 20,
+    /// 32x32 pixels png file icon.
+    FileIcon32x32 = 1,
+    /// Other file icon.
+    FileIconOther = 2,
+    /// Other.
+    Other = 0,
+}
+
+/// A metadata block that embeds a picture (e.g. cover art).
+///
+/// Produced by [`read_picture_block`](fn.read_picture_block.html).
+pub struct Picture {
+    /// The picture kind: front cover, leaflet, etc.
+    pub kind: PictureKind,
+
+    /// MIME type of the picture.
+    ///
+    /// The type can also be `-->`, in which case the data should be interpreted
+    /// as a URL rather than the actual picture data.
+    pub mime_type: String,
+
+    /// A description of the picture. Often empty in practice.
+    pub description: String,
+
+    /// The width of the picture in pixels.
+    pub width: u32,
+
+    /// The height of the picture in pixels.
+    pub height: u32,
+
+    /// The size of the picture data in bytes.
+    pub length: u32,
+}
+
+/// Read the header of a PICTURE block.
+///
+/// Takes `header.length` as input. This function does not consume those full
+/// `length` bytes, it only reads the part of the block that contains the image
+/// metadata. An image reading library can then read the remaining
+/// `picture.length` bytes, or you can skip over these bytes if you were only
+/// interested in the metadata.
+pub fn read_picture_block<R: io::Read>(input: &mut R, length: u32) -> Result<Picture> {
+    if length < 32 {
+        // We expect at a minimum 8 all of the 32-bit fields.
+        return fmt_err("picture block is too short");
+    }
+
+    let picture_type = input.read_be_u32()?;
+
+    let kind = match picture_type {
+        0 => PictureKind::Other,
+        1 => PictureKind::FileIcon32x32,
+        2 => PictureKind::FileIconOther,
+        3 => PictureKind::FrontCover,
+        4 => PictureKind::BackCover,
+        5 => PictureKind::LeafletPage,
+        6 => PictureKind::Media,
+        7 => PictureKind::LeadArtist,
+        8 => PictureKind::Artist,
+        9 => PictureKind::Conductor,
+        10 => PictureKind::Band,
+        11 => PictureKind::Composer,
+        12 => PictureKind::Lyricist,
+        13 => PictureKind::RecordingLocation,
+        14 => PictureKind::DuringRecording,
+        15 => PictureKind::DuringPerformance,
+        16 => PictureKind::VideoScreenCapture,
+        17 => PictureKind::BrightColoredFish,
+        18 => PictureKind::Illustration,
+        19 => PictureKind::BandLogotype,
+        20 => PictureKind::PublisherLogotype,
+        // Picture types up to 20 are valid, others are reserved.
+        _ => return fmt_err("invalid picture type"),
+    };
+
+    let mime_len = input.read_be_u32()?;
+
+    // The mime type string must fit within the picture block. Also put a limit
+    // on the length, to ensure we don't allocate large strings, in order to
+    // prevent denial of service attacks.
+    if mime_len > length - 32 {
+        return fmt_err("picture MIME type string too long");
+    }
+    if mime_len > 256 {
+        let msg = "picture MIME types larger than 256 bytes are not supported";
+        return Err(Error::Unsupported(msg));
+    }
+    let mut mime_bytes = Vec::with_capacity(mime_len as usize);
+
+    // We can safely set the length of the vector here; the uninitialized memory
+    // is not exposed. If `read_exact` succeeds, it will have overwritten all
+    // bytes. If not, an error is returned and the memory is never exposed.
+    unsafe {
+        mime_bytes.set_len(mime_len as usize);
+    }
+    input.read_exact(&mut mime_bytes)?;
+
+    // According to the spec, the MIME type string must consist of printable
+    // ASCII characters in the range 0x20-0x7e; validate that. This also means
+    // that we don't have to check for valid UTF-8 to turn it into a string.
+    if mime_bytes.iter().any(|&b| b < 0x20 || b > 0x7e) {
+        return fmt_err("picture mime type string contains invalid characters");
+    }
+    let mime_type = unsafe { String::from_utf8_unchecked(mime_bytes) };
+
+    let description_len = input.read_be_u32()?;
+
+    // The description must fit within the picture block. Also put a limit
+    // on the length, to ensure we don't allocate large strings, in order to
+    // prevent denial of service attacks.
+    if description_len > length - 32 {
+        return fmt_err("picture description too long");
+    }
+    if description_len > 256 {
+        let msg = "picture descriptions larger than 256 bytes are not supported";
+        return Err(Error::Unsupported(msg));
+    }
+    let mut description_bytes = Vec::with_capacity(description_len as usize);
+
+    // We can safely set the length of the vector here; the uninitialized memory
+    // is not exposed. If `read_exact` succeeds, it will have overwritten all
+    // bytes. If not, an error is returned and the memory is never exposed.
+    unsafe {
+        description_bytes.set_len(description_len as usize);
+    }
+    input.read_exact(&mut description_bytes)?;
+    let description = String::from_utf8(description_bytes)?;
+
+    // Next are a few fields with pixel metadata. It seems a bit weird to me
+    // that FLAC stores the bits per pixel, and especially the number of indexed
+    // colors. Perhaps the idea was to allow choosing which picture to decode,
+    // but peeking the image data itself would be better anyway. I have no use
+    // case for these fields, so they are not exposed, to keep the API cleaner,
+    // and to save a few bytes of memory.
+    let width = input.read_be_u32()?;
+    let height = input.read_be_u32()?;
+    let _bits_per_pixel = input.read_be_u32()?;
+    let _num_indexed_colors = input.read_be_u32()?;
+
+    let data_len = input.read_be_u32()?;
+
+    // The length field is redundant, because we already have the size of the
+    // block. The picture should fill up the remainder of the block.
+    if data_len > length - 32 - mime_len - description_len {
+        return fmt_err("picture data does not fit the picture block");
+    }
+
+    // The largest picture in my personal collection is 13_318_155 bytes; the
+    // 95th percentile is 3_672_912 bytes. Having larger cover art embedded kind
+    // of defeats the purpose, as the cover art would be larger than the audio
+    // data for the typical track. Hence a 100 MiB limit should be reasonable.
+    // TODO: Now that we only return the length, this is less risky. But it
+    // still seems dangerous to not put a limit on it by default, because
+    // callers are likely not expecting large images, and they might try to read
+    // the entire thing into a Vec<u8> ... Perhaps a good solution is to return
+    // a Result<u32, u32>, where Err indicates a large image.
+    if data_len > 100 * 1024 * 1024 {
+        let msg = "pictures larger than 100 MiB are not supported";
+        return Err(Error::Unsupported(msg));
+    }
+
+    let picture = Picture {
+        kind: kind,
+        mime_type: mime_type,
+        description: description,
+        width: width,
+        height: height,
+        length: data_len,
+    };
+
+    Ok(picture)
 }
