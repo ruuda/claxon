@@ -81,7 +81,6 @@ mod crc;
 mod error;
 pub mod frame;
 pub mod input;
-pub mod metadata;
 pub mod subframe;
 pub mod metadata2;
 
