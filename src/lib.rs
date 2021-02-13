@@ -83,6 +83,7 @@ pub mod frame;
 pub mod input;
 pub mod subframe;
 pub mod metadata2;
+pub mod metadata3;
 
 pub use error::{Error, Result};
 pub use frame::Block;
