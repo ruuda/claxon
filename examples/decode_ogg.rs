@@ -20,7 +20,7 @@ use std::io;
 use std::path::Path;
 
 use claxon::input::ReadBytes;
-use claxon::metadata::{StreamInfo, read_metadata_block_with_header};
+use claxon::metadata::{read_metadata_block_with_header, StreamInfo};
 use hound::{WavSpec, WavWriter};
 
 fn decode_file(fname: &Path) {
@@ -56,12 +56,14 @@ fn decode_file(fname: &Path) {
 
     // All the packets that follow contain one flac frame each. Decode those one
     // by one, recycling the buffer.
-    let mut buffer = Vec::with_capacity(streaminfo.max_block_size as usize *
-                                        streaminfo.channels as usize);
+    let mut buffer =
+        Vec::with_capacity(streaminfo.max_block_size as usize * streaminfo.channels as usize);
     while let Some(packet) = preader.read_packet().expect("failed to read ogg") {
         // Empty packets do occur, skip them. So far I have only observed the
         // final packet to be empty.
-        if packet.data.len() == 0 { continue }
+        if packet.data.len() == 0 {
+            continue;
+        }
         buffer = decode_frame(&packet, buffer, &mut wav_writer);
     }
 }
@@ -87,20 +89,23 @@ fn read_first_packet(packet: &ogg::Packet) -> (StreamInfo, u16) {
 
     // Next is the streaminfo metadata block, which we return.
     match read_metadata_block_with_header(&mut cursor) {
-      Ok(MetadataBlock::StreamInfo(si)) => (si, header_packets_left),
-      Ok(..) => panic!("expected streaminfo, found other metadata block"),
-      Err(err) => panic!("failed to read streaminfo: {:?}", err),
+        Ok(MetadataBlock::StreamInfo(si)) => (si, header_packets_left),
+        Ok(..) => panic!("expected streaminfo, found other metadata block"),
+        Err(err) => panic!("failed to read streaminfo: {:?}", err),
     }
 }
 
 /// Decode a single frame stored in an ogg packet.
 ///
 /// Takes a buffer to decode into, and returns it again so it can be recycled.
-fn decode_frame<W>(packet: &ogg::Packet,
-                   buffer: Vec<i32>,
-                   wav_writer: &mut WavWriter<W>)
-                   -> Vec<i32>
-where W: io::Seek + io::Write {
+fn decode_frame<W>(
+    packet: &ogg::Packet,
+    buffer: Vec<i32>,
+    wav_writer: &mut WavWriter<W>,
+) -> Vec<i32>
+where
+    W: io::Seek + io::Write,
+{
     // The Claxon `FrameReader` takes something that implements `ReadBytes`, it
     // needs a buffer to decode efficiently. The packet stores the bytes in a
     // vec, so wrapping it in an `io::Cursor` works; it implements `ReadBytes`.
@@ -110,14 +115,20 @@ where W: io::Seek + io::Write {
 
     // TODO There should be a read_next method too that does not tolerate EOF.
     let result = frame_reader.read_next_or_eof(buffer);
-    let block = result.expect("failed to decode frame").expect("unexpected EOF");
+    let block = result
+        .expect("failed to decode frame")
+        .expect("unexpected EOF");
 
     // TODO: Here we assume that we are decoding a stereo stream, which is
     // wrong, but very convenient, as there is no interleaved sample iterator
     // for `Block`. One should be added.
     for (sl, sr) in block.stereo_samples() {
-        wav_writer.write_sample(sl).expect("failed to write wav file");
-        wav_writer.write_sample(sr).expect("failed to write wav file");
+        wav_writer
+            .write_sample(sl)
+            .expect("failed to write wav file");
+        wav_writer
+            .write_sample(sr)
+            .expect("failed to write wav file");
     }
 
     // Give the buffer back so it can be recycled.

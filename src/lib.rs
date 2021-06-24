@@ -68,14 +68,14 @@
 
 #![warn(missing_docs)]
 
-use std::fs;
-use std::io;
-use std::mem;
-use std::path;
 use error::fmt_err;
 use frame::FrameReader;
 use input::{BufferedReader, ReadBytes};
 use metadata::{MetadataBlock, MetadataBlockReader, StreamInfo, VorbisComment};
+use std::fs;
+use std::io;
+use std::mem;
+use std::path;
 
 mod crc;
 mod error;
@@ -156,7 +156,7 @@ impl FlacReaderOptions {
         // If we do not want only metadata, we want everything. Hence there are
         // desired blocks left.
         if !self.metadata_only {
-            return true
+            return true;
         }
 
         // Should be the or of all read_* fields, of which vorbis_comment is the
@@ -192,7 +192,7 @@ fn read_stream_header<R: ReadBytes>(input: &mut R) -> Result<()> {
     // error message if a file starts like this.
     const ID3_HEADER: u32 = 0x49_44_33_00;
 
-    let header = try!(input.read_be_u32());
+    let header = input.read_be_u32()?;
     if header != FLAC_HEADER {
         if (header & 0xff_ff_ff_00) == ID3_HEADER {
             fmt_err("stream starts with ID3 header rather than FLAC header")
@@ -232,7 +232,7 @@ impl<R: io::Read> FlacReader<R> {
         let mut opts_current = options;
 
         // A flac stream first of all starts with a stream header.
-        try!(read_stream_header(&mut buf_reader));
+        read_stream_header(&mut buf_reader)?;
 
         // Start a new scope, because the input reader must be available again
         // for the frame reader next.
@@ -241,7 +241,7 @@ impl<R: io::Read> FlacReader<R> {
             // dictates that the streaminfo block is the first block. The metadata
             // block reader will yield at least one element, so the unwrap is safe.
             let mut metadata_iter = MetadataBlockReader::new(&mut buf_reader);
-            let streaminfo_block = try!(metadata_iter.next().unwrap());
+            let streaminfo_block = metadata_iter.next().unwrap()?;
             let streaminfo = match streaminfo_block {
                 MetadataBlock::StreamInfo(info) => info,
                 _ => return fmt_err("streaminfo block missing"),
@@ -251,12 +251,12 @@ impl<R: io::Read> FlacReader<R> {
 
             // There might be more metadata blocks, read and store them.
             for block_result in metadata_iter {
-                match try!(block_result) {
+                match block_result? {
                     MetadataBlock::VorbisComment(vc) => {
                         // The Vorbis comment block need not be present, but
                         // when it is, it must be unique.
                         if vorbis_comment.is_some() {
-                            return fmt_err("encountered second Vorbis comment block")
+                            return fmt_err("encountered second Vorbis comment block");
                         } else {
                             vorbis_comment = Some(vc);
                         }
@@ -274,7 +274,7 @@ impl<R: io::Read> FlacReader<R> {
                 // Early-out reading metadata once all desired blocks have been
                 // collected.
                 if !opts_current.has_desired_blocks() {
-                    break
+                    break;
                 }
             }
 
@@ -298,8 +298,8 @@ impl<R: io::Read> FlacReader<R> {
 
         // The flac reader will contain the reader that will read frames.
         let flac_reader = FlacReader {
-            streaminfo: streaminfo,
-            vorbis_comment: vorbis_comment,
+            streaminfo,
+            vorbis_comment,
             input: state,
         };
 
@@ -367,9 +367,10 @@ impl<R: io::Read> FlacReader<R> {
     pub fn blocks<'r>(&'r mut self) -> FrameReader<&'r mut BufferedReader<R>> {
         match self.input {
             FlacReaderState::Full(ref mut inp) => FrameReader::new(inp),
-            FlacReaderState::MetadataOnly(..) =>
-                panic!("FlacReaderOptions::metadata_only must be false \
-                       to be able to use FlacReader::blocks()"),
+            FlacReaderState::MetadataOnly(..) => panic!(
+                "FlacReaderOptions::metadata_only must be false \
+                       to be able to use FlacReader::blocks()"
+            ),
         }
     }
 
@@ -395,18 +396,18 @@ impl<R: io::Read> FlacReader<R> {
     /// handling overhead, use `blocks()`.
     pub fn samples<'r>(&'r mut self) -> FlacSamples<&'r mut BufferedReader<R>> {
         match self.input {
-            FlacReaderState::Full(ref mut inp) => {
-                FlacSamples {
-                    frame_reader: frame::FrameReader::new(inp),
-                    block: Block::empty(),
-                    sample: 0,
-                    channel: 0,
-                    has_failed: false,
-                }
-            }
+            FlacReaderState::Full(ref mut inp) => FlacSamples {
+                frame_reader: frame::FrameReader::new(inp),
+                block: Block::empty(),
+                sample: 0,
+                channel: 0,
+                has_failed: false,
+            },
             FlacReaderState::MetadataOnly(..) => {
-                panic!("FlacReaderOptions::metadata_only must be false \
-                       to be able to use FlacReader::samples()")
+                panic!(
+                    "FlacReaderOptions::metadata_only must be false \
+                       to be able to use FlacReader::samples()"
+                )
             }
         }
     }
@@ -416,20 +417,20 @@ impl<R: io::Read> FlacReader<R> {
     /// See `samples()` for more info.
     pub fn into_samples(self) -> FlacIntoSamples<BufferedReader<R>> {
         match self.input {
-            FlacReaderState::Full(inp) => {
-                FlacIntoSamples {
-                    inner: FlacSamples {
-                        frame_reader: frame::FrameReader::new(inp),
-                        block: Block::empty(),
-                        sample: 0,
-                        channel: 0,
-                        has_failed: false,
-                    }
-                }
-            }
+            FlacReaderState::Full(inp) => FlacIntoSamples {
+                inner: FlacSamples {
+                    frame_reader: frame::FrameReader::new(inp),
+                    block: Block::empty(),
+                    sample: 0,
+                    channel: 0,
+                    has_failed: false,
+                },
+            },
             FlacReaderState::MetadataOnly(..) => {
-                panic!("FlacReaderOptions::metadata_only must be false \
-                       to be able to use FlacReader::into_samples()")
+                panic!(
+                    "FlacReaderOptions::metadata_only must be false \
+                       to be able to use FlacReader::into_samples()"
+                )
             }
         }
     }
@@ -453,7 +454,7 @@ impl FlacReader<fs::File> {
     /// `FlacReader` from it. There is no need to wrap the file in a
     /// `BufReader`, as the `FlacReader` employs buffering already.
     pub fn open<P: AsRef<path::Path>>(filename: P) -> Result<FlacReader<fs::File>> {
-        let file = try!(fs::File::open(filename));
+        let file = fs::File::open(filename)?;
         FlacReader::new(file)
     }
 
@@ -462,10 +463,11 @@ impl FlacReader<fs::File> {
     /// This is a convenience constructor that opens a `File`, and constructs a
     /// `FlacReader` from it. There is no need to wrap the file in a
     /// `BufReader`, as the `FlacReader` employs buffering already.
-    pub fn open_ext<P: AsRef<path::Path>>(filename: P,
-                                          options: FlacReaderOptions)
-                                          -> Result<FlacReader<fs::File>> {
-        let file = try!(fs::File::open(filename));
+    pub fn open_ext<P: AsRef<path::Path>>(
+        filename: P,
+        options: FlacReaderOptions,
+    ) -> Result<FlacReader<fs::File>> {
+        let file = fs::File::open(filename)?;
         FlacReader::new_ext(file, options)
     }
 }
@@ -496,7 +498,10 @@ impl<R: ReadBytes> Iterator for FlacSamples<R> {
                 // reuse the current buffer to decode again.
                 let current_block = mem::replace(&mut self.block, Block::empty());
 
-                match self.frame_reader.read_next_or_eof(current_block.into_buffer()) {
+                match self
+                    .frame_reader
+                    .read_next_or_eof(current_block.into_buffer())
+                {
                     Ok(Some(next_block)) => {
                         self.block = next_block;
                     }

@@ -39,10 +39,11 @@ fn decode_file(data: &[u8], sample_times_ns: &mut Vec<f64>) -> (f64, f64) {
     // extract the cursor immediately afterwards. This will read the metadata
     // but not yet any audio data. The position of the cursor is then the amount
     // of metadata bytes.
-    let data_bytes = data.len() - FlacReader::new(Cursor::new(data))
-        .unwrap()
-        .into_inner()
-        .position() as usize;
+    let data_bytes = data.len()
+        - FlacReader::new(Cursor::new(data))
+            .unwrap()
+            .into_inner()
+            .position() as usize;
 
     let cursor = Cursor::new(data);
     let mut reader = FlacReader::new(cursor).unwrap();
@@ -76,9 +77,9 @@ fn decode_file(data: &[u8], sample_times_ns: &mut Vec<f64>) -> (f64, f64) {
                 // optimized away here anyway. The decode needs to happen anyway
                 // to decide whether we hit the panic below.
                 sample_buffer = block.into_buffer();
-            },
+            }
             Ok(None) => break, // End of file.
-            Err(_) => panic!("failed to decode")
+            Err(_) => panic!("failed to decode"),
         }
     }
 
@@ -96,8 +97,14 @@ fn print_stats(sample_times_ns: &mut Vec<f64>, stats_pair: (f64, f64)) {
     let p50 = sample_times_ns[50 * sample_times_ns.len() / 100];
     let p90 = sample_times_ns[90 * sample_times_ns.len() / 100];
 
-    println!("{:>6.2} {:>6.2} {:>6.2} {:>6.2} {:>6.2}",
-             p10, p50, p90, ns_per_sample, bytes_per_sec / 1024.0 / 1024.0);
+    println!(
+        "{:>6.2} {:>6.2} {:>6.2} {:>6.2} {:>6.2}",
+        p10,
+        p50,
+        p90,
+        ns_per_sample,
+        bytes_per_sec / 1024.0 / 1024.0
+    );
 }
 
 fn main() {

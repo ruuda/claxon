@@ -73,16 +73,18 @@ fn read_streaminfo<P: AsRef<Path>>(fname: P) -> String {
     let streaminfo = reader.streaminfo();
 
     // Format the streaminfo in the same way that metaflac prints it.
-    format!("{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n",
-            streaminfo.min_block_size,
-            streaminfo.max_block_size,
-            streaminfo.min_frame_size.unwrap_or(0),
-            streaminfo.max_frame_size.unwrap_or(0),
-            streaminfo.sample_rate,
-            streaminfo.channels,
-            streaminfo.bits_per_sample,
-            streaminfo.samples.unwrap_or(0),
-            print_hex(&streaminfo.md5sum)) // TODO implement LowerHex for &[u8] and submit a PR.
+    format!(
+        "{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n",
+        streaminfo.min_block_size,
+        streaminfo.max_block_size,
+        streaminfo.min_frame_size.unwrap_or(0),
+        streaminfo.max_frame_size.unwrap_or(0),
+        streaminfo.sample_rate,
+        streaminfo.channels,
+        streaminfo.bits_per_sample,
+        streaminfo.samples.unwrap_or(0),
+        print_hex(&streaminfo.md5sum)
+    ) // TODO implement LowerHex for &[u8] and submit a PR.
 }
 
 fn compare_metaflac_streaminfo<P: AsRef<Path>>(fname: P) {
@@ -117,13 +119,13 @@ fn compare_metaflac_vorbis_comment<P: AsRef<Path>>(fname: P) {
             match reader.vendor() {
                 Some(x) if x.starts_with('\0') => {
                     assert_eq!("", mf_vendor_string);
-                    break
+                    break;
                 }
                 _ => {}
             }
 
             assert_eq!(reader.vendor(), Some(mf_vendor_string));
-            break
+            break;
         }
     }
 
@@ -186,20 +188,22 @@ fn compare_decoded_stream<P: AsRef<Path>>(fname: P) {
         let block = blocks.read_next_or_eof(buffer).unwrap().unwrap();
         {
             let mut channels: Vec<_> = (0..n_channels)
-                                           .map(|i| block.channel(i).iter().cloned())
-                                           .collect();
+                .map(|i| block.channel(i).iter().cloned())
+                .collect();
             for i in 0..block.duration() {
                 for ch in 0..n_channels as usize {
                     let ref_sample = ref_samples.next().map(|r| r.ok().unwrap());
                     let try_sample = channels[ch].next();
                     if ref_sample != try_sample {
-                        println!("disagreement at sample {} of block {} in channel {}: \
+                        println!(
+                            "disagreement at sample {} of block {} in channel {}: \
                                   reference is {} but decoded is {}",
-                                 i,
-                                 b,
-                                 ch,
-                                 ref_sample.unwrap(),
-                                 try_sample.unwrap());
+                            i,
+                            b,
+                            ch,
+                            ref_sample.unwrap(),
+                            try_sample.unwrap()
+                        );
                         panic!("decoding differs from reference decoder");
                     }
                 }
@@ -420,7 +424,7 @@ fn verify_limits_on_vorbis_comment_block() {
     // make the decoder go OOM.
     match claxon::FlacReader::open("testsamples/large_vorbis_comment_block.flac") {
         Ok(..) => panic!("This file should fail to load"),
-        Err(claxon::Error::Unsupported(..)) => { }
+        Err(claxon::Error::Unsupported(..)) => {}
         Err(..) => panic!("Expected 'Unsupported' error."),
     }
 }
@@ -472,7 +476,7 @@ fn verify_extra_samples() {
     use std::ffi::OsStr;
 
     if !Path::new("testsamples/extra").exists() {
-        return
+        return;
     }
 
     let wd = walkdir::WalkDir::new("testsamples/extra")
@@ -485,8 +489,10 @@ fn verify_extra_samples() {
     for entry in wd {
         let path = entry.path();
         if path.is_file() && path.extension() == Some(OsStr::new("flac")) {
-            print!("    comparing {} ...", path.to_str()
-                                               .expect("unsupported filename"));
+            print!(
+                "    comparing {} ...",
+                path.to_str().expect("unsupported filename")
+            );
             compare_metaflac_streaminfo(&path);
             compare_metaflac_vorbis_comment(&path);
             compare_decoded_stream(&path);
@@ -502,12 +508,15 @@ fn regression_test_fuzz_samples() {
     // Enumerate all the flac files in the testsamples/fuzz directory,
     // and ensure that they can be decoded without panic.
     let dir = fs::read_dir("testsamples/fuzz")
-                 .ok().expect("failed to enumerate flac files");
+        .ok()
+        .expect("failed to enumerate flac files");
     for path in dir {
         let path = path.ok().expect("failed to obtain path info").path();
         if path.is_file() && path.extension() == Some(OsStr::new("flac")) {
-            print!("    regression testing {} ...", path.to_str()
-                   .expect("unsupported filename"));
+            print!(
+                "    regression testing {} ...",
+                path.to_str().expect("unsupported filename")
+            );
 
             let mut decodes = Vec::new();
 

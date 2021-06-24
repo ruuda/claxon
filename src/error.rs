@@ -33,7 +33,7 @@ pub enum Error {
 
 impl PartialEq for Error {
     fn eq(&self, other: &Error) -> bool {
-        use error::Error::{IoError, FormatError, Unsupported};
+        use error::Error::{FormatError, IoError, Unsupported};
         match (self, other) {
             (&FormatError(r1), &FormatError(r2)) => r1 == r2,
             (&Unsupported(f1), &Unsupported(f2)) => f1 == f2,
@@ -49,12 +49,14 @@ impl fmt::Display for Error {
         match *self {
             Error::IoError(ref err) => err.fmt(formatter),
             Error::FormatError(reason) => {
-                try!(formatter.write_str("Ill-formed FLAC stream: "));
+                formatter.write_str("Ill-formed FLAC stream: ")?;
                 formatter.write_str(reason)
             }
             Error::Unsupported(feature) => {
-                try!(formatter.write_str("A currently unsupported feature of the FLAC format \
-                                          was encountered: "));
+                formatter.write_str(
+                    "A currently unsupported feature of the FLAC format \
+                                          was encountered: ",
+                )?;
                 formatter.write_str(feature)
             }
         }
