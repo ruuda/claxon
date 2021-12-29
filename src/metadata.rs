@@ -20,7 +20,7 @@ struct MetadataBlockHeader {
 }
 
 /// The streaminfo metadata block, with important information about the stream.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct StreamInfo {
     // TODO: "size" would better be called "duration" for clarity.
     /// The minimum block size (in inter-channel samples) used in the stream.
@@ -54,7 +54,7 @@ pub struct StreamInfo {
 }
 
 /// A seek point in the seek table.
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub struct SeekPoint {
     /// Sample number of the first sample in the target frame, or 2<sup>64</sup> - 1 for a placeholder.
     pub sample: u64,
