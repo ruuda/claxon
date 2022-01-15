@@ -135,10 +135,6 @@ impl<R: ReadBytes> ReadBytes for Crc8Reader<R> {
         }
     }
 
-    fn read_into(&mut self, _buffer: &mut [u8]) -> io::Result<()> {
-        panic!("CRC reader does not support read_into.");
-    }
-
     fn skip(&mut self, _amount: u32) -> io::Result<()> {
         panic!("CRC reader does not support skip, it does not compute CRC over skipped data.");
     }
@@ -165,10 +161,6 @@ impl<R: ReadBytes> ReadBytes for Crc16Reader<R> {
             Ok(None) => Ok(None),
             Err(err) => Err(err),
         }
-    }
-
-    fn read_into(&mut self, _buffer: &mut [u8]) -> io::Result<()> {
-        panic!("CRC reader does not support read_into.");
     }
 
     fn skip(&mut self, _amount: u32) -> io::Result<()> {
