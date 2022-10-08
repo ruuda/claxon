@@ -15,8 +15,8 @@ extern crate hound;
 use std::env;
 use std::path::Path;
 
-fn decode_file(fname: &Path) {
-    let mut reader = claxon::FlacReader::open(fname).expect("failed to open FLAC stream");
+fn decode_file(fname: &Path) -> claxon::Result<()> {
+    let mut reader = try!(claxon::FlacReader::open(fname));
 
     let spec = hound::WavSpec {
         channels: reader.streaminfo().channels as u16,
@@ -30,13 +30,27 @@ fn decode_file(fname: &Path) {
     let mut wav_writer = opt_wav_writer.expect("failed to create wav file");
 
     for opt_sample in reader.samples() {
-        let sample = opt_sample.expect("failed to decode FLAC stream");
+        let sample = try!(opt_sample);
         wav_writer.write_sample(sample).expect("failed to write wav file");
     }
+
+    Ok(())
 }
 
 fn main() {
     for fname in env::args().skip(1) {
-        decode_file(&Path::new(&fname));
+        print!("{}", fname);
+        match decode_file(&Path::new(&fname)) {
+            Ok(()) => println!(": done"),
+            Err(claxon::Error::Unsupported(msg)) => {
+                println!(": error, unsupported: {}", msg);
+            }
+            Err(claxon::Error::FormatError(msg)) => {
+                println!(": error, invalid input: {}", msg);
+            }
+            Err(claxon::Error::IoError(io_err)) => {
+                println!(": IO error: {}", io_err);
+            }
+        }
     }
 }
