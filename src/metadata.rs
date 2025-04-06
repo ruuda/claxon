@@ -11,6 +11,8 @@ use error::{Error, Result, fmt_err};
 use input::ReadBytes;
 use std::str;
 use std::slice;
+use uninit::VecExtendFromReader;
+use uninit::ReadIntoUninit;
 
 #[derive(Clone, Copy)]
 struct MetadataBlockHeader {
@@ -194,7 +196,7 @@ impl<'a> Iterator for GetTag<'a> {
     #[inline]
     fn next(&mut self) -> Option<&'a str> {
         // This import is actually required on Rust 1.13.
-        #[allow(unused_imports)]
+        #[allow(deprecated, unused_imports)]
         use std::ascii::AsciiExt;
 
         while self.index < self.vorbis_comments.len() {
@@ -211,7 +213,7 @@ impl<'a> Iterator for GetTag<'a> {
 }
 
 #[inline]
-fn read_metadata_block_header<R: ReadBytes>(input: &mut R) -> Result<MetadataBlockHeader> {
+fn read_metadata_block_header<R: ReadIntoUninit + ReadBytes>(input: &mut R) -> Result<MetadataBlockHeader> {
     let byte = try!(input.read_u8());
 
     // The first bit specifies whether this is the last block, the next 7 bits
@@ -241,7 +243,7 @@ fn read_metadata_block_header<R: ReadBytes>(input: &mut R) -> Result<MetadataBlo
 /// metadata blocks including their header verbatim in packets. This function
 /// can be used to decode that raw data.
 #[inline]
-pub fn read_metadata_block_with_header<R: ReadBytes>(input: &mut R)
+pub fn read_metadata_block_with_header<R: ReadIntoUninit + ReadBytes>(input: &mut R)
                                                      -> Result<MetadataBlock> {
   let header = try!(read_metadata_block_header(input));
   read_metadata_block(input, header.block_type, header.length)
@@ -258,7 +260,7 @@ pub fn read_metadata_block_with_header<R: ReadBytes>(input: &mut R)
 /// a “FLAC Specific Box” which contains the block type and the raw data. This
 /// function can be used to decode that raw data.
 #[inline]
-pub fn read_metadata_block<R: ReadBytes>(input: &mut R,
+pub fn read_metadata_block<R: ReadIntoUninit + ReadBytes>(input: &mut R,
                                          block_type: u8,
                                          length: u32)
                                          -> Result<MetadataBlock> {
@@ -318,7 +320,7 @@ pub fn read_metadata_block<R: ReadBytes>(input: &mut R,
     }
 }
 
-fn read_streaminfo_block<R: ReadBytes>(input: &mut R) -> Result<StreamInfo> {
+fn read_streaminfo_block<R: ReadIntoUninit + ReadBytes>(input: &mut R) -> Result<StreamInfo> {
     let min_block_size = try!(input.read_be_u16());
     let max_block_size = try!(input.read_be_u16());
 
@@ -353,7 +355,7 @@ fn read_streaminfo_block<R: ReadBytes>(input: &mut R) -> Result<StreamInfo> {
 
     // Next are 128 bits (16 bytes) of MD5 signature.
     let mut md5sum = [0u8; 16];
-    try!(input.read_into(&mut md5sum));
+    try!(input.read_exact(&mut md5sum));
 
     // Lower bounds can never be larger than upper bounds. Note that 0 indicates
     // unknown for the frame size. Also, the block size must be at least 16.
@@ -399,7 +401,13 @@ fn read_streaminfo_block<R: ReadBytes>(input: &mut R) -> Result<StreamInfo> {
     Ok(stream_info)
 }
 
-fn read_vorbis_comment_block<R: ReadBytes>(input: &mut R, length: u32) -> Result<VorbisComment> {
+fn read_vorbis_comment_block<R> (
+    mut input: R,
+    length: u32,
+) -> Result<VorbisComment>
+where
+    R : ReadIntoUninit + ReadBytes,
+{
     if length < 8 {
         // We expect at a minimum a 32-bit vendor string length, and a 32-bit
         // comment count.
@@ -429,13 +437,9 @@ fn read_vorbis_comment_block<R: ReadBytes>(input: &mut R, length: u32) -> Result
     // 32-bit vendor string length, and comment count.
     let vendor_len = try!(input.read_le_u32());
     if vendor_len > length - 8 { return fmt_err("vendor string too long") }
-    let mut vendor_bytes = Vec::with_capacity(vendor_len as usize);
 
-    // We can safely set the lenght of the vector here; the uninitialized memory
-    // is not exposed. If `read_into` succeeds, it will have overwritten all
-    // bytes. If not, an error is returned and the memory is never exposed.
-    unsafe { vendor_bytes.set_len(vendor_len as usize); }
-    try!(input.read_into(&mut vendor_bytes));
+    let mut vendor_bytes = Vec::new();
+    try!(vendor_bytes.extend_from_reader(vendor_len as usize, &mut input));
     let vendor = try!(String::from_utf8(vendor_bytes));
 
     // Next up is the number of comments. Because every comment is at least 4
@@ -470,9 +474,8 @@ fn read_vorbis_comment_block<R: ReadBytes>(input: &mut R, length: u32) -> Result
         }
 
         // For the same reason as above, setting the length is safe here.
-        let mut comment_bytes = Vec::with_capacity(comment_len as usize);
-        unsafe { comment_bytes.set_len(comment_len as usize); }
-        try!(input.read_into(&mut comment_bytes));
+        let mut comment_bytes = Vec::new();
+        try!(comment_bytes.extend_from_reader(comment_len as usize, &mut input));
 
         bytes_left -= comment_len;
 
@@ -512,7 +515,7 @@ fn read_vorbis_comment_block<R: ReadBytes>(input: &mut R, length: u32) -> Result
     Ok(vorbis_comment)
 }
 
-fn read_padding_block<R: ReadBytes>(input: &mut R, length: u32) -> Result<()> {
+fn read_padding_block<R: ReadIntoUninit + ReadBytes>(input: &mut R, length: u32) -> Result<()> {
     // The specification dictates that all bits of the padding block must be 0.
     // However, the reference implementation does not issue an error when this
     // is not the case, and frankly, when you are going to skip over these
@@ -521,10 +524,19 @@ fn read_padding_block<R: ReadBytes>(input: &mut R, length: u32) -> Result<()> {
     Ok(try!(input.skip(length)))
 }
 
-fn read_application_block<R: ReadBytes>(input: &mut R, length: u32) -> Result<(u32, Vec<u8>)> {
-    if length < 4 {
-        return fmt_err("application block length must be at least 4 bytes")
-    }
+fn read_application_block<R> (
+    input: &mut R,
+    length: u32,
+) -> Result<(u32, Vec<u8>)>
+where
+    R : ReadIntoUninit + ReadBytes,
+{
+    let length_minus_four = match (length as usize).checked_sub(4) {
+        | Some(result) => result,
+        | _ => {
+            return fmt_err("application block length must be at least 4 bytes");
+        },
+    };
 
     // Reject large application blocks to avoid memory-based denial-
     // of-service attacks. See also the more elaborate motivation in
@@ -541,9 +553,8 @@ fn read_application_block<R: ReadBytes>(input: &mut R, length: u32) -> Result<(u
     // uninitialized memory is never exposed: read_into will either fill the
     // buffer completely, or return an err, in which case the memory is not
     // exposed.
-    let mut data = Vec::with_capacity(length as usize - 4);
-    unsafe { data.set_len(length as usize - 4); }
-    try!(input.read_into(&mut data));
+    let mut data = Vec::new();
+    try!(data.extend_from_reader(length_minus_four, input));
 
     Ok((id, data))
 }
@@ -554,7 +565,7 @@ fn read_application_block<R: ReadBytes>(input: &mut R, length: u32) -> Result<(u
 /// byte of a metadata block header. This means that the iterator will yield at
 /// least a single value. If the iterator ever yields an error, then no more
 /// data will be read thereafter, and the next value will be `None`.
-pub struct MetadataBlockReader<R: ReadBytes> {
+pub struct MetadataBlockReader<R: ReadIntoUninit + ReadBytes> {
     input: R,
     done: bool,
 }
@@ -562,7 +573,7 @@ pub struct MetadataBlockReader<R: ReadBytes> {
 /// Either a `MetadataBlock` or an `Error`.
 pub type MetadataBlockResult = Result<MetadataBlock>;
 
-impl<R: ReadBytes> MetadataBlockReader<R> {
+impl<R: ReadIntoUninit + ReadBytes> MetadataBlockReader<R> {
     /// Creates a metadata block reader that will yield at least one element.
     pub fn new(input: R) -> MetadataBlockReader<R> {
         MetadataBlockReader {
@@ -580,7 +591,7 @@ impl<R: ReadBytes> MetadataBlockReader<R> {
     }
 }
 
-impl<R: ReadBytes> Iterator for MetadataBlockReader<R> {
+impl<R: ReadIntoUninit + ReadBytes> Iterator for MetadataBlockReader<R> {
     type Item = MetadataBlockResult;
 
     #[inline]
