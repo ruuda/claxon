@@ -16,20 +16,11 @@ use std::path::Path;
 use test::Bencher;
 
 /// Replace the reader with one that starts again from the beginning.
-fn refresh_reader(reader: &mut claxon::FlacReader<Cursor<Vec<u8>>>) {
-    // We want to replace the reader in-place, but in order to do so, we must
-    // first destruct it. Rust does not allow us to do that without providing a
-    // replacement, so we temporarily put `mem::uninitialized()` in there. At
-    // the end, that memory is released without running a destructor with
-    // `mem::forget()`.
-    let fake_reader = unsafe { std::mem::uninitialized() };
-    let stolen_reader = std::mem::replace(reader, fake_reader);
-    let cursor = stolen_reader.into_inner();
+fn refresh_reader(reader: claxon::FlacReader<Cursor<Vec<u8>>>) -> claxon::FlacReader<Cursor<Vec<u8>>> {
+    let cursor = reader.into_inner();
     let vec = cursor.into_inner();
     let new_cursor = Cursor::new(vec);
-    let new_reader = claxon::FlacReader::new(new_cursor).unwrap();
-    let stolen_reader = std::mem::replace(reader, new_reader);
-    std::mem::forget(stolen_reader);
+    claxon::FlacReader::new(new_cursor).unwrap()
 }
 
 fn bench_decode<P: AsRef<Path>>(path: P, bencher: &mut Bencher) {
@@ -64,7 +55,7 @@ fn bench_decode<P: AsRef<Path>>(path: P, bencher: &mut Bencher) {
         if should_refresh {
             // We decoded until the end, but the bencher wants to measure more
             // still. Re-create a new FlacReader and start over then.
-            refresh_reader(&mut reader);
+            reader = refresh_reader(reader);
         }
     });
 

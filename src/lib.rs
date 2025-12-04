@@ -68,6 +68,8 @@
 
 #![warn(missing_docs)]
 
+extern crate uninit;
+
 use std::fs;
 use std::io;
 use std::mem;
