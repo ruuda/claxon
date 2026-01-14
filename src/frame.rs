@@ -406,15 +406,18 @@ pub struct Block {
     block_size: u32,
     /// The number of channels in the block.
     channels: u32,
+    /// The sample rate of this block.
+    sample_rate: u32,
     /// The decoded samples, the channels stored consecutively.
     buffer: Vec<i32>,
 }
 
 impl Block {
-    fn new(time: u64, bs: u32, buffer: Vec<i32>) -> Block {
+    fn new(time: u64, bs: u32, sr: u32, buffer: Vec<i32>) -> Block {
         Block {
             first_sample_number: time,
             block_size: bs,
+            sample_rate: sr,
             channels: buffer.len() as u32 / bs,
             buffer: buffer,
         }
@@ -426,6 +429,7 @@ impl Block {
             first_sample_number: 0,
             block_size: 0,
             channels: 0,
+            sample_rate: 0,
             buffer: Vec::with_capacity(0),
         }
     }
@@ -502,6 +506,12 @@ impl Block {
     /// capacity of the buffer may be bigger than `len()` times `channels()`.
     pub fn into_buffer(self) -> Vec<i32> {
         return self.buffer;
+    }
+
+    /// Returns the sample rate of this block.
+    #[inline(always)]
+    pub fn sample_rate(&self) -> u32 {
+        self.sample_rate
     }
 
     /// Returns an iterator that produces left and right channel samples.
@@ -773,7 +783,7 @@ impl<R: ReadBytes> FrameReader<R> {
             BlockTime::SampleNumber(snr) => snr,
         };
 
-        let block = Block::new(time, header.block_size as u32, buffer);
+        let block = Block::new(time, header.block_size as u32, header.sample_rate.unwrap_or_default(), buffer);
 
         Ok(Some(block))
     }
