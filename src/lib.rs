@@ -68,10 +68,8 @@
 
 #![warn(missing_docs)]
 
-use std::cmp::Ordering;
 use std::fs;
 use std::io;
-use std::io::Seek;
 use std::mem;
 use std::path;
 use error::fmt_err;
@@ -422,7 +420,7 @@ impl<R: io::Read> FlacReader<R> {
     /// Same as `samples`, but takes ownership of the `FlacReader`.
     ///
     /// See `samples()` for more info.
-    pub fn into_samples<'a>(self) -> FlacIntoSamples<BufferedReader<R>> {
+    pub fn into_samples(self) -> FlacIntoSamples<BufferedReader<R>> {
         match self.input {
             FlacReaderState::Full(inp) => {
                 FlacIntoSamples {
@@ -480,7 +478,7 @@ impl FlacReader<fs::File> {
 
 impl<R: io::Seek + io::Read> FlacReader<R> {
     /// Equivalent to [blocks] where playback will continue from the frame containing the desired
-    /// sample onward.
+    /// inter-channel sample.
     pub fn seek_block<'r>(&'r mut self, sample: u64) -> crate::Result<FrameReader<&'r mut BufferedReader<R>>> {
         let seek_table = self.seek_table.clone();
 
@@ -488,9 +486,37 @@ impl<R: io::Seek + io::Read> FlacReader<R> {
 
         blocks.seek_with_seek_table(sample, seek_table.as_ref())?;
 
-
-
         Ok(blocks)
+    }
+
+    /// Equivalent to [samples] where playback will continue from the desired inter-channel sample.
+    pub fn seek_sample<'r>(&'r mut self, sample: u64) -> crate::Result<FlacSamples<&'r mut BufferedReader<R>>> {
+        if let FlacReaderState::MetadataOnly(..) = self.input {
+            panic!("FlacReaderOptions::metadata_only must be false \
+                       to be able to use FlacReader::seek_sample()")
+        }
+
+        let mut reader = self.seek_block(sample)?;
+
+        let Some(block) = reader.read_next_or_eof(Vec::new())? else {
+            return Ok(FlacSamples {
+                frame_reader: reader,
+                block: Block::empty(),
+                sample: 0,
+                channel: 0,
+                has_failed: false,
+            })
+        };
+
+        let offset = (sample - block.time()) as u32;
+
+        Ok(FlacSamples {
+            frame_reader: reader,
+            block: block,
+            sample: offset,
+            channel: 0,
+            has_failed: false,
+        })
     }
 }
 
