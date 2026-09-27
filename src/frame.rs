@@ -7,7 +7,7 @@
 
 //! The `frame` module deals with the frames that make up a FLAC stream.
 
-use std::{cmp::Ordering, i32, io::Seek, ops::Range};
+use std::{cmp::Ordering, i32, io::{Seek, SeekFrom}, ops::Range};
 
 use crc::{Crc8Reader, Crc16Reader};
 use error::{Error, Result, fmt_err};
@@ -890,14 +890,17 @@ impl<R: ReadBytes + Seek> FrameReader<R> {
                     // blocksize is used to calculate the sample position
                     let time = match header.block_time {
                         BlockTime::FrameNumber(frame) => fixed_blocksize.map(|blocksize| frame as u64 * blocksize as u64),
-                        BlockTime::SampleNumber(n) => fixed_blocksize.is_none().then(|| n)
+                        BlockTime::SampleNumber(n) => if fixed_blocksize.is_none() { Some(n) } else { None }
                     };
 
                     // Sometimes fake valid frame headers will appear in subframe data sections, but
                     // their data will not be consistent with the rest of the stream.
-                    let Some(time) = time else {
-                        seek = false;
-                        continue;
+                    let time = match time {
+                        Some(v) => v,
+                        None => {
+                            seek = false;
+                            continue;
+                        }
                     };
 
                     if !search_bound_samples.contains(&time) {
@@ -907,9 +910,13 @@ impl<R: ReadBytes + Seek> FrameReader<R> {
 
                     // Only check that the fixed blocksize is consistent if we're sure that this is
                     // not the last frame
-                    if frame_pos != max_frame_pos && fixed_blocksize.is_some_and(|expected_size| header.block_size != expected_size) {
-                        seek = false;
-                        continue;
+                    if frame_pos != max_frame_pos {
+                        if let Some(expected_size) = fixed_blocksize {
+                            if header.block_size != expected_size {
+                                seek = false;
+                                continue;
+                            }
+                        }
                     }
 
                     if time > sample_number {
@@ -1053,7 +1060,7 @@ impl<R: ReadBytes + Seek> FrameReader<R> {
             }
         }
 
-        let res = self.input.stream_position()?;
+        let res = self.input.seek(SeekFrom::Current(0))?;
         Ok(res)
     }
 

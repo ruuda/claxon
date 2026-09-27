@@ -221,7 +221,7 @@ impl<R: Seek + io::Read> Seek for BufferedReader<R> {
                 if current < 0 && (self.pos as i64) >= -current {
                     self.pos -= (-current) as u32;
 
-                    return self.inner.stream_position().map(|pos| {
+                    return self.inner.seek(SeekFrom::Current(0)).map(|pos| {
                         pos - (self.num_valid - self.pos) as u64
                     })
                 }

@@ -498,8 +498,9 @@ impl<R: io::Seek + io::Read> FlacReader<R> {
 
         let mut reader = self.seek_block(sample)?;
 
-        let Some(block) = reader.read_next_or_eof(Vec::new())? else {
-            return Ok(FlacSamples {
+        let block = match reader.read_next_or_eof(Vec::new())? {
+            Some(v) => v,
+            None => return Ok(FlacSamples {
                 frame_reader: reader,
                 block: Block::empty(),
                 sample: 0,
