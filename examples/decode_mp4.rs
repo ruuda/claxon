@@ -140,7 +140,7 @@ where R: io::Read, W: io::Write + io::Seek {
     // wrapping the original file in an `io::BufReader`, but in a Claxon
     // `BufferedReader`. It would have to implement `io::Read` then.
     let buffered_reader = claxon::input::BufferedReader::new(input);
-    let mut frame_reader = claxon::frame::FrameReader::new(buffered_reader, None);
+    let mut frame_reader = claxon::frame::FrameReader::new(buffered_reader);
     let mut buffer = Vec::with_capacity(streaminfo.max_block_size as usize *
                                         streaminfo.channels as usize);
 

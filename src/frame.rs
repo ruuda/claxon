@@ -7,14 +7,14 @@
 
 //! The `frame` module deals with the frames that make up a FLAC stream.
 
-use std::{cmp::Ordering, i32, io::Seek};
+use std::{cmp::Ordering, i32, io::Seek, ops::Range};
 
 use crc::{Crc8Reader, Crc16Reader};
 use error::{Error, Result, fmt_err};
 use input::{Bitstream, ReadBytes};
 use subframe;
 
-use crate::metadata::{self, SeekTable};
+use crate::{FlacReader, metadata::{SeekPoint, SeekTable}};
 
 #[derive(Clone, Copy)]
 enum BlockingStrategy {
@@ -602,12 +602,10 @@ fn verify_block_stereo_samples_iterator() {
 ///
 /// TODO: for now, it is assumes that the reader starts at a frame header;
 /// no searching for a sync code is performed at the moment.
-pub struct FrameReader<'a, R: ReadBytes> {
+pub struct FrameReader<R: ReadBytes> {
     input: R,
-    seek_table: Option<&'a SeekTable>,
-    /// Byte index of the first frame
-    first_frame: Option<u64>,
-    /// The 
+    /// First block size encountered by this frame reader. Used to correctly calculate the last
+    /// frame's block time.
     first_known_block_size: Option<u16>,
 }
 
@@ -654,13 +652,11 @@ fn ensure_buffer_len_returns_buffer_with_new_len() {
     }
 }
 
-impl<R: ReadBytes> FrameReader<'_, R> {
+impl<R: ReadBytes> FrameReader<R> {
     /// Creates a new frame reader that will yield at least one element.
-    pub fn new<'a>(input: R, seek_table: Option<&'a SeekTable>) -> FrameReader<'a, R> {
+    pub fn new(input: R) -> FrameReader<R> {
         FrameReader {
             input,
-            seek_table,
-            first_frame: None,
             first_known_block_size: None,
         }
     }
@@ -806,58 +802,23 @@ impl<R: ReadBytes> FrameReader<'_, R> {
 }
 
 
-impl<R: ReadBytes + Seek> FrameReader<'_, R> {
+impl<R: ReadBytes + Seek> FrameReader<R> {
     /// Finds the frame containing the given sample number and returns it. Further reads will
     /// continue from this position in the stream.
-    pub fn seek(&mut self, sample_number: u64, mut buffer: Vec<i32>) -> FrameResult {
-        let first_frame = if let Some(first_frame) = self.first_frame {
-            first_frame
-        } else {
-            self.find_first_frame()?
+    pub fn seek(
+        &mut self,
+        sample_number: u64,
+        search_bound: Option<Range<u64>>,
+        search_bound_samples: Option<Range<u64>>
+    ) -> Result<()> {
+
+        let first_frame = self.find_first_frame()?;
+        let mut search_bound = match search_bound {
+            Some(bound) => (bound.start + first_frame)..(bound.end + first_frame),
+            None => first_frame..self.input.seek(std::io::SeekFrom::End(0))?
         };
 
-        let mut search_bound = first_frame..self.input.seek(std::io::SeekFrom::End(0))?;
-        let mut search_bound_samples = 0..u64::MAX;
-
-        if let Some(seek_table) = self.seek_table {
-            let result = seek_table.seekpoints.binary_search_by(|seek_point| {
-                if seek_point.sample > sample_number {
-                    Ordering::Greater
-                } else if seek_point.sample + (seek_point.samples as u64) < sample_number {
-                    Ordering::Less
-                } else {
-                    Ordering::Equal
-                }
-            });
-
-
-            match result {
-                Ok(index) => {
-                    // Seek table confirms it is that exact frame
-                    let seek_point = seek_table.seekpoints[index];
-                    search_bound.start = first_frame + seek_point.offset;
-                    search_bound.end = search_bound.start;
-                    search_bound_samples.start = seek_point.sample;
-                    search_bound_samples.end = seek_point.sample + seek_point.samples as u64;
-                }
-                Err(index) => {
-                    // The "index where a matching element would be inserted" will point to after
-                    // the desired sample.
-                    let start = if index != 0 { seek_table.seekpoints[index - 1] } else { metadata::SeekPoint {
-                        sample: 0,
-                        samples: 0,
-                        offset: 0
-                    }};
-                    let end = seek_table.seekpoints[index];
-
-                    search_bound.start = first_frame + start.offset;
-                    search_bound.end = first_frame + end.offset;
-
-                    search_bound_samples.start = start.sample;
-                    search_bound_samples.end = end.sample;
-                }
-            }
-        }
+        let mut search_bound_samples = search_bound_samples.unwrap_or(0..u64::MAX);
 
         // Should not seek if the frame header failed to be read or had inconsistent data, since it
         // was likely a sync-fooling sequence of bytes inside a subframe.
@@ -886,7 +847,7 @@ impl<R: ReadBytes + Seek> FrameReader<'_, R> {
                 Ok(pos) => pos,
                 Err(_) => {
                     if search_bound.is_empty() {
-                        return Ok(None)
+                        return Ok(())
                     } else {
                         search_bound.end = search_bound.start;
                         continue;
@@ -920,6 +881,9 @@ impl<R: ReadBytes + Seek> FrameReader<'_, R> {
                         first_iteration = false;
                         // Already parsed the first frame to extract this information, it is cheap
                         // to also use it to be able to seek to the start in one iteration
+                        if !search_bound_samples.contains(&0) {
+                            continue;
+                        }
                     }
 
                     // The last frame is allowed to have a lower blocksize, so the first header's
@@ -988,12 +952,17 @@ impl<R: ReadBytes + Seek> FrameReader<'_, R> {
 
                         // As a final safeguard against fake frames, parsing the entire frame will
                         // include a CRC16 check which is more reliable than the CRC8 in the header
-                        match self.read_next_or_eof(buffer) {
-                            Ok(frame) => {
-                                return Ok(frame);
+                        match self.read_next_or_eof(Vec::new()) {
+                            Ok(_) => {
+                                // TODO: Regardless of whether I return the parsed frame or not, I
+                                // still need to parse it for a CRC16 check. The API in FlacReader
+                                // expects the caller to run read_next_or_eof again after seeking,
+                                // parsing the same frame twice. Not sure if this is a problem and
+                                // how to optimize for it.
+                                self.input.seek(std::io::SeekFrom::Start(frame_pos))?;
+                                return Ok(());
                             }
                             Err(_) => {
-                                buffer = Vec::new();
                                 seek = false;
                                 self.input.seek(std::io::SeekFrom::Start(frame_pos + 2))?;
                                 continue;
@@ -1002,7 +971,9 @@ impl<R: ReadBytes + Seek> FrameReader<'_, R> {
                     }
 
                 },
-                Ok(None) => return Ok(None),
+                // Reached end of stream. Any further attempt to read a block will immediately
+                // return Ok(None)
+                Ok(None) => return Ok(()),
                 Err(_) => {
                     seek = false;
                     // We don't know where the frame header function left the stream. In most cases
@@ -1014,6 +985,55 @@ impl<R: ReadBytes + Seek> FrameReader<'_, R> {
                 }
             }
         }
+    }
+
+    /// Equivalent to [seek], but using a seek table to find the target frame faster.
+    pub fn seek_with_seek_table(
+        &mut self,
+        sample_number: u64,
+        seek_table: Option<&SeekTable>
+    ) -> Result<()> {
+        let seek_table = match seek_table {
+            Some(t) => t,
+            None => return self.seek(sample_number, None, None)
+        };
+
+        let search_bound;
+        let search_bound_samples;
+        let result = seek_table.seekpoints.binary_search_by(|seek_point| {
+            if seek_point.sample > sample_number {
+                Ordering::Greater
+            } else if seek_point.sample + (seek_point.samples as u64) < sample_number {
+                Ordering::Less
+            } else {
+                Ordering::Equal
+            }
+        });
+
+
+        match result {
+            Ok(index) => {
+                // Seek table confirms it is that exact frame
+                let seek_point = seek_table.seekpoints[index];
+                search_bound = Some(seek_point.offset..seek_point.offset);
+                search_bound_samples = Some(seek_point.sample..(seek_point.sample + seek_point.samples as u64));
+            }
+            Err(index) => {
+                // The "index where a matching element would be inserted" will point to after
+                // the desired sample.
+                let start = if index != 0 { seek_table.seekpoints[index - 1] } else { SeekPoint {
+                    sample: 0,
+                    samples: 0,
+                    offset: 0
+                }};
+                let end = seek_table.seekpoints[index];
+
+                search_bound = Some(start.offset..end.offset);
+                search_bound_samples = Some(start.sample..end.sample);
+            }
+        }
+
+        self.seek(sample_number, search_bound, search_bound_samples)
     }
 
     /// Rewinds the reader to the start of the stream to find the position of the start of the first
@@ -1034,8 +1054,6 @@ impl<R: ReadBytes + Seek> FrameReader<'_, R> {
         }
 
         let res = self.input.stream_position()?;
-        self.first_frame = Some(res);
-
         Ok(res)
     }
 

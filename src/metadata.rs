@@ -66,6 +66,7 @@ pub struct SeekPoint {
 }
 
 /// A seek table to aid seeking in the stream.
+#[derive(Clone)]
 pub struct SeekTable {
     /// The seek points, sorted in ascending order by sample number.
     pub seekpoints: Vec<SeekPoint>,

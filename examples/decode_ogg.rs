@@ -106,7 +106,7 @@ where W: io::Seek + io::Write {
     // vec, so wrapping it in an `io::Cursor` works; it implements `ReadBytes`.
     let cursor = io::Cursor::new(&packet.data);
 
-    let mut frame_reader = claxon::frame::FrameReader::new(cursor, None);
+    let mut frame_reader = claxon::frame::FrameReader::new(cursor);
 
     // TODO There should be a read_next method too that does not tolerate EOF.
     let result = frame_reader.read_next_or_eof(buffer);
