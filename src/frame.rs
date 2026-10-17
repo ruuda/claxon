@@ -14,7 +14,7 @@ use error::{Error, Result, fmt_err};
 use input::{Bitstream, ReadBytes};
 use subframe;
 
-use crate::{FlacReader, metadata::{SeekPoint, SeekTable}};
+use crate::{FlacReader, metadata::{SeekPoint, SeekTable, StreamInfo}};
 
 #[derive(Clone, Copy)]
 enum BlockingStrategy {
@@ -1033,7 +1033,13 @@ impl<R: ReadBytes + Seek> FrameReader<R> {
                     samples: 0,
                     offset: 0
                 }};
-                let end = seek_table.seekpoints[index];
+                let end = if index != seek_table.seekpoints.len() { seek_table.seekpoints[index] } else { SeekPoint {
+                    // sample range is only used for verification against fake frames, it does not
+                    // need to be accurate
+                    sample: u64::MAX,
+                    samples: 0,
+                    offset: self.input.seek(SeekFrom::End(0))?
+                }};
 
                 search_bound = Some(start.offset..end.offset);
                 search_bound_samples = Some(start.sample..end.sample);

@@ -54,7 +54,7 @@ pub struct StreamInfo {
 }
 
 /// A seek point in the seek table.
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct SeekPoint {
     /// Sample number of the first sample in the target frame, or 2<sup>64</sup> - 1 for a placeholder.
     pub sample: u64,
@@ -66,7 +66,7 @@ pub struct SeekPoint {
 }
 
 /// A seek table to aid seeking in the stream.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct SeekTable {
     /// The seek points, sorted in ascending order by sample number.
     pub seekpoints: Vec<SeekPoint>,
@@ -284,9 +284,8 @@ pub fn read_metadata_block<R: ReadBytes>(input: &mut R,
             })
         }
         3 => {
-            // TODO: implement seektable reading. For now, pretend it is padding.
-            try!(input.skip(length));
-            Ok(MetadataBlock::Padding { length: length })
+            let seek_table = read_seek_table_block(input, length)?;
+            Ok(MetadataBlock::SeekTable(seek_table))
         }
         4 => {
             let vorbis_comment = try!(read_vorbis_comment_block(input, length));
@@ -519,6 +518,29 @@ fn read_padding_block<R: ReadBytes>(input: &mut R, length: u32) -> Result<()> {
     // bytes and do nothing with them whatsoever, why waste all those CPU
     // cycles checking that the padding is valid?
     Ok(try!(input.skip(length)))
+}
+
+fn read_seek_table_block<R: ReadBytes>(input: &mut R, length: u32) -> Result<SeekTable> {
+    const POINT_SIZE: u32 = 18;
+
+    let seek_points = length / POINT_SIZE;
+
+    let mut out = Vec::with_capacity(seek_points as usize);
+    for i in 1..=seek_points {
+        let seek_point = SeekPoint {
+            sample: input.read_be_u64()?,
+            offset: input.read_be_u64()?,
+            samples: input.read_be_u16()?
+        };
+        if seek_point.sample == 0xFFFFFFFFFFFFFFFF {
+            input.skip((seek_points - i) * POINT_SIZE)?;
+            break
+        }
+
+        out.push(seek_point);
+    }
+
+    Ok(SeekTable { seekpoints: out })
 }
 
 fn read_application_block<R: ReadBytes>(input: &mut R, length: u32) -> Result<(u32, Vec<u8>)> {
