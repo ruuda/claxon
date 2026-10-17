@@ -7,12 +7,14 @@
 
 //! The `frame` module deals with the frames that make up a FLAC stream.
 
-use std::i32;
+use std::{cmp::Ordering, i32, io::{Seek, SeekFrom}, ops::Range};
 
 use crc::{Crc8Reader, Crc16Reader};
 use error::{Error, Result, fmt_err};
 use input::{Bitstream, ReadBytes};
 use subframe;
+
+use crate::{FlacReader, metadata::{SeekPoint, SeekTable, StreamInfo}};
 
 #[derive(Clone, Copy)]
 enum BlockingStrategy {
@@ -602,6 +604,9 @@ fn verify_block_stereo_samples_iterator() {
 /// no searching for a sync code is performed at the moment.
 pub struct FrameReader<R: ReadBytes> {
     input: R,
+    /// First block size encountered by this frame reader. Used to correctly calculate the last
+    /// frame's block time.
+    first_known_block_size: Option<u16>,
 }
 
 /// Either a `Block` or an `Error`.
@@ -651,7 +656,8 @@ impl<R: ReadBytes> FrameReader<R> {
     /// Creates a new frame reader that will yield at least one element.
     pub fn new(input: R) -> FrameReader<R> {
         FrameReader {
-            input: input,
+            input,
+            first_known_block_size: None,
         }
     }
 
@@ -768,8 +774,19 @@ impl<R: ReadBytes> FrameReader<R> {
 
         // TODO: constant block size should be verified if a frame number is
         // encountered.
+        // TODO: regarding the todo above - do you really want to do this when you can't verify
+        // whether this is the last frame, which is allowed to have a smaller block size? You could
+        // still check that the block size is not larger than it should (RFC 9639 § 8.2)
         let time = match header.block_time {
-            BlockTime::FrameNumber(fnr) => header.block_size as u64 * fnr as u64,
+            BlockTime::FrameNumber(fnr) => {
+                // The last frame's position must be calculated using a previous header's block size
+                let stream_block_size = self.first_known_block_size.unwrap_or_else(|| {
+                    self.first_known_block_size = Some(header.block_size);
+                    header.block_size
+                });
+
+                stream_block_size as u64 * fnr as u64
+            },
             BlockTime::SampleNumber(snr) => snr,
         };
 
@@ -781,6 +798,303 @@ impl<R: ReadBytes> FrameReader<R> {
     /// Destroy the frame reader, returning the wrapped reader.
     pub fn into_inner(self) -> R {
         self.input
+    }
+}
+
+
+impl<R: ReadBytes + Seek> FrameReader<R> {
+    /// Finds the frame containing the given sample number and returns it. Further reads will
+    /// continue from this position in the stream.
+    pub fn seek(
+        &mut self,
+        sample_number: u64,
+        search_bound: Option<Range<u64>>,
+        search_bound_samples: Option<Range<u64>>
+    ) -> Result<()> {
+
+        let first_frame = self.find_first_frame()?;
+        let mut search_bound = match search_bound {
+            Some(bound) => (bound.start + first_frame)..(bound.end + first_frame),
+            None => first_frame..self.input.seek(std::io::SeekFrom::End(0))?
+        };
+
+        let mut search_bound_samples = search_bound_samples.unwrap_or(0..u64::MAX);
+
+        // Should not seek if the frame header failed to be read or had inconsistent data, since it
+        // was likely a sync-fooling sequence of bytes inside a subframe.
+        //
+        // Should not seek at the start, since the first frame header is the only one guaranteed to
+        // be a real frame from which we can extract information to spot fake frame headers
+        let mut seek = false;
+
+        self.input.seek(std::io::SeekFrom::Start(first_frame))?;
+
+        let mut first_iteration = true;
+        let mut fixed_blocksize: Option<u16> = None;
+
+        let mut max_frame_pos = 0;
+
+        loop {
+            // If we narrowed down search to a location that does not contain the target, something
+            // has gone wrong
+            debug_assert!(search_bound_samples.contains(&sample_number));
+
+            if seek {
+                self.input.seek(std::io::SeekFrom::Start((search_bound.start + search_bound.end) / 2))?;
+            }
+
+            let frame_pos = match self.find_sync_code() {
+                Ok(pos) => pos,
+                Err(_) => {
+                    if search_bound.is_empty() {
+                        return Ok(())
+                    } else {
+                        search_bound.end = search_bound.start;
+                        continue;
+                    }
+                }
+            };
+
+            max_frame_pos = std::cmp::max(frame_pos, max_frame_pos);
+
+            // If seeking to the middle of the search bound did not result in a frame that is inside
+            // it, find the target sequentially as there are no longer enough frames to perform
+            // binary search
+            //
+            // If the bound is empty, continue finding the target sequentially
+            if frame_pos >= search_bound.end && !search_bound.is_empty() {
+                search_bound.end = search_bound.start;
+                seek = true;
+                continue;
+            }
+
+            match read_frame_header_or_eof(&mut self.input) {
+                Ok(Some(header)) => {
+                    if first_iteration {
+                        fixed_blocksize = match header.block_time {
+                            BlockTime::FrameNumber(_) => {
+                                self.first_known_block_size = Some(header.block_size);
+                                self.first_known_block_size
+                            }
+                            BlockTime::SampleNumber(_) => None
+                        };
+                        first_iteration = false;
+                        // Already parsed the first frame to extract this information, it is cheap
+                        // to also use it to be able to seek to the start in one iteration
+                        if !search_bound_samples.contains(&0) {
+                            continue;
+                        }
+                    }
+
+                    // The last frame is allowed to have a lower blocksize, so the first header's
+                    // blocksize is used to calculate the sample position
+                    let time = match header.block_time {
+                        BlockTime::FrameNumber(frame) => fixed_blocksize.map(|blocksize| frame as u64 * blocksize as u64),
+                        BlockTime::SampleNumber(n) => if fixed_blocksize.is_none() { Some(n) } else { None }
+                    };
+
+                    // Sometimes fake valid frame headers will appear in subframe data sections, but
+                    // their data will not be consistent with the rest of the stream.
+                    let time = match time {
+                        Some(v) => v,
+                        None => {
+                            seek = false;
+                            continue;
+                        }
+                    };
+
+                    if !search_bound_samples.contains(&time) {
+                        seek = false;
+                        continue;
+                    }
+
+                    // Only check that the fixed blocksize is consistent if we're sure that this is
+                    // not the last frame
+                    if frame_pos != max_frame_pos {
+                        if let Some(expected_size) = fixed_blocksize {
+                            if header.block_size != expected_size {
+                                seek = false;
+                                continue;
+                            }
+                        }
+                    }
+
+                    if time > sample_number {
+                        // Without this check, corrupted files where there is no frame containing
+                        // the target sample would start an infinite loop
+                        if search_bound.is_empty() {
+                            // TODO: should this just be a continue? It is technically possible for
+                            // a valid file to contain a fake frame header that passes all the
+                            // checks above and hits this condition. However, letting this just
+                            // letting this continue would result in an invalid file that actually
+                            // does have a missing frame result in an erroneous "Ok(None)" result
+                            // after parsing every single frame header from here up to the end of
+                            // the stream. Could keep a counter of how many times this was
+                            // encountered but that feels more like a workaround than a proper fix
+                            return fmt_err("Requested frame is missing");
+                        }
+                        search_bound.end = frame_pos;
+                        search_bound_samples.end = time + header.block_size as u64;
+                        seek = true;
+                        continue;
+                    } else if time + (header.block_size as u64) <= sample_number {
+                        // smallest frame header
+                        // + smallest subframe header
+                        // + smallest subframe data (constant)
+                        // + frame footer
+
+                        search_bound.start = frame_pos + 7 + 1 + 1 + 2;
+                        search_bound_samples.start = time;
+
+                        // could otherwise get stuck in an infinite loop looking for this header
+                        if search_bound.end < search_bound.start {
+                            search_bound.end = search_bound.start;
+                        }
+
+                        seek = true;
+                        continue;
+                    } else {
+
+                        self.input.seek(std::io::SeekFrom::Start(frame_pos))?;
+
+                        // As a final safeguard against fake frames, parsing the entire frame will
+                        // include a CRC16 check which is more reliable than the CRC8 in the header
+                        match self.read_next_or_eof(Vec::new()) {
+                            Ok(_) => {
+                                // TODO: Regardless of whether I return the parsed frame or not, I
+                                // still need to parse it for a CRC16 check. The API in FlacReader
+                                // expects the caller to run read_next_or_eof again after seeking,
+                                // parsing the same frame twice. Not sure if this is a problem and
+                                // how to optimize for it.
+                                self.input.seek(std::io::SeekFrom::Start(frame_pos))?;
+                                return Ok(());
+                            }
+                            Err(_) => {
+                                seek = false;
+                                self.input.seek(std::io::SeekFrom::Start(frame_pos + 2))?;
+                                continue;
+                            }
+                        }
+                    }
+
+                },
+                // Reached end of stream. Any further attempt to read a block will immediately
+                // return Ok(None)
+                Ok(None) => return Ok(()),
+                Err(_) => {
+                    seek = false;
+                    // We don't know where the frame header function left the stream. In most cases
+                    // it will be frame_pos + 3 or after, meaning that if the fake sync code
+                    // happened to be the end of a frame, the real frame's sync code would be
+                    // skipped. (FF F8 FF F8)
+                    self.input.seek(std::io::SeekFrom::Start(frame_pos + 2))?;
+                    continue;
+                }
+            }
+        }
+    }
+
+    /// Equivalent to [seek], but using a seek table to find the target frame faster.
+    pub fn seek_with_seek_table(
+        &mut self,
+        sample_number: u64,
+        seek_table: Option<&SeekTable>
+    ) -> Result<()> {
+        let seek_table = match seek_table {
+            Some(t) => t,
+            None => return self.seek(sample_number, None, None)
+        };
+
+        let search_bound;
+        let search_bound_samples;
+        let result = seek_table.seekpoints.binary_search_by(|seek_point| {
+            if seek_point.sample > sample_number {
+                Ordering::Greater
+            } else if seek_point.sample + (seek_point.samples as u64) < sample_number {
+                Ordering::Less
+            } else {
+                Ordering::Equal
+            }
+        });
+
+
+        match result {
+            Ok(index) => {
+                // Seek table confirms it is that exact frame
+                let seek_point = seek_table.seekpoints[index];
+                search_bound = Some(seek_point.offset..seek_point.offset);
+                search_bound_samples = Some(seek_point.sample..(seek_point.sample + seek_point.samples as u64));
+            }
+            Err(index) => {
+                // The "index where a matching element would be inserted" will point to after
+                // the desired sample.
+                let start = if index != 0 { seek_table.seekpoints[index - 1] } else { SeekPoint {
+                    sample: 0,
+                    samples: 0,
+                    offset: 0
+                }};
+                let end = if index != seek_table.seekpoints.len() { seek_table.seekpoints[index] } else { SeekPoint {
+                    // sample range is only used for verification against fake frames, it does not
+                    // need to be accurate
+                    sample: u64::MAX,
+                    samples: 0,
+                    offset: self.input.seek(SeekFrom::End(0))?
+                }};
+
+                search_bound = Some(start.offset..end.offset);
+                search_bound_samples = Some(start.sample..end.sample);
+            }
+        }
+
+        self.seek(sample_number, search_bound, search_bound_samples)
+    }
+
+    /// Rewinds the reader to the start of the stream to find the position of the start of the first
+    /// frame in the stream
+    fn find_first_frame(&mut self) -> Result<u64> {
+        self.input.seek(std::io::SeekFrom::Start(4))?;
+
+        loop {
+            // This read is aligned with a metadata block header
+            let read = self.input.read_be_u32()?;
+
+            self.input.skip(read & 0x00FFFFFF)?;
+
+            // Last-metadata-block flag
+            if read & 0x80000000 == 0x80000000 {
+                break;
+            }
+        }
+
+        let res = self.input.seek(SeekFrom::Current(0))?;
+        Ok(res)
+    }
+
+    /// Reads in an unknown position in a FLAC stream until it finds a sync code, then seeks to
+    /// before that sync code so it can be read again with the rest of the header.
+    ///
+    /// Does not verify that this is an actual sync code. Subframes are allowed to contain
+    /// sync-fooling bytes, so reading the whole header and verifying its validity is required after
+    /// calling this method.
+    fn find_sync_code(&mut self) -> Result<u64> {
+        let mut first = self.input.read_u8()?;
+        loop {
+            if first != 0b1111_1111 {
+                first = self.input.read_u8()?;
+                continue;
+            }
+
+            let second = self.input.read_u8()?;
+            if second & 0b1111_1110 != 0b1111_1000 {
+                // FF FF F8 could make it skip a sync code otherwise
+                first = second;
+                continue;
+            }
+
+            break;
+        }
+
+        Ok(self.input.seek(std::io::SeekFrom::Current(-2))?)
     }
 }
 

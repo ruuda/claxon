@@ -75,7 +75,7 @@ use std::path;
 use error::fmt_err;
 use frame::FrameReader;
 use input::{BufferedReader, ReadBytes};
-use metadata::{MetadataBlock, MetadataBlockReader, StreamInfo, VorbisComment};
+use metadata::{MetadataBlock, MetadataBlockReader, StreamInfo, VorbisComment, SeekTable};
 
 mod crc;
 mod error;
@@ -94,6 +94,7 @@ pub struct FlacReader<R: io::Read> {
     streaminfo: StreamInfo,
     vorbis_comment: Option<VorbisComment>,
     input: FlacReaderState<BufferedReader<R>>,
+    seek_table: Option<SeekTable>,
 }
 
 enum FlacReaderState<T> {
@@ -236,7 +237,7 @@ impl<R: io::Read> FlacReader<R> {
 
         // Start a new scope, because the input reader must be available again
         // for the frame reader next.
-        let (streaminfo, vorbis_comment) = {
+        let (streaminfo, vorbis_comment, seek_table) = {
             // Next are one or more metadata blocks. The flac specification
             // dictates that the streaminfo block is the first block. The metadata
             // block reader will yield at least one element, so the unwrap is safe.
@@ -248,6 +249,7 @@ impl<R: io::Read> FlacReader<R> {
             };
 
             let mut vorbis_comment = None;
+            let mut seek_table = None;
 
             // There might be more metadata blocks, read and store them.
             for block_result in metadata_iter {
@@ -267,6 +269,9 @@ impl<R: io::Read> FlacReader<R> {
                     MetadataBlock::StreamInfo(..) => {
                         return fmt_err("encountered second streaminfo block")
                     }
+                    MetadataBlock::SeekTable(table) => {
+                        seek_table = Some(table);
+                    }
                     // Other blocks are currently not handled.
                     _block => {}
                 }
@@ -284,7 +289,7 @@ impl<R: io::Read> FlacReader<R> {
                 vorbis_comment = None;
             }
 
-            (streaminfo, vorbis_comment)
+            (streaminfo, vorbis_comment, seek_table)
         };
 
         // Even if we might have read all metadata blocks, only set the state to
@@ -301,6 +306,7 @@ impl<R: io::Read> FlacReader<R> {
             streaminfo: streaminfo,
             vorbis_comment: vorbis_comment,
             input: state,
+            seek_table: seek_table
         };
 
         Ok(flac_reader)
@@ -467,6 +473,51 @@ impl FlacReader<fs::File> {
                                           -> Result<FlacReader<fs::File>> {
         let file = try!(fs::File::open(filename));
         FlacReader::new_ext(file, options)
+    }
+}
+
+impl<R: io::Seek + io::Read> FlacReader<R> {
+    /// Equivalent to [blocks] where playback will continue from the frame containing the desired
+    /// inter-channel sample.
+    pub fn seek_block<'r>(&'r mut self, sample: u64) -> crate::Result<FrameReader<&'r mut BufferedReader<R>>> {
+        let seek_table = self.seek_table.clone();
+
+        let mut blocks = self.blocks();
+
+        blocks.seek_with_seek_table(sample, seek_table.as_ref())?;
+
+        Ok(blocks)
+    }
+
+    /// Equivalent to [samples] where playback will continue from the desired inter-channel sample.
+    pub fn seek_sample<'r>(&'r mut self, sample: u64) -> crate::Result<FlacSamples<&'r mut BufferedReader<R>>> {
+        if let FlacReaderState::MetadataOnly(..) = self.input {
+            panic!("FlacReaderOptions::metadata_only must be false \
+                       to be able to use FlacReader::seek_sample()")
+        }
+
+        let mut reader = self.seek_block(sample)?;
+
+        let block = match reader.read_next_or_eof(Vec::new())? {
+            Some(v) => v,
+            None => return Ok(FlacSamples {
+                frame_reader: reader,
+                block: Block::empty(),
+                sample: 0,
+                channel: 0,
+                has_failed: false,
+            })
+        };
+
+        let offset = (sample - block.time()) as u32;
+
+        Ok(FlacSamples {
+            frame_reader: reader,
+            block: block,
+            sample: offset,
+            channel: 0,
+            has_failed: false,
+        })
     }
 }
 
