@@ -87,6 +87,8 @@ pub mod subframe;
 pub use error::{Error, Result};
 pub use frame::Block;
 
+use crate::metadata::{Picture, PictureType};
+
 /// A FLAC decoder that can decode the stream from the underlying reader.
 ///
 /// TODO: Add an example.
@@ -94,6 +96,7 @@ pub struct FlacReader<R: io::Read> {
     streaminfo: StreamInfo,
     vorbis_comment: Option<VorbisComment>,
     input: FlacReaderState<BufferedReader<R>>,
+    pictures: Vec<Picture>,
 }
 
 enum FlacReaderState<T> {
@@ -139,12 +142,21 @@ pub struct FlacReaderOptions {
     ///
     /// Defaults to true.
     pub read_vorbis_comment: bool,
+
+    /// When true, include Picture blocks when reading metadata.
+    ///
+    /// When false, the `Flacreader` will be constructed without picture data, even if the data
+    /// contains some. Consequently, all picture-related methods will not return any data.
+    ///
+    /// Defaults to true.
+    pub read_picture: bool,
 }
 
 impl Default for FlacReaderOptions {
     fn default() -> FlacReaderOptions {
         FlacReaderOptions {
             read_vorbis_comment: true,
+            read_picture: true,
             metadata_only: false,
         }
     }
@@ -159,9 +171,8 @@ impl FlacReaderOptions {
             return true
         }
 
-        // Should be the or of all read_* fields, of which vorbis_comment is the
-        // only one at the moment.
-        self.read_vorbis_comment
+        // Or of all read_* fields
+        self.read_vorbis_comment || self.read_picture
     }
 }
 
@@ -236,7 +247,7 @@ impl<R: io::Read> FlacReader<R> {
 
         // Start a new scope, because the input reader must be available again
         // for the frame reader next.
-        let (streaminfo, vorbis_comment) = {
+        let (streaminfo, vorbis_comment, pictures) = {
             // Next are one or more metadata blocks. The flac specification
             // dictates that the streaminfo block is the first block. The metadata
             // block reader will yield at least one element, so the unwrap is safe.
@@ -248,6 +259,7 @@ impl<R: io::Read> FlacReader<R> {
             };
 
             let mut vorbis_comment = None;
+            let mut pictures = Vec::new();
 
             // There might be more metadata blocks, read and store them.
             for block_result in metadata_iter {
@@ -267,6 +279,12 @@ impl<R: io::Read> FlacReader<R> {
                     MetadataBlock::StreamInfo(..) => {
                         return fmt_err("encountered second streaminfo block")
                     }
+                    MetadataBlock::Picture(picture) => {
+                        pictures.push(picture);
+
+                        // You cannot know how many picture blocks there are until you've read all metadata blocks,
+                        // so there is no way to stop reading early if you need pictures
+                    }
                     // Other blocks are currently not handled.
                     _block => {}
                 }
@@ -278,13 +296,7 @@ impl<R: io::Read> FlacReader<R> {
                 }
             }
 
-            // TODO: Rather than discarding afterwards, never parse it in the
-            // first place; treat it like padding in the MetadataBlockReader.
-            if !options.read_vorbis_comment {
-                vorbis_comment = None;
-            }
-
-            (streaminfo, vorbis_comment)
+            (streaminfo, vorbis_comment, pictures)
         };
 
         // Even if we might have read all metadata blocks, only set the state to
@@ -298,9 +310,10 @@ impl<R: io::Read> FlacReader<R> {
 
         // The flac reader will contain the reader that will read frames.
         let flac_reader = FlacReader {
-            streaminfo: streaminfo,
-            vorbis_comment: vorbis_comment,
+            streaminfo,
+            vorbis_comment,
             input: state,
+            pictures
         };
 
         Ok(flac_reader)
@@ -443,6 +456,41 @@ impl<R: io::Read> FlacReader<R> {
             FlacReaderState::Full(inp) => inp.into_inner(),
             FlacReaderState::MetadataOnly(inp) => inp.into_inner(),
         }
+    }
+
+    /// Returns all pictures read by this reader.
+    ///
+    /// This will be empty if there are no pictures or if the reader was constructed with
+    /// `read_picture` in [FlacReaderOptions] set to false.
+    pub fn pictures(&self) -> &Vec<Picture> {
+        &self.pictures
+    }
+
+    /// Like [Self::pictures], but consumes this reader.
+    ///
+    /// This will be empty if there are no pictures or if the reader was constructed with
+    /// `read_picture` in [FlacReaderOptions] set to false.
+    pub fn into_pictures(self) -> Vec<Picture> {
+        self.pictures
+    }
+
+    /// Finds the first picture with type [PictureType::FrontCover], which is generally displayed
+    /// during playback. There may be multiple pictures with different properties, this method only
+    /// picks the first one. Consider using [Self::pictures] for better control over which picture
+    /// is used.
+    ///
+    /// This will be None if there is no front cover or if the reader was constructed with
+    /// `read_picture` in [FlacReaderOptions] set to false.
+    pub fn cover_art(&self) -> Option<&Picture> {
+        self.pictures.iter().find(|p| p.picture_type == PictureType::FrontCover)
+    }
+
+    /// Like [Self::cover_art], but consumes this reader.
+    ///
+    /// This will be None if there is no front cover or if the reader was constructed with
+    /// `read_picture` in [FlacReaderOptions] set to false.
+    pub fn into_cover_art(self) -> Option<Picture> {
+        self.pictures.into_iter().find(|p| p.picture_type == PictureType::FrontCover)
     }
 }
 

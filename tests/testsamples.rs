@@ -430,6 +430,7 @@ fn metadata_only_still_reads_vorbis_comment_block() {
     let opts = claxon::FlacReaderOptions {
         metadata_only: true,
         read_vorbis_comment: true,
+        read_picture: false,
     };
     let reader = claxon::FlacReader::open_ext("testsamples/short.flac", opts).unwrap();
     assert_eq!(reader.vendor(), Some("reference libFLAC 1.3.2 20170101"));
@@ -440,6 +441,7 @@ fn no_read_vorbis_comment_block_does_not_contain_vendor_string() {
     let opts = claxon::FlacReaderOptions {
         metadata_only: true,
         read_vorbis_comment: false,
+        read_picture: false,
     };
     let reader = claxon::FlacReader::open_ext("testsamples/short.flac", opts).unwrap();
     assert_eq!(reader.vendor(), None);
@@ -451,6 +453,7 @@ fn samples_panics_when_metadata_only_is_set() {
     let opts = claxon::FlacReaderOptions {
         metadata_only: true,
         read_vorbis_comment: true,
+        read_picture: true,
     };
     let mut reader = claxon::FlacReader::open_ext("testsamples/short.flac", opts).unwrap();
     let _samples = reader.samples();
@@ -462,6 +465,7 @@ fn blocks_panics_when_metadata_only_is_set() {
     let opts = claxon::FlacReaderOptions {
         metadata_only: true,
         read_vorbis_comment: true,
+        read_picture: true,
     };
     let mut reader = claxon::FlacReader::open_ext("testsamples/short.flac", opts).unwrap();
     let _blocks = reader.blocks();

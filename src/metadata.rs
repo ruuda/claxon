@@ -12,6 +12,8 @@ use input::ReadBytes;
 use std::str;
 use std::slice;
 
+use crate::FlacReaderOptions;
+
 #[derive(Clone, Copy)]
 struct MetadataBlockHeader {
     is_last: bool,
@@ -100,6 +102,129 @@ pub struct VorbisComment {
     pub comments: Vec<(String, usize)>,
 }
 
+/// A picture embedded in a FLAC file.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct Picture {
+    /// The picture type. Generally, if present, FrontCover is displayed during playback.
+    pub picture_type: PictureType,
+    /// The description of the picture.
+    pub description: Option<String>,
+    /// The width of the picture in pixels.
+    ///
+    /// Applications MUST NOT use this field in decoding the picture or deciding how to display it,
+    /// but applications MAY use it to decide whether or not to process a block (e.g., when
+    /// selecting between different picture blocks) and MAY show it to the user. May be None if a
+    /// picture has no concept for width (e.g., vector images) or the content of this field is
+    /// unknown.
+    pub width: Option<u32>,
+    /// The height of the picture in pixels.
+    ///
+    /// Applications MUST NOT use this field in decoding the picture or deciding how to display it,
+    /// but applications MAY use it to decide whether or not to process a block (e.g., when
+    /// selecting between different picture blocks) and MAY show it to the user. May be None if a
+    /// picture has no concept for height (e.g., vector images) or the content of this field is
+    /// unknown.
+    pub height: Option<u32>,
+    /// The color depth of the picture in bits per pixel.
+    ///
+    /// Applications MUST NOT use this field in decoding the picture or deciding how to display it,
+    /// but applications MAY use it to decide whether or not to process a block (e.g., when
+    /// selecting between different picture blocks) and MAY show it to the user. May be None if a
+    /// picture has no concept for color depth or the content of this field is unknown.
+    pub color_depth: Option<u32>,
+    /// For indexed-color pictures (e.g., GIF), the number of colors used
+    ///
+    /// Applications MUST NOT use this field in decoding the picture or deciding how to display it,
+    /// but applications MAY use it to decide whether or not to process a block (e.g., when
+    /// selecting between different picture blocks) and MAY show it to the user. May be None if a
+    /// picture has no concept for color count (e.g, PNG) or the content of this field is unknown.
+    pub color_count: Option<u32>,
+    /// The picture contents.
+    pub contents: PictureContents,
+}
+
+/// The contents of the picture.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub enum PictureContents {
+    /// The header contains a reference to the picture in the form of a URI as specified by
+    /// RFC 3986. The following points apply:
+    /// - The URI can be in either absolute or relative form. If a URI is in relative form, it is
+    /// related to the URI of the FLAC content processed.
+    /// - Applications MUST obtain explicit user approval to retrieve images via remote protocols
+    /// and to retrieve local images that are not located in the same directory as the FLAC file
+    /// being processed.
+    /// - Applications supporting linked images MUST handle unavailability of URIs gracefully. They
+    /// MAY report unavailability to the user.
+    /// - Applications MAY reject processing URIs for any reason, particularly for security or
+    /// privacy reasons.
+    URI(String),
+    /// The raw picture data is embedded directly in the metadata block.
+    Data {
+        /// The media type string as specified by RFC 2046.
+        media_type: String,
+        /// The raw data of the picture.
+        data: Vec<u8>
+    }
+}
+
+/// Picture type, derived from the ID3v2 standard. Generally, if present, FrontCover is displayed
+/// during playback.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum PictureType {
+    /// Anything that does not fall under other categories
+    Other,
+    /// PNG file icon of 32x32 pixels.
+    ///
+    /// There may only be one picture of this type in a file.
+    FileIcon32,
+    /// General File Icon
+    ///
+    /// There may only be one picture of this type in a file.
+    GeneralFileIcon,
+    /// Front Cover
+    ///
+    /// Generally, if present, this is displayed during playback.
+    FrontCover,
+    /// Back Cover
+    BackCover,
+    /// Liner Notes Page
+    LinerNotesPage,
+    /// Media label (e.g., CD, Vinyl or Cassette label)
+    MediaLabel,
+    /// Lead artist, lead performer, or soloist
+    LeadArtist,
+    /// Artist or performer
+    Artist,
+    /// Conductor
+    Conductor,
+    /// Band or orchestra
+    Band,
+    /// Composer
+    Composer,
+    /// Lyricist or text writer
+    Lyricist,
+    /// Recording location
+    RecordingLocation,
+    /// During recording
+    DuringRecording,
+    /// During performance
+    DuringPerformance,
+    /// Movie or video screen capture
+    Video,
+    /// A bright colored fish.
+    ///
+    /// The origin and use of this value is unclear. This was copied to maintain compatibility with
+    /// ID3v2. Applications are discouraged from offering this value to users when embedding a
+    /// picture.
+    Fish,
+    /// Illustration
+    Illustration,
+    /// Band or artist logotype
+    BandLogotype,
+    /// Publisher or studio logotype
+    PublisherLogotype,
+}
+
 /// A metadata about the flac stream.
 pub enum MetadataBlock {
     /// A stream info block.
@@ -123,7 +248,7 @@ pub enum MetadataBlock {
     /// A CUE sheet block.
     CueSheet, // TODO
     /// A picture block.
-    Picture, // TODO
+    Picture(Picture),
     /// A block with a reserved block type, not supported by this library.
     Reserved,
 }
@@ -262,22 +387,36 @@ pub fn read_metadata_block<R: ReadBytes>(input: &mut R,
                                          block_type: u8,
                                          length: u32)
                                          -> Result<MetadataBlock> {
+
+    read_metadata_block_ext(input, block_type, length, &FlacReaderOptions::default())
+
+}
+
+
+/// Same as [read_metadata_block], but takes [FlacReaderOptions] as an argument to decide whether to
+/// skip parsing some blocks.
+#[inline]
+pub fn read_metadata_block_ext<R: ReadBytes>(input: &mut R,
+                                             block_type: u8,
+                                             length: u32,
+                                             options: &FlacReaderOptions)
+                                             -> Result<MetadataBlock> {
     match block_type {
         0 => {
             // The streaminfo block has a fixed size of 34 bytes.
             if length == 34 {
-                let streaminfo = try!(read_streaminfo_block(input));
+                let streaminfo = read_streaminfo_block(input)?;
                 Ok(MetadataBlock::StreamInfo(streaminfo))
             } else {
                 fmt_err("invalid streaminfo metadata block length")
             }
         }
         1 => {
-            try!(read_padding_block(input, length));
+            read_padding_block(input, length)?;
             Ok(MetadataBlock::Padding { length: length })
         }
         2 => {
-            let (id, data) = try!(read_application_block(input, length));
+            let (id, data) = read_application_block(input, length)?;
             Ok(MetadataBlock::Application {
                 id: id,
                 data: data,
@@ -289,18 +428,27 @@ pub fn read_metadata_block<R: ReadBytes>(input: &mut R,
             Ok(MetadataBlock::Padding { length: length })
         }
         4 => {
-            let vorbis_comment = try!(read_vorbis_comment_block(input, length));
-            Ok(MetadataBlock::VorbisComment(vorbis_comment))
+            if options.read_vorbis_comment {
+                let vorbis_comment = read_vorbis_comment_block(input, length)?;
+                Ok(MetadataBlock::VorbisComment(vorbis_comment))
+            } else {
+                input.skip(length)?;
+                Ok(MetadataBlock::Padding { length: length })
+            }
         }
         5 => {
             // TODO: implement CUE sheet reading. For now, pretend it is padding.
-            try!(input.skip(length));
+            input.skip(length)?;
             Ok(MetadataBlock::Padding { length: length })
         }
         6 => {
-            // TODO: implement picture reading. For now, pretend it is padding.
-            try!(input.skip(length));
-            Ok(MetadataBlock::Padding { length: length })
+            if options.read_picture {
+                let picture = read_picture_block(input, length)?;
+                Ok(MetadataBlock::Picture(picture))
+            } else {
+                input.skip(length)?;
+                Ok(MetadataBlock::Padding { length: length })
+            }
         }
         127 => {
             // This code is invalid to avoid confusion with a frame sync code.
@@ -312,7 +460,7 @@ pub fn read_metadata_block<R: ReadBytes>(input: &mut R,
             // one way of handling it, but maybe there should be some kind of
             // 'strict' mode (configurable at compile time?) so that this can
             // be an error if desired.
-            try!(input.skip(length));
+            input.skip(length)?;
             Ok(MetadataBlock::Reserved)
         }
     }
@@ -429,14 +577,8 @@ fn read_vorbis_comment_block<R: ReadBytes>(input: &mut R, length: u32) -> Result
     // 32-bit vendor string length, and comment count.
     let vendor_len = try!(input.read_le_u32());
     if vendor_len > length - 8 { return fmt_err("vendor string too long") }
-    let mut vendor_bytes = Vec::with_capacity(vendor_len as usize);
 
-    // We can safely set the lenght of the vector here; the uninitialized memory
-    // is not exposed. If `read_into` succeeds, it will have overwritten all
-    // bytes. If not, an error is returned and the memory is never exposed.
-    unsafe { vendor_bytes.set_len(vendor_len as usize); }
-    try!(input.read_into(&mut vendor_bytes));
-    let vendor = try!(String::from_utf8(vendor_bytes));
+    let vendor = input.read_utf8(vendor_len as usize)?;
 
     // Next up is the number of comments. Because every comment is at least 4
     // bytes to indicate its length, there cannot be more comments than the
@@ -469,10 +611,7 @@ fn read_vorbis_comment_block<R: ReadBytes>(input: &mut R, length: u32) -> Result
             continue;
         }
 
-        // For the same reason as above, setting the length is safe here.
-        let mut comment_bytes = Vec::with_capacity(comment_len as usize);
-        unsafe { comment_bytes.set_len(comment_len as usize); }
-        try!(input.read_into(&mut comment_bytes));
+        let comment_bytes = input.read_n(comment_len as usize)?;
 
         bytes_left -= comment_len;
 
@@ -521,6 +660,89 @@ fn read_padding_block<R: ReadBytes>(input: &mut R, length: u32) -> Result<()> {
     Ok(try!(input.skip(length)))
 }
 
+fn read_picture_block<R: ReadBytes>(input: &mut R, length: u32) -> Result<Picture> {
+    if length < 32 {
+        return fmt_err("picture block length must be at least 32 bytes")
+    }
+
+    let picture_type = match input.read_be_u32()? {
+        0  => PictureType::Other,
+        1  => PictureType::FileIcon32,
+        2  => PictureType::GeneralFileIcon,
+        3  => PictureType::FrontCover,
+        4  => PictureType::BackCover,
+        5  => PictureType::LinerNotesPage,
+        6  => PictureType::MediaLabel,
+        7  => PictureType::LeadArtist,
+        8  => PictureType::Artist,
+        9  => PictureType::Conductor,
+        10 => PictureType::Band,
+        11 => PictureType::Composer,
+        12 => PictureType::Lyricist,
+        13 => PictureType::RecordingLocation,
+        14 => PictureType::DuringRecording,
+        15 => PictureType::DuringPerformance,
+        16 => PictureType::Video,
+        17 => PictureType::Fish,
+        18 => PictureType::Illustration,
+        19 => PictureType::BandLogotype,
+        20 => PictureType::PublisherLogotype,
+        _ => return fmt_err("invalid picture type")
+    };
+
+    let media_type_len = input.read_be_u32()?;
+    let mut bytes_left = length - 8;
+    if media_type_len > bytes_left - 24 {
+        return fmt_err("media type string is longer than the block size allows")
+    }
+    bytes_left -= media_type_len;
+
+    let media_type_bytes = input.read_n(media_type_len as usize)?;
+
+    if media_type_bytes.iter().any(|b| !(0x20..=0x7E).contains(b)) {
+        return fmt_err("media type string is not printable ASCII characters 0x20-0x7E")
+    }
+    // already checked that the bytes are printable standard ASCII, and all standard ASCII is valid
+    // utf8
+    let media_type = unsafe { String::from_utf8_unchecked(media_type_bytes) };
+
+    let description_len = input.read_be_u32()?;
+    bytes_left -= 4;
+
+    if description_len > bytes_left - 20 {
+        return fmt_err("description is longer than the block size allows")
+    }
+    bytes_left -= description_len;
+
+    let description = input.read_utf8(description_len as usize)?;
+
+    let width = input.read_be_u32()?;
+    let height = input.read_be_u32()?;
+    let color_depth = input.read_be_u32()?;
+    let color_count = input.read_be_u32()?;
+    let data_len = input.read_be_u32()?;
+    bytes_left -= 20;
+    if data_len != bytes_left {
+        return fmt_err("block size does not match picture data size")
+    }
+
+    let data = input.read_n(data_len as usize)?;
+
+    Ok(Picture {
+        picture_type,
+        description: if description_len > 0 { Some(description) } else { None },
+        width:       if width != 0          { Some(width)       } else { None },
+        height:      if height != 0         { Some(height)      } else { None },
+        color_depth: if color_depth != 0    { Some(color_depth) } else { None },
+        color_count: if color_count != 0    { Some(color_count) } else { None },
+        contents: if media_type == "-->" {
+            PictureContents::URI(String::from_utf8(data)?)
+        } else {
+            PictureContents::Data { media_type, data }
+        }
+    })
+}
+
 fn read_application_block<R: ReadBytes>(input: &mut R, length: u32) -> Result<(u32, Vec<u8>)> {
     if length < 4 {
         return fmt_err("application block length must be at least 4 bytes")
@@ -537,13 +759,7 @@ fn read_application_block<R: ReadBytes>(input: &mut R, length: u32) -> Result<(u
     let id = try!(input.read_be_u32());
 
     // Four bytes of the block have been used for the ID, the rest is payload.
-    // Create a vector of uninitialized memory, and read the block into it. The
-    // uninitialized memory is never exposed: read_into will either fill the
-    // buffer completely, or return an err, in which case the memory is not
-    // exposed.
-    let mut data = Vec::with_capacity(length as usize - 4);
-    unsafe { data.set_len(length as usize - 4); }
-    try!(input.read_into(&mut data));
+    let data = input.read_n(length as usize - 4)?;
 
     Ok((id, data))
 }
@@ -557,6 +773,7 @@ fn read_application_block<R: ReadBytes>(input: &mut R, length: u32) -> Result<(u
 pub struct MetadataBlockReader<R: ReadBytes> {
     input: R,
     done: bool,
+    options: FlacReaderOptions
 }
 
 /// Either a `MetadataBlock` or an `Error`.
@@ -568,13 +785,24 @@ impl<R: ReadBytes> MetadataBlockReader<R> {
         MetadataBlockReader {
             input: input,
             done: false,
+            options: FlacReaderOptions::default()
+        }
+    }
+
+    /// Creates a metadata block reader that will yield at least one element, using the given
+    /// options to read or discard specific elements.
+    pub fn new_ext(input: R, options: FlacReaderOptions) -> MetadataBlockReader<R> {
+        MetadataBlockReader {
+            input,
+            done: false,
+            options
         }
     }
 
     #[inline]
     fn read_next(&mut self) -> MetadataBlockResult {
-        let header = try!(read_metadata_block_header(&mut self.input));
-        let block = try!(read_metadata_block(&mut self.input, header.block_type, header.length));
+        let header = read_metadata_block_header(&mut self.input)?;
+        let block = read_metadata_block_ext(&mut self.input, header.block_type, header.length, &self.options)?;
         self.done = header.is_last;
         Ok(block)
     }

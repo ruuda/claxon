@@ -7,7 +7,7 @@
 
 //! The `frame` module deals with the frames that make up a FLAC stream.
 
-use std::i32;
+use std::{cmp::Ordering, ops::Range};
 
 use crc::{Crc8Reader, Crc16Reader};
 use error::{Error, Result, fmt_err};

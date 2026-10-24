@@ -125,6 +125,21 @@ pub trait ReadBytes {
         let b3 = try!(self.read_u8()) as u32;
         Ok(b3 << 24 | b2 << 16 | b1 << 8 | b0)
     }
+
+    /// Creates and fills a new vector with N bytes from the stream.
+    fn read_n(&mut self, n: usize) -> io::Result<Vec<u8>> {
+        // The uninitialized memory is never exposed: read_into will either fill the buffer completely,
+        // or return an err, in which case the memory is not exposed.
+        let mut vec = Vec::with_capacity(n);
+        unsafe { vec.set_len(n); }
+        self.read_into(&mut vec)?;
+        Ok(vec)
+    }
+
+    /// Read `length` **bytes** from the stream as a UTF-8 string.
+    fn read_utf8(&mut self, length: usize) -> crate::Result<String> {
+        Ok(String::from_utf8(self.read_n(length)?)?)
+    }
 }
 
 impl<R: io::Read> ReadBytes for BufferedReader<R>
